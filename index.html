@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Paddentrek Teller Pro</title>
+    <link rel="manifest" href="manifest.webmanifest">
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext y='50' font-size='48'%3E🐸%3C/text%3E%3C/svg%3E">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -22,11 +23,15 @@
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         #update-btn { z-index: 120; }
+        /* Emojis en letters */
+        .icon-lg { font-size: 18px; line-height: 1; display: inline-block; color: #fff; vertical-align: -3px; }
+        .icon-img { width: 24px; height: 24px; display: inline-block; vertical-align: -4px; }
     </style>
 </head>
 <body class="bg-gray-900 text-gray-100 pb-24">
 
     <canvas id="canvas-fx"></canvas>
+    <input type="file" accept="image/*" capture="environment" onchange="handlePhoto(event)" id="photo-input" class="hidden">
 
     <!-- Header -->
     <header class="bg-gray-800 p-4 shadow-lg sticky top-0 z-50">
@@ -47,18 +52,25 @@
                 <input type="date" id="datePicker" class="bg-gray-700 border-none rounded px-2 py-1.5 text-sm focus:ring-2 focus:ring-emerald-500 text-white w-full shadow-inner">
                 <button id="new-session-btn" onclick="startSession(true)" class="bg-emerald-700 px-3 py-2 rounded text-[10px] font-bold uppercase tracking-widest">Nieuwe sessie</button>
             </div>
-            <div id="session-panel" class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-[11px] flex flex-col gap-1">
-                <div class="flex justify-between items-center text-gray-200 font-bold">
-                    <span id="session-status">Geen sessie</span>
-                    <div class="flex gap-1">
-                        <button onclick="endSession()" class="bg-gray-700 px-2 py-1 rounded text-[10px]">Stop</button>
+            <div id="session-panel" class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-[11px] flex flex-col gap-2">
+                <div class="flex items-center gap-2">
+                    <label class="text-[10px] text-gray-400 uppercase font-bold">Toon sessie</label>
+                    <select id="session-view-select" class="bg-gray-700 border border-gray-600 rounded px-2 py-1 flex-1 text-white text-[11px]" onchange="setViewedSession(this.value)"></select>
+                </div>
+                <div class="flex justify-between items-center text-gray-200 font-bold bg-gray-900/60 px-3 py-2 rounded border border-gray-700">
+                    <div>
+                        <div id="session-status" class="text-xs text-gray-400">Geen sessie</div>
+                        <div id="session-summary" class="text-lg">0 stuks</div>
+                    </div>
+                    <div class="flex gap-2 items-center">
+                        <button onclick="triggerPhoto()" class="bg-purple-700 text-white rounded px-3 py-2 text-[11px] font-bold flex items-center justify-center gap-1">
+                            📸
+                        </button>
+                        <button onclick="endSession()" class="bg-gray-700 px-2 py-1 rounded text-[10px] flex items-center gap-1" id="stop-btn">
+                            <span class="text-red-400">⏹</span> Stop
+                        </button>
                     </div>
                 </div>
-                <div class="flex items-center gap-2 text-[10px] text-gray-300">
-                    <span>Actieve sessie:</span>
-                    <select id="active-session-select" class="bg-gray-700 border border-gray-600 rounded px-2 py-1 flex-1" onchange="setActiveSession(this.value)"></select>
-                </div>
-                <div id="session-list" class="text-[10px] text-gray-400 space-y-1 max-h-24 overflow-y-auto"></div>
             </div>
         </div>
         
@@ -71,11 +83,12 @@
 
     <!-- Navigatie -->
     <nav class="flex bg-gray-800 border-b border-gray-700 text-[10px] font-bold sticky top-[115px] z-40 overflow-x-auto whitespace-nowrap no-scrollbar shadow-md">
-        <button onclick="switchTab('count')" id="tab-count" class="px-5 py-3 active-tab uppercase tracking-tight">Tellen</button>
-        <button onclick="switchTab('log')" id="tab-log" class="px-5 py-3 uppercase tracking-tight">Log & Weer</button>
-        <button onclick="switchTab('share')" id="tab-share" class="px-5 py-3 uppercase tracking-tight">Delen</button>
+        <button onclick="switchTab('count')" id="tab-count" class="px-5 py-3 active-tab uppercase tracking-tight">🧮 Tellen</button>
+        <button onclick="switchTab('sessions')" id="tab-sessions" class="px-5 py-3 uppercase tracking-tight">📒 Sessie log</button>
+        <button onclick="switchTab('report')" id="tab-report" class="px-5 py-3 uppercase tracking-tight">📊 Rapport</button>
         <button onclick="switchTab('settings')" id="tab-settings" class="px-5 py-3 uppercase tracking-tight">⚙️ Instellingen</button>
-        <button onclick="switchTab('help')" id="tab-help" class="px-5 py-3 uppercase tracking-tight">Determinatiehulp</button>
+        <button onclick="switchTab('help')" id="tab-help" class="px-5 py-3 uppercase tracking-tight">🔍 Determinatiehulp</button>
+        <button onclick="switchTab('info')" id="tab-info" class="px-5 py-3 uppercase tracking-tight">ℹ️ Info</button>
     </nav>
 
     <main class="p-4">
@@ -98,70 +111,37 @@
             </button>
         </section>
 
-        <!-- TAB 2: LOG & WEER -->
-        <section id="view-log" class="hidden space-y-6 text-center">
-            <div class="bg-gray-800 p-4 rounded-xl border border-yellow-500/30 text-left">
-                <h3 class="font-bold mb-3 text-yellow-400 flex items-center justify-between">
-                    🌤️ Weerbericht
-                    <button onclick="fetchWeather()" class="text-[10px] bg-yellow-600 text-white px-3 py-1 rounded">GPS Update</button>
-                </h3>
-                <div id="weather-display" class="text-sm text-gray-300 italic">Laden...</div>
+        <!-- TAB 2: SESSIE LOG -->
+        <section id="view-sessions" class="hidden space-y-4">
+            <div class="text-[11px] text-gray-400">
+                Beheer per sessie: weer, trajectnaam, notities en foto's.
             </div>
-
-            <div class="bg-gray-800 p-4 rounded-xl border border-blue-500/30 text-left">
-                <h3 class="font-bold mb-4 text-blue-400 italic">📝 Notities</h3>
-                <textarea id="daily-notes" oninput="saveNotes()" placeholder="Beschrijf de avond..." class="w-full bg-gray-700 border-none rounded p-3 text-sm h-24 text-white focus:ring-1 focus:ring-blue-500"></textarea>
-            </div>
-
-            <div class="bg-gray-800 p-4 rounded-xl border border-purple-500/30">
-                <h3 class="font-bold mb-4 text-purple-400">📸 Foto's</h3>
-                <label class="block mb-4">
-                    <span class="bg-purple-600 text-white px-8 py-3 rounded-full font-bold text-sm inline-block cursor-pointer active:bg-purple-700 shadow-lg">📸 Foto nemen</span>
-                    <input type="file" accept="image/*" capture="environment" onchange="handlePhoto(event)" class="hidden">
-                </label>
-                <div class="flex justify-between items-center mb-2 text-[10px] text-gray-400">
-                    <span>Alle foto's lokaal</span>
-                    <button onclick="clearAllPhotos()" class="bg-red-900/30 text-red-300 px-2 py-1 rounded">Wis alles</button>
-                </div>
-                <div id="photo-gallery" class="grid grid-cols-2 gap-2 mt-2"></div>
-            </div>
+            <datalist id="route-suggestions"></datalist>
+            <div id="session-log-container" class="space-y-4"></div>
         </section>
 
-        <!-- TAB 4: DELEN (incl. rapport) -->
-        <section id="view-share" class="hidden space-y-6 text-center">
-            <div class="bg-gray-800 p-6 rounded-xl border border-purple-500/30">
-                <h3 class="font-bold mb-2">QR van mijn data</h3>
-                <div class="flex gap-2 mb-3 text-[10px] text-gray-300 items-center">
-                    <span>Data:</span>
-                    <select id="qr-session-select" class="bg-gray-700 border border-gray-600 rounded px-2 py-1 flex-1 text-left text-white" onchange="generateQR()"></select>
-                </div>
-                <div id="qrcode-area" class="bg-white p-3 rounded-lg inline-block mx-auto mb-4 border-4 border-purple-500"></div>
-                <button onclick="generateQR()" class="w-full bg-purple-600 py-3 rounded-lg font-bold uppercase text-xs">Refresh QR</button>
-            </div>
-            <div class="bg-gray-800 p-6 rounded-xl border border-emerald-500/30">
-                <h3 class="font-bold mb-2 text-emerald-300">Sync met partner</h3>
-                <div id="reader" class="rounded-lg overflow-hidden bg-black mb-4 mx-auto w-full max-w-[300px]"></div>
-                <button id="scan-btn" onclick="startScanner()" class="w-full bg-emerald-600 py-3 rounded-lg font-bold uppercase text-xs">Start Camera</button>
-            </div>
+        <!-- TAB 4: RAPPORT -->
+        <section id="view-report" class="hidden space-y-6 text-center">
             <div class="bg-gray-800 p-4 rounded-xl border border-emerald-500/30 space-y-3 text-left">
                 <div class="flex items-center gap-2 text-[10px] text-gray-300">
                     <span>Sessie:</span>
                     <select id="report-session-select" class="bg-gray-700 border border-gray-600 rounded px-2 py-1 flex-1 text-left text-white" onchange="updateReport()"></select>
+                    <button class="text-[10px] bg-gray-700 px-2 py-1 rounded" onclick="setReportMode('session')">Per sessie</button>
+                    <button class="text-[10px] bg-gray-700 px-2 py-1 rounded" onclick="setReportMode('day')">Hele dag</button>
                 </div>
                 <div id="report-text" class="bg-gray-900 p-3 rounded-lg font-mono text-left text-[11px] border border-emerald-500/30 whitespace-pre-wrap leading-relaxed"></div>
-                <div class="bg-gray-900 p-3 rounded-lg font-mono text-left text-[11px] border border-blue-500/30 whitespace-pre-wrap leading-relaxed" id="all-report-text"></div>
                 <div class="grid grid-cols-1 gap-3">
                     <button onclick="copyReport()" class="w-full bg-emerald-600 py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg active:bg-emerald-700 text-sm">
                         📋 Kopieer rapport
                     </button>
-                    <button onclick="copyAllReport()" class="w-full bg-blue-700 py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg active:bg-blue-800 text-sm">
-                        📋 Kopieer alle dagen
+                    <button onclick="shareReport()" class="w-full bg-purple-700 py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg active:bg-purple-800 text-sm">
+                        📤 Deel naar WhatsApp
                     </button>
-                    <button onclick="sharePhotos(true)" class="w-full bg-purple-700 py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg active:bg-purple-800 text-sm">
-                        📤 Deel rapport + foto's
+                    <button onclick="shareReport(true)" class="w-full bg-purple-900/70 border border-purple-400/30 py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg active:bg-purple-900 text-xs uppercase tracking-widest">
+                        📸 Deel met foto's
                     </button>
-                    <button onclick="sharePhotos(false)" class="w-full bg-purple-900/70 border border-purple-400/30 py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg active:bg-purple-900 text-xs uppercase tracking-widest">
-                        📸 Deel alleen foto's
+                    <button onclick="exportReportCSV()" class="w-full bg-indigo-600 py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg active:bg-indigo-700 text-sm">
+                        ⬇️ Exporteer CSV van vandaag
                     </button>
                 </div>
             </div>
@@ -178,13 +158,61 @@
                 </div>
                 <div id="session-admin-list" class="space-y-2 text-[11px]"></div>
             </div>
-            <div class="bg-gray-800 p-4 rounded-xl border border-purple-500/30">
-                <h3 class="font-bold mb-2 text-purple-300">QR Import (sessies)</h3>
-                <div id="session-reader" class="rounded-lg overflow-hidden bg-black mb-4 mx-auto w-full max-w-[300px]"></div>
+            <div class="bg-gray-800 p-4 rounded-xl border border-purple-500/30 space-y-3">
+                <h3 class="font-bold mb-2 text-purple-300">Export & Import (QR)</h3>
+                <div class="flex gap-2 mb-2 text-[10px] text-gray-300 items-center">
+                    <span>Data:</span>
+                    <select id="qr-session-select" class="bg-gray-700 border border-gray-600 rounded px-2 py-1 flex-1 text-left text-white" onchange="generateQR();updateQrSummary();"></select>
+                </div>
+                <div class="flex flex-col md:flex-row gap-3 items-start">
+                    <div id="qrcode-area" class="bg-white p-3 rounded-lg inline-block mx-auto md:mx-0 border-4 border-purple-500"></div>
+                    <div class="flex-1 text-[11px] text-gray-300 bg-gray-900/60 border border-gray-700 rounded p-3" id="qr-summary-box">
+                        Scan deze code om tellingen te ontvangen.
+                    </div>
+                </div>
+                <button onclick="generateQR()" class="w-full bg-purple-600 py-3 rounded-lg font-bold uppercase text-xs">Refresh QR</button>
+                <div class="h-px bg-purple-500/30 my-2"></div>
+                <h4 class="text-purple-200 font-bold text-sm">Importeer</h4>
+                <div class="text-[11px] text-gray-400 mb-2">
+                    QR-import is bedoeld om met twee personen op verschillende stukken van een traject te tellen en nadien de tellingen samen te voegen.
+                    Alleen aantallen worden gedeeld, geen foto’s. Kies hieronder waar de telling wordt bijgeboekt en start daarna de scan.
+                </div>
+                <label class="text-[10px] text-gray-300 font-bold uppercase">Bijtellen in</label>
+                <select id="import-target-select" class="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-white w-full text-[12px]" onchange="updateImportTargetHint()"></select>
+                <div id="import-target-hint" class="text-[11px] text-gray-400 bg-gray-900/70 border border-gray-700 rounded px-2 py-2"></div>
                 <button onclick="startSessionScanner()" class="w-full bg-purple-600 py-3 rounded-lg font-bold uppercase text-xs">Scan QR</button>
             </div>
-            <div class="bg-gray-800 p-4 rounded-xl border border-red-500/30 space-y-2">
-                <h3 class="font-bold text-red-300 text-sm">Databeheer</h3>
+            <div class="bg-gray-800 p-4 rounded-xl border border-indigo-500/30 space-y-3">
+                <h3 class="font-bold text-indigo-300 text-sm">CSV Import</h3>
+                <p class="text-[11px] text-gray-300">Importeer CSV’s zoals je ze exporteert (kolommen: Datum; Soort; Koppels levend; Koppels dood; M/V/Onb levend/dood).</p>
+                <input type="file" accept=".csv,text/csv" id="csv-import-input" class="block w-full text-[11px] text-gray-300 bg-gray-700 border border-gray-600 rounded px-2 py-2">
+                <button onclick="handleCSVImport()" class="w-full bg-indigo-600 py-3 rounded-lg font-bold uppercase text-xs">⬆️ Importeer CSV</button>
+                <div id="csv-import-result" class="text-[10px] text-gray-400"></div>
+            </div>
+            <div class="bg-gray-800 p-4 rounded-xl border border-indigo-400/30 space-y-3">
+                <h3 class="font-bold text-indigo-200 text-sm">CSV Export</h3>
+                <p class="text-[11px] text-gray-300">Exporteer dag of sessie van de huidige datum, of een datumrange.</p>
+                <div class="grid grid-cols-2 gap-2 text-[11px] text-gray-200">
+                    <div class="space-y-1">
+                        <label class="uppercase tracking-wide text-[9px] text-gray-400">Van</label>
+                        <input type="date" id="csv-from-settings" class="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-white w-full">
+                    </div>
+                    <div class="space-y-1">
+                        <label class="uppercase tracking-wide text-[9px] text-gray-400">Tot</label>
+                        <input type="date" id="csv-to-settings" class="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-white w-full">
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 gap-2">
+                    <button onclick="exportAllSessionsCSV()" class="w-full bg-indigo-600 py-2 rounded-lg font-bold uppercase text-xs">⬇️ Exporteer alle sessies (vandaag)</button>
+                    <button onclick="exportRangeCSV(true)" class="w-full bg-indigo-500 py-2 rounded-lg font-bold uppercase text-xs">⬇️ Exporteer alle sessies (range)</button>
+                </div>
+            </div>
+            <div class="bg-gray-800 p-4 rounded-xl border border-red-500/30 space-y-3">
+                <h3 class="font-bold text-red-300 text-sm">Databeheer foto's</h3>
+                <div class="flex items-center gap-2">
+                    <input type="date" id="photo-clean-date" class="bg-gray-700 border-none rounded px-2 py-1.5 text-sm focus:ring-2 focus:ring-emerald-500 text-white w-full shadow-inner" value="">
+                    <button onclick="clearAllPhotos(document.getElementById('photo-clean-date').value || picker.value)" class="bg-red-800 px-3 py-2 rounded text-[10px] text-white">Wis dag</button>
+                </div>
                 <button onclick="clearAllPhotos()" class="w-full bg-red-900/40 border border-red-700 text-red-200 py-2 rounded text-[11px]">Wis alle foto's</button>
             </div>
         </section>
@@ -205,6 +233,52 @@
                 <p class="text-xs">Oranje buik met vlekken. Keel is altijd gevlekt.</p>
             </div>
         </section>
+
+        <!-- TAB 8: INFO -->
+        <section id="view-info" class="hidden space-y-4 text-sm">
+            <h2 class="text-xl font-bold text-emerald-400 text-center">ℹ️ Info & Werking</h2>
+            <div class="bg-gray-800 p-4 rounded-xl border border-emerald-500/30 space-y-3">
+                <h3 class="font-bold text-emerald-300 text-sm">Tellen</h3>
+                <ul class="list-disc list-inside text-gray-200 space-y-1">
+                    <li>Kies de dag bovenaan; start een sessie om te tellen.</li>
+                    <li>Knoppen links = levend, rechts = dood. Paartje telt automatisch als 2 stuks.</li>
+                    <li>Foto maken: knop in Tellen of via Sessie log per sessie.</li>
+                </ul>
+            </div>
+            <div class="bg-gray-800 p-4 rounded-xl border border-blue-500/30 space-y-3">
+                <h3 class="font-bold text-blue-300 text-sm">Sessies & Log</h3>
+                <ul class="list-disc list-inside text-gray-200 space-y-1">
+                    <li>Sessies splitsen een avond in tijdsblokken (bijv. shift 1 en 2) zodat aantallen per blok zichtbaar blijven.</li>
+                    <li>In Sessie log zie je per sessie totaal, weer, traject en foto’s.</li>
+                    <li>Traject heeft suggestielijst van eerder gelopen routes.</li>
+                    <li>Foto aanklikken = grote weergave; delen kan per sessie.</li>
+                    <li>Sessies samenvoegen kan via Instellingen → Sessiemanagement.</li>
+                </ul>
+            </div>
+            <div class="bg-gray-800 p-4 rounded-xl border border-purple-500/30 space-y-3">
+                <h3 class="font-bold text-purple-300 text-sm">Rapport & Delen</h3>
+                <ul class="list-disc list-inside text-gray-200 space-y-1">
+                    <li>Kies sessie of hele dag; delen via Share/WhatsApp met of zonder foto’s.</li>
+                    <li>QR-export toont wat ontvangers zullen bijtellen.</li>
+                </ul>
+            </div>
+            <div class="bg-gray-800 p-4 rounded-xl border border-amber-500/30 space-y-3">
+                <h3 class="font-bold text-amber-300 text-sm">QR Import</h3>
+                <ul class="list-disc list-inside text-gray-200 space-y-1">
+                    <li>Twee personen kunnen elk een deel van het traject tellen en achteraf de QR scannen om de aantallen samen te voegen.</li>
+                    <li>Alleen aantallen worden gedeeld; foto’s blijven lokaal.</li>
+                    <li>Kies “Bijtellen in” (dag of specifieke sessie) vóór het scannen.</li>
+                </ul>
+            </div>
+            <div class="bg-gray-800 p-4 rounded-xl border border-red-500/30 space-y-3">
+                <h3 class="font-bold text-red-300 text-sm">Data & Offline</h3>
+                <ul class="list-disc list-inside text-gray-200 space-y-1">
+                    <li>Alles staat lokaal in de browser; PWA werkt offline na eerste gebruik.</li>
+                    <li>Instellingen → Databeheer: foto’s per dag of alles verwijderen.</li>
+                </ul>
+            </div>
+            <p class="text-[11px] text-gray-500 text-center mt-2">App gemaakt door Jasper Cuvelier.</p>
+        </section>
     </main>
 
     <div id="toast" class="fixed bottom-10 left-1/2 transform -translate-x-1/2 bg-emerald-600 text-white px-6 py-3 rounded-full shadow-2xl hidden z-[110] transition-all opacity-0 font-bold border border-emerald-400/30">
@@ -213,6 +287,26 @@
     <button id="update-btn" class="hidden fixed right-4 bottom-24 bg-emerald-600 text-white px-4 py-2 rounded-full shadow-2xl font-bold text-xs uppercase tracking-widest border border-emerald-300/40">
         UPDATE
     </button>
+
+    <!-- Photo lightbox -->
+    <div id="photo-lightbox" class="fixed inset-0 bg-black/80 backdrop-blur-sm hidden z-[200] flex items-center justify-center p-4" onclick="closePhoto(event)">
+        <div class="relative max-w-4xl max-h-[90vh] w-full flex justify-center">
+            <img id="photo-lightbox-img" src="" class="rounded-xl shadow-2xl max-h-[90vh] object-contain bg-black" alt="Foto">
+            <button class="absolute top-2 right-2 bg-black/60 text-white rounded-full w-10 h-10 font-bold text-lg" onclick="closePhoto(event)">✕</button>
+        </div>
+    </div>
+
+    <!-- QR scan modal -->
+    <div id="qr-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm hidden z-[210] flex items-center justify-center p-4" onclick="closeQrModal(event)">
+        <div class="bg-gray-900 rounded-xl border border-purple-500/40 w-full max-w-md p-4 relative">
+            <div class="flex justify-between items-center mb-3">
+                <h3 class="text-purple-200 font-bold text-sm">QR Scan</h3>
+                <button class="bg-black/50 text-white rounded-full w-8 h-8" onclick="closeQrModal(event)">✕</button>
+            </div>
+            <div id="session-reader-modal" class="rounded-lg overflow-hidden bg-black aspect-square"></div>
+            <div class="text-[10px] text-gray-400 mt-2">Richt de camera op de QR-code.</div>
+        </div>
+    </div>
 
     <script>
         document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
@@ -255,10 +349,10 @@
         class Particle {
             constructor(x, y, color) {
                 this.x = x; this.y = y; this.color = color;
-                this.size = Math.random() * 3 + 1;
-                this.vX = (Math.random() - 0.5) * 10;
-                this.vY = (Math.random() - 0.5) * 10;
-                this.life = 1.0;
+                this.size = Math.random() * 4 + 1.5;
+                this.vX = (Math.random() - 0.5) * 12;
+                this.vY = (Math.random() - 0.5) * 12;
+                this.life = 1.2;
             }
             update() { this.x += this.vX; this.y += this.vY; this.vY += 0.2; this.life -= 0.02; }
             draw() { ctx.globalAlpha = this.life; ctx.fillStyle = this.color; ctx.beginPath(); ctx.arc(this.x, this.y, this.size, 0, Math.PI*2); ctx.fill(); }
@@ -299,10 +393,12 @@
                                         : ['#10b981', '#60a5fa', '#fcd34d', '#f472b6', '#ffffff'];
             const x = e ? e.clientX : window.innerWidth / 2;
             const y = e ? e.clientY : window.innerHeight / 2;
-            for(let i=0; i<20; i++) {
+            const count = hearts ? 35 : sad ? 18 : 30;
+            const sadEmojis = ['☠️','💀','🥀','😢','🪦','🙁'];
+            for(let i=0; i<count; i++) {
                 const color = colors[Math.floor(Math.random()*colors.length)];
                 if(hearts) particles.push(new HeartParticle(x, y, color));
-                else if(sad) particles.push(new EmojiParticle(x, y, '☹️'));
+                else if(sad) particles.push(new EmojiParticle(x, y, sadEmojis[Math.floor(Math.random()*sadEmojis.length)]));
                 else particles.push(new Particle(x, y, color));
             }
         }
@@ -327,7 +423,21 @@
 
         const WMO = { 0: "Helder", 1: "Licht bewolkt", 2:"Half bewolkt", 3: "Bewolkt", 61: "Regen", 80: "Buien" };
 
-        let storage = JSON.parse(localStorage.getItem(`paddentrek_${APP_VERSION}`)) || {};
+        const STORAGE_KEY = `paddentrek_${APP_VERSION}`;
+        let reportMode = 'session'; // 'session' | 'day'
+        let photoTargetSession = null;
+        let viewedSessionId = '';
+        let sessionScanner = null;
+        let storage = JSON.parse(localStorage.getItem(STORAGE_KEY));
+        // Migreer indien versie is opgehoogd zodat data behouden blijft
+        if(!storage) {
+            const prevKey = Object.keys(localStorage)
+                .filter(k => k.startsWith('paddentrek_') && k !== STORAGE_KEY)
+                .sort()
+                .pop();
+            storage = prevKey ? (JSON.parse(localStorage.getItem(prevKey)) || {}) : {};
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(storage));
+        }
         let activeSessionId = null;
         // Schema v2: per day stores counts, custom, photos, notes, weather, sessions
         // session object: { id, start, end?, counts: {}, notes: '' }
@@ -337,13 +447,21 @@
 
         // Zorgt dat een dag-object altijd alle sleutels heeft voordat we ermee werken
         function ensureDay(d = picker.value) {
-            if(!storage[d]) storage[d] = { counts: {}, custom: [], photos: [], notes: "", sessions: [] };
+            if(!storage[d]) storage[d] = { counts: {}, custom: [], photos: [], notes: "", sessions: [], weather: null };
             const day = storage[d];
             if(!day.counts) day.counts = {};
             if(!day.custom) day.custom = [];
             if(!day.photos) day.photos = [];
             if(typeof day.notes !== 'string') day.notes = "";
             if(!day.sessions) day.sessions = [];
+            if(!day.weather) day.weather = null;
+            day.sessions.forEach(s => {
+                if(!s.counts) s.counts = {};
+                if(!s.photos) s.photos = [];
+                if(!s.routeName) s.routeName = "";
+                if(typeof s.notes !== 'string') s.notes = "";
+                if(!s.weather) s.weather = null;
+            });
             return day;
         }
 
@@ -354,6 +472,14 @@
                 if(!day.custom) day.custom = [];
                 if(!day.photos) day.photos = [];
                 if(typeof day.notes !== 'string') day.notes = "";
+                if(!day.weather) day.weather = null;
+                day.sessions.forEach(s => {
+                    if(!s.counts) s.counts = {};
+                    if(!s.photos) s.photos = [];
+                    if(!s.routeName) s.routeName = "";
+                    if(typeof s.notes !== 'string') s.notes = "";
+                    if(!s.weather) s.weather = null;
+                });
             }
             save();
         }
@@ -361,8 +487,7 @@
         function buildUI() {
             document.getElementById('render-target').innerHTML = SPECIES.map(s => renderCard(s)).join('');
             renderCustom();
-            renderPhotos();
-            loadNotes();
+            renderSessionLog();
         }
 
         function renderCard(s, custom = false) {
@@ -377,17 +502,47 @@
                         <div class="grid grid-cols-2 gap-4">
                             <div class="space-y-1">
                                 <p class="text-[8px] text-emerald-400 font-bold uppercase tracking-widest italic">Levend</p>
-                                ${liveKeys.map(k => btn(s.id, k, s.color, k==='p_l' ? '❤️' : k[0].toUpperCase())).join('')}
+                                ${liveKeys.map(k => btn(s.id, k, s.color, k==='p_l' ? livePairLabel() : iconLabel(k, false))).join('')}
                             </div>
                             <div class="space-y-1">
                                 <p class="text-[8px] text-red-500 font-bold uppercase tracking-widest italic">Dood</p>
-                                ${s.hasAmplexus ? btn(s.id, 'p_d', 'red', 'PAARTJE ☠️', true) : ''}
-                                ${['m_d','v_d','o_d'].map(k => btn(s.id, k, 'red', k[0].toUpperCase(), true)).join('')}
+                                ${s.hasAmplexus ? btn(s.id, 'p_d', 'red', deadPairLabel(), true) : ''}
+                                ${['m_d','v_d','o_d'].map(k => btn(s.id, k, 'red', iconLabel(k, true), true)).join('')}
                             </div>
                         </div>
                     </div>
                 </div>
             `;
+        }
+
+        function livePairLabel() {
+            return `<span class="inline-flex items-center gap-1 text-[15px] font-bold">
+                <span class="icon-lg font-bold">M</span>
+                <span class="icon-lg" style="color:#f87171;">❤️</span>
+                <span class="icon-lg font-bold">V</span>
+            </span>`;
+        }
+        function deadPairLabel() {
+            return `<span class="inline-flex items-center gap-1">
+                <span class="icon-lg">☠️</span>
+                <span class="icon-lg font-bold">M</span>
+                <span class="icon-lg" style="color:#f87171;">❤️</span>
+                <span class="icon-lg font-bold">V</span>
+            </span>`;
+        }
+
+        function iconLabel(key, dead = false) {
+            const isM = key.startsWith('m') || key.includes('m_');
+            const isV = key.startsWith('v') || key.includes('v_');
+            const isO = key.startsWith('o') || key.includes('o_');
+            const male = `<span class="icon-lg font-bold">M</span>`;
+            const female = `<span class="icon-lg font-bold">V</span>`;
+            const unk = `<span class="icon-lg font-bold">?</span>`;
+            const skull = `<span class="icon-lg">☠️</span>`;
+            if(isM) return dead ? `${skull}${male}` : `${male}`;
+            if(isV) return dead ? `${skull}${female}` : `${female}`;
+            if(isO) return dead ? `${skull}${unk}` : `${unk}`;
+            return key;
         }
 
         function btn(sid, type, color, label, dood = false) {
@@ -399,8 +554,8 @@
 
             return `
                 <div class="flex items-center gap-1">
-                    <button onclick="mod('${key}', 1, event)" class="counter-btn flex-grow ${cls} h-10 rounded-lg font-bold text-xs border active:scale-95">
-                        ${label}: <span id="${key}">0</span>
+                    <button onclick="mod('${key}', 1, event)" class="counter-btn flex-grow ${cls} h-10 rounded-lg font-bold text-[14px] border active:scale-95">
+                        <span class="inline-flex items-center gap-1 align-middle">${label}</span>: <span id="${key}">0</span>
                     </button>
                     <button onclick="mod('${key}', -1, event)" class="minus-btn bg-gray-700/40 w-8 h-10 rounded-lg text-gray-500 border border-gray-600/20 active:bg-gray-600">-</button>
                 </div>
@@ -410,8 +565,6 @@
         function mod(key, val, e) {
             const d = picker.value;
             const day = ensureDay(d);
-            lastAction = { d, key, val };
-            document.getElementById('undo-container').classList.remove('hidden');
             let active = getActiveSession(day);
             if(!active) {
                 startSession(true, false, d);
@@ -433,23 +586,16 @@
             }
         }
 
-        function undo() {
-            if(!lastAction) return;
-            const day = ensureDay(lastAction.d);
-            day.counts[lastAction.key] -= lastAction.val;
-            if(day.counts[lastAction.key] < 0) day.counts[lastAction.key] = 0;
-            lastAction = null; document.getElementById('undo-container').classList.add('hidden');
-            save(); render(); showToast("Correctie doorgevoerd");
-        }
-
-        function save() { localStorage.setItem(`paddentrek_${APP_VERSION}`, JSON.stringify(storage)); }
+        function save() { localStorage.setItem(STORAGE_KEY, JSON.stringify(storage)); }
 
         function render() {
             const d = ensureDay();
+            const active = getActiveSession(d);
+            const countsSource = active ? (active.counts || {}) : d.counts;
             const up = s => {
                 let t = 0;
                 ['p_l','p_d','m_l','v_l','o_l','m_d','v_d','o_d'].forEach(k => {
-                    const v = d.counts[`${s.id}_${k}`] || 0;
+                    const v = countsSource[`${s.id}_${k}`] || 0;
                     if(document.getElementById(`${s.id}_${k}`)) document.getElementById(`${s.id}_${k}`).innerText = v;
                     t += (k==='p_l' || k==='p_d') ? v*2 : v;
                 });
@@ -458,50 +604,163 @@
             SPECIES.forEach(up);
             (d.custom || []).forEach(up);
             renderSessions();
+            renderSessionLog();
             updateReport(); updateWeather();
+        }
+
+        function renderSessionLog() {
+            const box = document.getElementById('session-log-container');
+            if(!box) return;
+            const day = ensureDay();
+            const sessions = day.sessions.slice().sort((a,b)=>new Date(a.start)-new Date(b.start));
+            if(!sessions.length) { box.innerHTML = '<div class="text-gray-500 text-sm">Nog geen sessies vandaag.</div>'; return; }
+            const selected = viewedSessionId || sessions[sessions.length-1].id;
+            box.innerHTML = sessions
+            .filter(s => s.id === selected)
+            .map(s => {
+                const total = sumCounts(s.counts);
+                const weather = s.weather ? `${s.weather.t}°C • ${WMO[s.weather.c] || 'OK'}` : 'Onbekend';
+                const photos = s.photos || [];
+                return `
+                    <div class="bg-gray-800 p-4 rounded-xl border border-gray-700 space-y-3">
+                        <div class="flex justify-between items-start gap-2">
+                            <div>
+                                <div class="text-xs text-gray-400">${fmtTime(s.start)} - ${s.end ? fmtTime(s.end) : 'lopend'}</div>
+                                <div class="text-lg font-bold text-white">${total} stuks</div>
+                            </div>
+                            <button class="bg-purple-700 px-2 py-1 rounded text-[10px]" onclick="triggerPhoto('${s.id}')">📸</button>
+                        </div>
+                            <div class="space-y-2 text-left">
+                                <label class="text-[10px] uppercase text-gray-400 font-bold">Traject</label>
+                                <input value="${s.routeName || ''}" oninput="updateRoute('${s.id}', this.value)" class="w-full bg-gray-700 rounded px-2 py-2 text-sm text-white border border-gray-600" placeholder="Sint-Amandsstraat, Pittem" list="route-suggestions">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <div class="text-[10px] uppercase text-gray-400 font-bold">Weer</div>
+                                    <div class="text-sm text-gray-200">${weather}</div>
+                                </div>
+                                <button class="bg-yellow-600 text-white px-3 py-1 rounded text-[10px]" onclick="fetchWeather(picker.value, '${s.id}')">GPS Update</button>
+                            </div>
+                            <label class="text-[10px] uppercase text-gray-400 font-bold">Notities</label>
+                            <textarea oninput="updateSessionNotes('${s.id}', this.value)" class="w-full bg-gray-700 border-none rounded p-3 text-sm h-20 text-white focus:ring-1 focus:ring-blue-500">${s.notes || ''}</textarea>
+                        </div>
+                        <div class="space-y-2">
+                            <div class="flex items-center justify-between text-[10px] text-gray-400">
+                                <span>Foto's (${photos.length})</span>
+                                <div class="flex gap-2">
+                                    <button class="bg-purple-700 px-3 py-1 rounded text-white text-[10px]" onclick="triggerPhoto('${s.id}')">➕ Voeg foto</button>
+                                    <button class="bg-purple-900/60 border border-purple-500 px-3 py-1 rounded text-white text-[10px]" onclick="shareSessionPhotos('${s.id}')">📤 Deel</button>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-3 gap-2">
+                                ${photos.map((p,i)=>`
+                                    <div class="relative">
+                                        <img src="${p}" class="rounded w-full aspect-square object-cover shadow cursor-pointer" onclick="openPhoto('${s.id}', ${i})">
+                                        <button class="absolute top-1 right-1 bg-red-700 rounded-full w-5 h-5 text-[9px] font-bold" onclick="removeSessionPhoto('${s.id}', ${i})">X</button>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            buildRouteSuggestions();
         }
 
         function renderSessions() {
             const day = ensureDay();
-            const list = document.getElementById('session-list');
             const status = document.getElementById('session-status');
-            const select = document.getElementById('active-session-select');
             const active = getActiveSession(day);
-            status.innerText = active ? `Actief sinds ${fmtTime(active.start)}` : 'Geen sessie actief';
-            const rows = day.sessions
-                .slice()
-                .sort((a,b) => new Date(a.start) - new Date(b.start))
-                .map(s => {
-                    const title = `${fmtTime(s.start)} - ${s.end ? fmtTime(s.end) : 'lopend'}`;
-                    const total = sumCounts(s.counts);
-                    const weather = s.weather ? ` • ${s.weather.t}°C ${WMO[s.weather.c] || 'OK'}` : '';
-                    return `<div class="flex justify-between items-center bg-gray-900/50 px-2 py-1 rounded border border-gray-800">
-                        <span>${title} · ${total} stuks${weather}</span>
-                        <div class="flex gap-1">
-                            <button onclick="mergeSession('${s.id}')" class="bg-gray-700 px-2 py-1 rounded text-[9px]">Voeg samen</button>
-                            ${s.end ? '' : '<span class="text-emerald-400 text-[9px]">live</span>'}
-                        </div>
-                    </div>`;
-                }).join('') || '<div class="text-gray-500">Nog geen sessies</div>';
-            if(list) list.innerHTML = rows;
-            if(select) {
-                select.innerHTML = '<option value=\"\">Geen</option>' + day.sessions.map(s => {
-                    const label = `${fmtTime(s.start)} ${s.end ? '– '+fmtTime(s.end) : '(live)'}`;
-                    return `<option value="${s.id}" ${(active && s.id===active.id) ? 'selected' : ''}>${label}</option>`;
-                }).join('');
-                select.value = active ? active.id : (select.options[0]?.value || '');
+            const dayTotal = sumCounts(day.counts);
+            const activeTotal = active ? sumCounts(active.counts) : null;
+            status.innerText = active
+                ? `Actief sinds ${fmtTime(active.start)} · Sessie: ${activeTotal} · Dag: ${dayTotal}`
+                : `Geen sessie actief · Dag: ${dayTotal}`;
+            const summary = document.getElementById('session-summary');
+            if(summary) summary.innerText = active ? `${activeTotal} stuks` : `${dayTotal} stuks vandaag`;
+            const stopBtn = document.getElementById('stop-btn');
+            if(stopBtn) stopBtn.classList.toggle('hidden', !active);
+            const newBtn = document.getElementById('new-session-btn');
+            if(newBtn) newBtn.classList.toggle('hidden', !!active);
+            buildViewedSessionOptions();
+            buildRouteSuggestions();
+        }
+
+        function buildViewedSessionOptions() {
+            const sel = document.getElementById('session-view-select');
+            if(!sel) return;
+            const day = ensureDay();
+            const sessions = day.sessions.slice().sort((a,b)=>new Date(a.start)-new Date(b.start));
+            sel.innerHTML = sessions.map(s => {
+                const label = `${fmtTime(s.start)} ${s.end ? '– '+fmtTime(s.end) : '(live)'}`;
+                return `<option value="${s.id}" ${s.id === (viewedSessionId || '') ? 'selected' : ''}>${label}</option>`;
+            }).join('') || '<option value=\"\">Geen sessies</option>';
+            if(!viewedSessionId && sessions.length) viewedSessionId = sessions[sessions.length-1].id;
+            if(sel && viewedSessionId) sel.value = viewedSessionId;
+        }
+
+        function setViewedSession(id) {
+            viewedSessionId = id || '';
+            renderSessionLog();
+            updateReport();
+        }
+
+
+        function updateSessionNotes(id, val) {
+            const day = ensureDay();
+            const s = day.sessions.find(x => x.id === id);
+            if(!s) return;
+            s.notes = val;
+            save();
+        }
+
+        function updateRoute(id, val) {
+            const day = ensureDay();
+            const s = day.sessions.find(x => x.id === id);
+            if(!s) return;
+            s.routeName = val;
+            save();
+            buildRouteSuggestions();
+        }
+
+        function removeSessionPhoto(id, idx) {
+            const day = ensureDay();
+            const s = day.sessions.find(x => x.id === id);
+            if(!s) return;
+            s.photos.splice(idx,1);
+            // dagbuffer opschonen grof (herstelt duplicaten niet exact, maar voldoende)
+            day.photos = day.sessions.flatMap(ss => ss.photos);
+            save(); renderSessionLog();
+        }
+
+        function openPhoto(sessionId, idx) {
+            const day = ensureDay();
+            const s = day.sessions.find(x => x.id === sessionId);
+            if(!s) return;
+            const photo = s.photos?.[idx];
+            if(!photo) return;
+            const box = document.getElementById('photo-lightbox');
+            const img = document.getElementById('photo-lightbox-img');
+            img.src = photo;
+            box.classList.remove('hidden');
+        }
+
+        function closePhoto(ev) {
+            // close when backdrop or X clicked
+            const box = document.getElementById('photo-lightbox');
+            if(!box) return;
+            if(ev.target.id === 'photo-lightbox' || ev.target.tagName === 'BUTTON' || ev.target.tagName === 'IMG' && ev.target.id === 'photo-lightbox-img') {
+                box.classList.add('hidden');
+                document.getElementById('photo-lightbox-img').src = '';
             }
         }
 
-        function setActiveSession(id) {
-            const day = ensureDay();
-            if(id && day.sessions.find(s => s.id === id)) activeSessionId = id;
-            else activeSessionId = null;
-            save(); renderSessions(); showToast(activeSessionId ? 'Actieve sessie gekozen' : 'Geen sessie actief');
-        }
-
         function sumCounts(obj = {}) {
-            return Object.values(obj).reduce((a,b) => a + b, 0);
+            let total = 0;
+            for(const k in obj) {
+                const v = obj[k] || 0;
+                total += (k.includes('_p_')) ? v*2 : v; // paartjes tellen als twee dieren
+            }
+            return total;
         }
 
         function getActiveSession(day) {
@@ -523,7 +782,7 @@
                         <div class="text-gray-400 text-[10px]">${total} stuks</div>
                         ${weather}
                     </div>
-                    <button class="bg-red-700 px-2 py-1 rounded text-[9px]" onclick="deleteSession('${s.id}','${dayKey}')">Del</button>
+                    <button class="bg-red-700 px-2 py-1 rounded text-[12px]" onclick="deleteSession('${s.id}','${dayKey}')" title="Verwijder sessie">🗑️</button>
                 </label>`;
             }).join('') || '<div class="text-gray-500">Geen sessies voor deze dag.</div>';
             box.innerHTML = items;
@@ -541,10 +800,11 @@
             const existing = day.sessions.find(s => !s.end);
             if(existing && !force) { alert('Er draait al een sessie. Stop eerst.'); return; }
             const now = new Date();
-            const session = { id: 'sess_'+now.getTime(), start: now.toISOString(), counts: {}, notes: '', weather: null };
+            const session = { id: 'sess_'+now.getTime(), start: now.toISOString(), counts: {}, notes: '', weather: null, photos: [], routeName: '' };
             day.sessions.push(session);
             activeSessionId = session.id;
-            save(); renderSessions(); renderSessionAdmin(); showToast('Sessie gestart');
+            viewedSessionId = session.id;
+            save(); render(); renderSessionAdmin(); showToast('Sessie gestart');
             fetchWeather(dayKey, session.id); // capture weather at start
         }
 
@@ -553,7 +813,7 @@
             const active = day.sessions.find(s => !s.end);
             if(!active) return alert('Geen actieve sessie');
             active.end = new Date().toISOString();
-            save(); renderSessions(); renderSessionAdmin(); showToast('Sessie gestopt');
+            save(); render(); renderSessionAdmin(); showToast('Sessie gestopt');
         }
 
         // legacy single merge fallback (unused in UI now but kept for safety)
@@ -566,6 +826,9 @@
             const master = target;
             others.forEach(s => {
                 for(const k in s.counts) master.counts[k] = (master.counts[k]||0) + s.counts[k];
+                if(s.photos && s.photos.length) {
+                    master.photos = (master.photos || []).concat(s.photos);
+                }
                 if(new Date(s.start) < new Date(master.start)) master.start = s.start;
                 if(s.end && (!master.end || new Date(s.end) > new Date(master.end))) master.end = s.end;
                 if(s.weather && !master.weather) master.weather = s.weather;
@@ -585,6 +848,9 @@
             const others = day.sessions.filter(s => ids.includes(s.id) && s.id !== masterId);
             others.forEach(s => {
                 for(const k in s.counts) master.counts[k] = (master.counts[k]||0) + s.counts[k];
+                if(s.photos && s.photos.length) {
+                    master.photos = (master.photos || []).concat(s.photos);
+                }
                 if(new Date(s.start) < new Date(master.start)) master.start = s.start;
                 if(s.end && (!master.end || new Date(s.end) > new Date(master.end))) master.end = s.end;
                 if(s.weather && !master.weather) master.weather = s.weather;
@@ -599,6 +865,24 @@
             day.sessions.forEach(s => {
                 for(const k in s.counts) day.counts[k] = (day.counts[k]||0) + s.counts[k];
             });
+            day.photos = day.sessions.flatMap(s => s.photos || []);
+        }
+
+        function purgeEmptyCustomSpecies() {
+            for(const d in storage) {
+                const day = ensureDay(d);
+                if(!day.custom) continue;
+                day.custom = day.custom.filter(c => {
+                    const hasCounts = Object.keys(day.counts||{}).some(k => k.startsWith(`${c.id}_`) && (day.counts[k]||0) > 0);
+                    return hasCounts || c.name !== 'Onbekend';
+                });
+                // verwijder lege count keys voor niet-bestaande custom soorten
+                const validIds = new Set(day.custom.map(c => c.id));
+                Object.keys(day.counts||{}).forEach(k => {
+                    const sid = k.split('_')[0];
+                    if(!validIds.has(sid) && k.startsWith('c_')) delete day.counts[k];
+                });
+            }
         }
 
         function deleteSession(id, dayKey = picker.value) {
@@ -642,8 +926,10 @@
         }
 
         function updateWeather() {
+            const el = document.getElementById('weather-display');
+            if(!el) return;
             const w = storage[picker.value]?.weather;
-            document.getElementById('weather-display').innerText = w ? `${w.t}°C - ${WMO[w.c] || "OK"}` : "Geen weerdata bekend.";
+            el.innerText = w ? `${w.t}°C - ${WMO[w.c] || "OK"}` : "Geen weerdata bekend.";
         }
 
         function addCustomSpecies() {
@@ -666,58 +952,72 @@
         }
         function removeC(id) { if(confirm("Soort wissen?")) { const day = ensureDay(); day.custom = day.custom.filter(c => c.id!==id); save(); buildUI(); render(); } }
 
+        function triggerPhoto(sessionId = null) {
+            const day = ensureDay();
+            const target = sessionId || (getActiveSession(day)?.id || null);
+            if(!target) { alert('Start eerst een sessie om foto\'s toe te voegen.'); return; }
+            photoTargetSession = target;
+            const input = document.getElementById('photo-input');
+            input.value = '';
+            input.click();
+        }
+
         function handlePhoto(e) {
             const f = e.target.files[0]; if(!f) return;
             const day = ensureDay();
+            const session = photoTargetSession
+                ? day.sessions.find(s => s.id === photoTargetSession)
+                : getActiveSession(day);
+            if(!session) { alert('Geen actieve sessie gevonden.'); return; }
             const r = new FileReader(); r.onload = ev => {
                 const img = new Image(); img.onload = () => {
                     const c = document.createElement('canvas'); const m = 600;
                     const fct = Math.min(1, m/Math.max(img.width, img.height));
                     c.width = img.width*fct; c.height = img.height*fct;
                     c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-                    day.photos.push(c.toDataURL('image/jpeg', 0.6));
-                    save(); renderPhotos();
+                    const data = c.toDataURL('image/jpeg', 0.6);
+                    session.photos.push(data);
+                    // ook op dag-niveau voor aggregatie en legacy
+                    day.photos.push(data);
+                    save(); renderSessionLog();
                 }; img.src = ev.target.result;
             }; r.readAsDataURL(f);
         }
-        function renderPhotos() {
-            const p = ensureDay().photos;
-            document.getElementById('photo-gallery').innerHTML = p.map((s,i) => `
-                <div class="relative"><img src="${s}" class="rounded w-full aspect-square object-cover shadow-lg">
-                <button onclick="remP(${i})" class="absolute top-1 right-1 bg-red-600 rounded-full w-5 h-5 text-[9px] font-bold">X</button></div>
-            `).join('');
-        }
-        function remP(i) { const day = ensureDay(); day.photos.splice(i,1); save(); renderPhotos(); }
 
-        function clearAllPhotos() {
-            if(!confirm('Alle foto\'s in alle dagen wissen?')) return;
-            for(const d in storage) { const day = ensureDay(d); day.photos = []; }
-            save(); renderPhotos(); showToast('Alle foto\'s gewist');
+        function clearAllPhotos(dayKey = null) {
+            if(!confirm(dayKey ? `Alle foto\'s van ${dayKey} wissen?` : 'Alle foto\'s in alle dagen wissen?')) return;
+            if(dayKey) {
+                const d = ensureDay(dayKey);
+                d.photos = [];
+                d.sessions.forEach(s => s.photos = []);
+            } else {
+                for(const d in storage) { const day = ensureDay(d); day.photos = []; day.sessions.forEach(s => s.photos = []); }
+            }
+            save(); renderSessionLog(); showToast('Foto\'s gewist');
         }
-        function saveNotes() { const day = ensureDay(); day.notes = document.getElementById('daily-notes').value; save(); updateReport(); }
-        function loadNotes() { document.getElementById('daily-notes').value = ensureDay().notes; }
 
-        async function sharePhotos(includeReportText = false) {
+        async function shareSessionPhotos(sessionId) {
             const day = ensureDay();
-            const photos = day.photos || [];
-            if(!photos.length) { alert("Geen foto's beschikbaar voor deze dag."); return; }
-
+            const session = day.sessions.find(s => s.id === sessionId);
+            if(!session) return alert('Sessies niet gevonden');
+            const photos = session.photos || [];
+            if(!photos.length) return alert('Geen foto\'s in deze sessie.');
             const files = photos.map((dataUrl, idx) => {
                 const res = dataURLToBlob(dataUrl);
-                return new File([res.blob], `paddentrek-${picker.value}-${idx+1}.${res.ext}`, { type: res.blob.type });
+                return new File([res.blob], `paddentrek-${picker.value}-${sessionId}-${idx+1}.${res.ext}`, { type: res.blob.type });
             });
-
-            const text = includeReportText ? document.getElementById('report-text').innerText : `Paddentrek foto's ${picker.value}`;
-
-            if(navigator.canShare && navigator.canShare({ files })) {
-                try {
-                    await navigator.share({ title: 'Paddentrek', text, files });
-                } catch(err) {
-                    if(err?.name !== 'AbortError') alert('Delen mislukt of niet ondersteund door deze browser.');
+            const text = `Foto's ${picker.value} (${fmtTime(session.start)}): ${photos.length} stuks`;
+            const shareData = { title: 'Paddentrek', text, files };
+            try {
+                if (navigator.share) {
+                    await navigator.share(shareData);
+                    return;
                 }
-            } else {
-                alert(`Deze browser ondersteunt delen van bestanden niet. Kopieer het rapport of stuur foto's handmatig.`);
+            } catch(err) {
+                if(err?.name === 'AbortError') return;
             }
+            const wa = `https://wa.me/?text=${encodeURIComponent(text)}`;
+            window.open(wa, '_blank');
         }
 
         function dataURLToBlob(dataUrl) {
@@ -731,56 +1031,147 @@
         }
 
         function updateReport() {
-            const d = picker.value; const data = storage[d] || {};
+            const d = picker.value; const data = ensureDay(d);
             const sel = document.getElementById('report-session-select');
             const sessionId = sel ? sel.value : '';
             const session = sessionId ? (data.sessions || []).find(s => s.id === sessionId) : null;
-            const c = session ? (session.counts || {}) : (data.counts || {});
+            const targetCounts = reportMode === 'session' && session ? session.counts : data.counts;
             let txt = `🐸 *OVERZET-UPDATE - ${d}*\n\n`;
-            const w = session?.weather || data.weather;
+            const w = (reportMode === 'session' ? session?.weather : data.weather) || session?.weather;
             if(w) txt += `🌤️ *Weer:* ${w.t}°C, ${WMO[w.c] || "OK"}\n\n`;
             const all = [...SPECIES, ...(data.custom || [])]; let h = false;
             all.forEach(s => {
-                const pl = c[`${s.id}_p_l`]||0, pd = c[`${s.id}_p_d`]||0;
-                const ml = c[`${s.id}_m_l`]||0, vl = c[`${s.id}_v_l`]||0, ol = c[`${s.id}_o_l`]||0;
-                const md = c[`${s.id}_m_d`]||0, vd = c[`${s.id}_v_d`]||0, od = c[`${s.id}_o_d`]||0;
+                const pl = targetCounts[`${s.id}_p_l`]||0, pd = targetCounts[`${s.id}_p_d`]||0;
+                const ml = targetCounts[`${s.id}_m_l`]||0, vl = targetCounts[`${s.id}_v_l`]||0, ol = targetCounts[`${s.id}_o_l`]||0;
+                const md = targetCounts[`${s.id}_m_d`]||0, vd = targetCounts[`${s.id}_v_d`]||0, od = targetCounts[`${s.id}_o_d`]||0;
                 if(pl+pd+ml+vl+ol+md+vd+od > 0) { h = true;
                     txt += `*${s.name}:*\n${pl>0 ? '  ❤️ '+pl+' Koppels (levend)\n':''}${pd>0 ? '  ☠️ '+pd+' Koppels (dood)\n':''}  - Levend: ${ml}m, ${vl}v, ${ol}o\n  - Dood: ${md}m, ${vd}v, ${od}o\n`;
                 }
             });
             txt += `\nℹ️ Koppels (❤️/☠️) worden niet dubbel geteld bij de losse man/vrouw-aantallen.\n`;
-            if(data.notes) txt += `\n📝 *Nota:* ${data.notes}\n`;
-            const sessionsToShow = session ? [session] : (data.sessions || []);
+            if(reportMode === 'session' && session?.notes) txt += `\n📝 *Nota:* ${session.notes}\n`;
+            if(reportMode === 'day' && data.notes) txt += `\n📝 *Nota:* ${data.notes}\n`;
+            const sessionsToShow = reportMode === 'session' && session ? [session] : (data.sessions || []);
             if(sessionsToShow.length) {
                 txt += `\n⏱️ *Sessies:*\n`;
                 sessionsToShow.sort((a,b)=>new Date(a.start)-new Date(b.start)).forEach(s => {
                     const total = sumCounts(s.counts);
                     const wtxt = s.weather ? ` | 🌤️ ${s.weather.t}°C ${WMO[s.weather.c]||'OK'}` : '';
-                    txt += `  - ${fmtTime(s.start)} - ${s.end ? fmtTime(s.end) : 'lopend'}: ${total} stuks${wtxt}\n`;
+                    const route = s.routeName ? ` | 🚶‍♂️ ${s.routeName}` : '';
+                    txt += `  - ${fmtTime(s.start)} - ${s.end ? fmtTime(s.end) : 'lopend'}: ${total} stuks${route}${wtxt}\n`;
                 });
             }
             txt += `\n#Paddentrek #Telling`;
             document.getElementById('report-text').innerText = h || data.notes ? txt : "Nog geen data ingevoerd.";
+        }
 
-            let allTxt = '🐸 *OVERZET - ALLE DAGEN*\n\n';
-            Object.keys(storage).sort().forEach(day => {
-                const ddata = storage[day]; if(!ddata) return;
-                const total = sumCounts(ddata.counts);
-                allTxt += `- ${day}: ${total} stuks\n`;
+        function setReportMode(m) {
+            reportMode = m;
+            updateReport();
+        }
+
+        async function shareReport(includePhotos = false) {
+            const day = ensureDay();
+            const sel = document.getElementById('report-session-select');
+            const sessionId = sel ? sel.value : '';
+            const session = sessionId ? day.sessions.find(s => s.id === sessionId) : null;
+            const text = document.getElementById('report-text').innerText || 'Geen data';
+            let files = [];
+            if(includePhotos) {
+                const photos = reportMode === 'session' && session ? (session.photos||[]) : (day.photos||[]);
+                files = photos.map((dataUrl, idx) => {
+                    const res = dataURLToBlob(dataUrl);
+                    return new File([res.blob], `paddentrek-${picker.value}-${idx+1}.${res.ext}`, { type: res.blob.type });
+                });
+            }
+            const shareData = includePhotos ? { title: 'Paddentrek', text, files } : { title: 'Paddentrek', text };
+            try {
+                if(navigator.share) {
+                    await navigator.share(shareData);
+                    return;
+                }
+            } catch(err) {
+                if(err?.name === 'AbortError') return;
+            }
+            // Fallback: WhatsApp tekst
+            const wa = `https://wa.me/?text=${encodeURIComponent(text)}`;
+            window.open(wa, '_blank');
+        }
+
+        function exportReportCSV(forceDay = false) {
+            const d = picker.value;
+            const day = ensureDay();
+            const sel = document.getElementById('report-session-select');
+            const sessionId = sel ? sel.value : '';
+            const session = (!forceDay && sessionId) ? day.sessions.find(s => s.id === sessionId) : null;
+            const counts = reportMode === 'session' && session ? session.counts || {} : day.counts || {};
+            const meta = reportMode === 'session' && session
+                ? { route: session.routeName || '', notes: session.notes || '', weather: session.weather }
+                : { route: '', notes: day.notes || '', weather: day.weather };
+            const rows = [];
+            rows.push(['Datum','Scope','Route','Notities','Weer temp','Weer code','Soort','Koppels levend','Koppels dood','M levend','V levend','Onb levend','M dood','V dood','Onb dood','Totaal']);
+            const all = [...SPECIES, ...(day.custom || [])];
+            all.forEach(s => {
+                const pl = counts[`${s.id}_p_l`]||0, pd = counts[`${s.id}_p_d`]||0;
+                const ml = counts[`${s.id}_m_l`]||0, vl = counts[`${s.id}_v_l`]||0, ol = counts[`${s.id}_o_l`]||0;
+                const md = counts[`${s.id}_m_d`]||0, vd = counts[`${s.id}_v_d`]||0, od = counts[`${s.id}_o_d`]||0;
+                const tot = pl*2+pd*2+ml+vl+ol+md+vd+od;
+                if(tot>0) rows.push([
+                    d,
+                    session ? 'Sessie' : 'Dag',
+                    meta.route,
+                    meta.notes,
+                    meta.weather?.t ?? '',
+                    meta.weather?.c ?? '',
+                    s.name, pl, pd, ml, vl, ol, md, vd, od, tot
+                ]);
             });
-            document.getElementById('all-report-text').innerText = allTxt;
+            if(rows.length===1) rows.push(['Geen data',0,0,0,0,0,0,0,0,0]);
+            downloadCSV(rows, session ? `paddentrek-${d}-${session.id}.csv` : `paddentrek-${d}-dag.csv`);
+        }
+
+        function downloadCSV(rows, name) {
+            const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(';')).join('\n');
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = name;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            showToast('CSV opgeslagen');
+        }
+
+        function exportAllSessionsCSV() {
+            const d = picker.value;
+            const day = ensureDay();
+            const rows = [['Datum','Scope','SessionId','Sessiestart','Sessie-einde','Route','Notities','Weer temp','Weer code','Soort','Koppels levend','Koppels dood','M levend','V levend','Onb levend','M dood','V dood','Onb dood','Totaal']];
+            const addRows = (scopeLabel, counts, route, notes, wt, wc, sessStart='', sessEnd='', sessId='') => {
+                const all = [...SPECIES, ...(day.custom || [])];
+                all.forEach(s => {
+                    const pl = counts[`${s.id}_p_l`]||0, pd = counts[`${s.id}_p_d`]||0;
+                    const ml = counts[`${s.id}_m_l`]||0, vl = counts[`${s.id}_v_l`]||0, ol = counts[`${s.id}_o_l`]||0;
+                    const md = counts[`${s.id}_m_d`]||0, vd = counts[`${s.id}_v_d`]||0, od = counts[`${s.id}_o_d`]||0;
+                    const tot = pl*2+pd*2+ml+vl+ol+md+vd+od;
+                    if(tot>0) rows.push([d, scopeLabel, sessId, sessStart, sessEnd, route, notes, wt, wc, s.name, pl, pd, ml, vl, ol, md, vd, od, tot]);
+                });
+            };
+            if(day.sessions && day.sessions.length) {
+                day.sessions.forEach(s => {
+                    const wt = s.weather?.t ?? day.weather?.t ?? '';
+                    const wc = s.weather?.c ?? day.weather?.c ?? '';
+                    addRows('Sessie', s.counts||{}, s.routeName||'', s.notes||'', wt, wc, s.start||'', s.end||'', s.id||'');
+                });
+            }
+            downloadCSV(rows, `paddentrek-${d}-sessies.csv`);
         }
 
         function copyReport() {
             const t = document.getElementById('report-text').innerText;
             const el = document.createElement('textarea'); el.value = t; document.body.appendChild(el);
             el.select(); document.execCommand('copy'); document.body.removeChild(el); showToast("Gekopieerd!");
-        }
-
-        function copyAllReport() {
-            const t = document.getElementById('all-report-text').innerText;
-            const el = document.createElement('textarea'); el.value = t; document.body.appendChild(el);
-            el.select(); document.execCommand('copy'); document.body.removeChild(el); showToast("Alle dagen gekopieerd");
         }
 
         // --- UPDATE BADGE ---
@@ -817,10 +1208,21 @@
             if(!sel) return;
             const day = ensureDay();
             sel.innerHTML = '<option value=\"\">Alle sessies</option>' + day.sessions.map(s => {
-                const label = `${fmtTime(s.start)} ${s.end ? '– '+fmtTime(s.end) : '(live)'}`;
+                const label = `${fmtTime(s.start)} ${s.end ? '– '+fmtTime(s.end) : '(live)'}${s.routeName ? ' · '+s.routeName : ''}`;
                 return `<option value="${s.id}">${label}</option>`;
             }).join('');
             sel.value = '';
+        }
+
+        function buildRouteSuggestions() {
+            const dl = document.getElementById('route-suggestions');
+            if(!dl) return;
+            const names = new Set();
+            for(const d in storage) {
+                const day = ensureDay(d);
+                (day.sessions || []).forEach(s => { if(s.routeName) names.add(s.routeName); });
+            }
+            dl.innerHTML = Array.from(names).slice(0,50).map(n => `<option value="${n}"></option>`).join('');
         }
 
         function generateQR() {
@@ -833,6 +1235,229 @@
             const counts = session ? session.counts || {} : day.counts || {};
             const payload = { d, c: counts, s: day.custom || [], sess: sessionId || null };
             new QRCode(container, { text: JSON.stringify(payload), width: 160, height: 160, correctLevel: QRCode.CorrectLevel.L });
+            updateQrSummary();
+        }
+
+        function updateQrSummary() {
+            const d = picker.value;
+            const sel = document.getElementById('qr-session-select');
+            const box = document.getElementById('qr-summary-box');
+            if(!sel || !box) return;
+            const sessionId = sel.value;
+            const day = ensureDay(d);
+            const session = sessionId ? day.sessions.find(s => s.id === sessionId) : null;
+            const counts = session ? session.counts || {} : day.counts || {};
+            const total = sumCounts(counts);
+            let lines = [`Dag: ${d}`, `Bron: ${session ? `Sessie ${fmtTime(session.start)}${session.end ? ' – '+fmtTime(session.end) : ''}` : 'Volledige dag'}`, `Totaal dieren: ${total}`];
+            const perSpecies = {};
+            for(const k in counts) {
+                const [sid, suf] = k.split('_');
+                perSpecies[sid] = perSpecies[sid] || 0;
+                perSpecies[sid] += counts[k] * (suf.includes('p_') ? 2 : 1);
+            }
+            Object.entries(perSpecies).sort((a,b)=>b[1]-a[1]).slice(0,4).forEach(([sid, val]) => {
+                const name = (SPECIES.find(s=>s.id===sid) || (day.custom||[]).find(c=>c.id===sid) || {name:sid}).name;
+                lines.push(`${name}: ${val}`);
+            });
+            box.innerText = `Wie deze QR scant, telt dit bij zichzelf op:\n\n${lines.join('\n')}`;
+        }
+
+        function exportRangeCSV(forceSettings = false) {
+            const from = document.getElementById(forceSettings ? 'csv-from-settings' : 'csv-from')?.value || picker.value;
+            const to = document.getElementById(forceSettings ? 'csv-to-settings' : 'csv-to')?.value || picker.value;
+            const dates = Object.keys(storage).filter(d => d >= from && d <= to).sort();
+            const rows = [['Datum','Scope','SessionId','Sessiestart','Sessie-einde','Route','Notities','Weer temp','Weer code','Soort','Koppels levend','Koppels dood','M levend','V levend','Onb levend','M dood','V dood','Onb dood','Totaal']];
+            dates.forEach(d => {
+                const day = ensureDay(d);
+                const addRows = (scopeLabel, counts, route, notes, wt, wc, sessStart='', sessEnd='', sessId='') => {
+                    const all = [...SPECIES, ...(day.custom || [])];
+                    all.forEach(s => {
+                        const pl = counts[`${s.id}_p_l`]||0, pd = counts[`${s.id}_p_d`]||0;
+                        const ml = counts[`${s.id}_m_l`]||0, vl = counts[`${s.id}_v_l`]||0, ol = counts[`${s.id}_o_l`]||0;
+                        const md = counts[`${s.id}_m_d`]||0, vd = counts[`${s.id}_v_d`]||0, od = counts[`${s.id}_o_d`]||0;
+                        const tot = pl*2+pd*2+ml+vl+ol+md+vd+od;
+                        if(tot>0) rows.push([d, scopeLabel, sessId, sessStart, sessEnd, route, notes, wt, wc, s.name, pl, pd, ml, vl, ol, md, vd, od, tot]);
+                    });
+                };
+                if(day.sessions && day.sessions.length) {
+                    day.sessions.forEach(s => {
+                        const wt = s.weather?.t ?? day.weather?.t ?? '';
+                        const wc = s.weather?.c ?? day.weather?.c ?? '';
+                        addRows('Sessie', s.counts||{}, s.routeName||'', s.notes||'', wt, wc, s.start||'', s.end||'', s.id || '');
+                    });
+                }
+                // ook dagtotaal opnemen
+                addRows('Dag', day.counts||{}, '', day.notes||'', day.weather?.t ?? '', day.weather?.c ?? '', '', '', 'day-'+d);
+            });
+            if(rows.length===1) rows.push(['Geen data',0,0,0,0,0,0,0,0,0,0]);
+            const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(';')).join('\n');
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `paddentrek-${from}-tot-${to}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            showToast('CSV range opgeslagen');
+        }
+
+        function handleCSVImport() {
+            const input = document.getElementById('csv-import-input');
+            const res = document.getElementById('csv-import-result');
+            if(!input?.files?.length) { res.innerText = 'Geen bestand gekozen.'; return; }
+            const file = input.files[0];
+            const reader = new FileReader();
+            reader.onload = () => {
+                const text = reader.result;
+                const { added, days } = importCSV(text);
+                res.innerText = `Geïmporteerd: ${added} records over ${days.size} dagen.`;
+                save(); render(); renderSessionAdmin(); updateReport(); buildRouteSuggestions();
+            };
+            reader.readAsText(file);
+        }
+
+        function importCSV(text) {
+            const lines = text.split(/\r?\n/).filter(l => l.trim().length);
+            if(!lines.length) return { added:0, days:new Set() };
+            const delim = lines[0].includes(';') ? ';' : ',';
+            const clean = v => v.replace(/^\"|\"$/g,'').trim().toLowerCase();
+            const header = lines[0].split(delim).map(clean);
+            const idx = {
+                date: header.findIndex(h => h.startsWith('datum')),
+                soort: header.findIndex(h => h.startsWith('soort')),
+                pl: header.findIndex(h => h.includes('koppels levend')),
+                pd: header.findIndex(h => h.includes('koppels dood')),
+                ml: header.findIndex(h => h.startsWith('m ') && h.includes('levend')) === -1 ? header.findIndex(h=>h==='m levend') : header.findIndex(h => h.startsWith('m') && h.includes('levend')),
+                vl: header.findIndex(h => h.startsWith('v') && h.includes('levend')),
+                ol: header.findIndex(h => h.includes('onb') && h.includes('levend')),
+                md: header.findIndex(h => h.startsWith('m') && h.includes('dood')),
+                vd: header.findIndex(h => h.startsWith('v') && h.includes('dood')),
+                od: header.findIndex(h => h.includes('onb') && h.includes('dood')),
+                route: header.findIndex(h => h.startsWith('route')),
+                notes: header.findIndex(h => h.startsWith('notities') || h.startsWith('nota')),
+                wt: header.findIndex(h => h.includes('weer temp')),
+                wc: header.findIndex(h => h.includes('weer code')),
+                scope: header.findIndex(h => h === 'scope'),
+                sessStart: header.findIndex(h => h.startsWith('sessiestart')),
+                sessEnd: header.findIndex(h => h.startsWith('sessie-einde')),
+                sessId: header.findIndex(h => h === 'sessionid'),
+            };
+            let added = 0;
+            const days = new Set();
+            const importSessions = {}; // key -> session
+            const sessionsSeen = {};
+            const fallbackCounts = {};
+            const fallbackMeta = {};
+            for(let i=1;i<lines.length;i++){
+                const cols = lines[i].split(delim).map(c => c.replace(/^\"|\"$/g,'').trim());
+                const date = cols[idx.date] || picker.value;
+                const speciesName = cols[idx.soort] || 'Onbekend';
+                if(!date || !speciesName) continue;
+                const day = ensureDay(date);
+                days.add(date);
+                const scope = idx.scope>=0 ? cols[idx.scope].toLowerCase() : '';
+                const startRaw = idx.sessStart>=0 ? cols[idx.sessStart] : '';
+                const endRaw = idx.sessEnd>=0 ? cols[idx.sessEnd] : '';
+                const sessIdCsv = idx.sessId>=0 ? cols[idx.sessId] : '';
+                let sess = null;
+                const isSessionRow = scope.includes('sessie');
+                if(isSessionRow) {
+                    const key = sessIdCsv || `${date}_${startRaw||'00:00'}`;
+                    if(!importSessions[key]) {
+                        const startIso = startRaw ? new Date(startRaw).toISOString() : new Date(`${date}T00:00:00`).toISOString();
+                        const endIso = endRaw ? new Date(endRaw).toISOString() : null;
+                        const existing = day.sessions.find(s => s.id === sessIdCsv);
+                        sess = existing || { id: sessIdCsv || `import_${key}_${i}`, start: startIso, end: endIso, counts: {}, notes: cols[idx.notes] || 'CSV import', photos: [], routeName: cols[idx.route] || 'CSV import', weather: null };
+                        if(!existing) day.sessions.push(sess);
+                        importSessions[key] = sess;
+                    } else {
+                        sess = importSessions[key];
+                    }
+                    sessionsSeen[date] = true;
+                }
+                // fallback dagtotaal verzamelen, pas later toepassen
+                if(!isSessionRow) {
+                    if(!fallbackCounts[date]) fallbackCounts[date] = {};
+                    const route = cols[idx.route] || '';
+                    const notes = cols[idx.notes] || '';
+                    const wt = idx.wt>=0 ? parseFloat(cols[idx.wt].replace(',','.')) : null;
+                    const wc = idx.wc>=0 ? parseInt(cols[idx.wc]) : null;
+                    if(!fallbackMeta[date]) fallbackMeta[date] = { route, notes, wt, wc };
+                }
+                if(idx.wt >=0 || idx.wc >=0) {
+                    const wt = idx.wt>=0 ? parseFloat(cols[idx.wt].replace(',','.')) : null;
+                    const wc = idx.wc>=0 ? parseInt(cols[idx.wc]) : null;
+                    if(sess) {
+                        if(!sess.weather && (wt || wc)) {
+                            sess.weather = { t: wt ?? 0, c: isFinite(wc)? wc : 0, ts: Date.now() };
+                            day.weather = day.weather || sess.weather;
+                        }
+                    } else {
+                        // day-row: bewaar in fallbackMeta zodat we het later kunnen toepassen
+                        const fm = fallbackMeta[date] || {};
+                        if(wt !== null) fm.wt = wt;
+                        if(wc !== null && isFinite(wc)) fm.wc = wc;
+                        fallbackMeta[date] = fm;
+                    }
+                }
+
+                let species = SPECIES.find(s => s.name.toLowerCase() === speciesName.toLowerCase());
+                if(!species) {
+                    species = day.custom.find(c => c.name.toLowerCase() === speciesName.toLowerCase());
+                    if(!species) {
+                        species = { id: 'c_'+Date.now()+Math.random().toString(16).slice(2), name: speciesName, color: 'gray', hasAmplexus: true };
+                        day.custom.push(species);
+                    }
+                }
+                const counts = day.counts;
+                const addVal = (field, val, targetCounts) => {
+                    if(isNaN(val)) return;
+                    const key = `${species.id}_${field}`;
+                    targetCounts[key] = (targetCounts[key]||0) + val;
+                };
+                const num = k => {
+                    const v = idx[k] >=0 ? parseFloat(cols[idx[k]].replace(',','.')) : 0;
+                    return isFinite(v) ? v : 0;
+                };
+                if(isSessionRow) {
+                    addVal('p_l', num('pl'), sess.counts);
+                    addVal('p_d', num('pd'), sess.counts);
+                    addVal('m_l', num('ml'), sess.counts);
+                    addVal('v_l', num('vl'), sess.counts);
+                    addVal('o_l', num('ol'), sess.counts);
+                    addVal('m_d', num('md'), sess.counts);
+                    addVal('v_d', num('vd'), sess.counts);
+                    addVal('o_d', num('od'), sess.counts);
+                } else {
+                    addVal('p_l', num('pl'), fallbackCounts[date]);
+                    addVal('p_d', num('pd'), fallbackCounts[date]);
+                    addVal('m_l', num('ml'), fallbackCounts[date]);
+                    addVal('v_l', num('vl'), fallbackCounts[date]);
+                    addVal('o_l', num('ol'), fallbackCounts[date]);
+                    addVal('m_d', num('md'), fallbackCounts[date]);
+                    addVal('v_d', num('vd'), fallbackCounts[date]);
+                    addVal('o_d', num('od'), fallbackCounts[date]);
+                }
+                added++;
+            }
+            // apply fallbacks and recalc day totals from sessions
+            days.forEach(d => {
+                const day = ensureDay(d);
+                if(sessionsSeen[d]) {
+                    recalcDayFromSessions(day);
+                } else if(fallbackCounts[d]) {
+                    day.counts = fallbackCounts[d];
+                    const meta = fallbackMeta[d] || {};
+                    // maak een dag-importsessie zodat log iets toont
+                    const startIso = new Date(`${d}T00:00:00`).toISOString();
+                    const endIso = new Date(`${d}T23:59:00`).toISOString();
+                    day.sessions.push({ id:`import_${d}_day`, start:startIso, end:endIso, counts:{...fallbackCounts[d]}, notes: meta.notes||'', photos: [], routeName: meta.route||'', weather: (meta.wt||meta.wc) ? {t:meta.wt||0, c:meta.wc||0, ts:Date.now()} : null });
+                }
+            });
+            purgeEmptyCustomSpecies();
+            return { added, days };
         }
 
         function describeSync(incoming) {
@@ -878,30 +1503,87 @@
         }
 
         function startSessionScanner() {
-            const sc = new Html5Qrcode("session-reader");
-            sc.start({ facingMode: "environment" }, { fps: 10, qrbox: 200 }, t => {
+            const modal = document.getElementById('qr-modal');
+            modal.classList.remove('hidden');
+            const targetId = 'session-reader-modal';
+            if(sessionScanner) { sessionScanner.stop().catch(()=>{}); sessionScanner = null; }
+            sessionScanner = new Html5Qrcode(targetId);
+            sessionScanner.start({ facingMode: "environment" }, { fps: 10, qrbox: 220 }, t => {
                 try {
                     const i = JSON.parse(t);
                     const summary = describeSync(i);
                     const day = ensureDay(i.d);
+                    const targetSessionId = document.getElementById('import-target-select')?.value || '';
                     for(let k in i.c) day.counts[k] = (day.counts[k] || 0) + i.c[k];
+                    if(targetSessionId) {
+                        const ts = day.sessions.find(s => s.id === targetSessionId);
+                        if(ts) {
+                            for(let k in i.c) ts.counts[k] = (ts.counts[k] || 0) + i.c[k];
+                        }
+                    }
                     (i.s||[]).forEach(si => { if(!day.custom.some(c => c.name===si.name)) day.custom.push(si); });
-                    save(); buildUI(); render(); sc.stop(); alert(summary); showToast("Sessies geïmporteerd"); switchTab('sessions');
+                    save(); buildUI(); render(); stopSessionScanner(); alert(summary); showToast("Sessies geïmporteerd"); switchTab('sessions');
                 } catch(e) { alert("QR fout"); }
             }).catch(() => alert("Camera fout"));
         }
 
+        function stopSessionScanner() {
+            if(sessionScanner) {
+                sessionScanner.stop().catch(()=>{}).finally(()=> sessionScanner = null);
+            }
+        }
+
+        function closeQrModal(ev) {
+            const modal = document.getElementById('qr-modal');
+            if(ev.target.id === 'qr-modal' || ev.target.tagName === 'BUTTON') {
+                stopSessionScanner();
+                modal.classList.add('hidden');
+                document.getElementById('session-reader-modal').innerHTML = '';
+            }
+        }
+
+        function buildImportTargetOptions() {
+            const sel = document.getElementById('import-target-select');
+            const hint = document.getElementById('import-target-hint');
+            if(!sel || !hint) return;
+            const day = ensureDay();
+            const sessions = day.sessions.slice().sort((a,b)=>new Date(a.start)-new Date(b.start));
+            sel.innerHTML = `<option value=\"\">Dag ${picker.value} (dagtotaal)</option>` +
+                sessions.map(s => `<option value="${s.id}">${fmtTime(s.start)} ${s.end ? '– '+fmtTime(s.end) : '(live)'}</option>`).join('');
+            sel.value = '';
+            updateImportTargetHint();
+        }
+
+        function updateImportTargetHint() {
+            const sel = document.getElementById('import-target-select');
+            const hint = document.getElementById('import-target-hint');
+            if(!sel || !hint) return;
+            const val = sel.value;
+            if(!val) {
+                hint.innerText = `Tellen uit de QR worden bij het dagtotaal van ${picker.value} opgeteld.`;
+            } else {
+                hint.innerText = `Tellen uit de QR worden bijgeteld in sessie ${sel.selectedOptions[0].textContent}.`;
+            }
+        }
+
         function switchTab(t) {
             document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
-            document.getElementById('view-' + t).classList.remove('hidden');
+            const view = document.getElementById('view-' + t);
+            if(view) view.classList.remove('hidden');
             document.querySelectorAll('nav button').forEach(b => b.classList.remove('active-tab'));
-            document.getElementById('tab-' + t).classList.add('active-tab');
-            if(t==='share') { buildQRSessionOptions(); buildReportSessionOptions(); generateQR(); updateReport(); }
-            if(t==='log') { renderPhotos(); loadNotes(); }
+            const tab = document.getElementById('tab-' + t);
+            if(tab) tab.classList.add('active-tab');
+            if(t==='report') { buildReportSessionOptions(); updateReport(); }
+            if(t==='sessions') { renderSessionLog(); }
             if(t==='settings') {
                 const sd = document.getElementById('sessionDate');
                 if(sd) sd.value = picker.value;
+                const pd = document.getElementById('photo-clean-date');
+                if(pd) pd.value = picker.value;
                 renderSessionAdmin();
+                buildQRSessionOptions();
+                buildImportTargetOptions();
+                generateQR();
             }
         }
 

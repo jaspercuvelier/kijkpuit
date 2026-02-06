@@ -4,7 +4,15 @@ const NAME = `paddentrek-${APP_VERSION}`;
 const URLS = [
   './',
   './index.html',
+  './manifest.webmanifest',
   './version.js',
+  './icons/icon-192.png',
+  './icons/icon-512.png',
+  './icons/ui/pair.png',
+  './icons/ui/pair_dead.png',
+  './icons/ui/male.png',
+  './icons/ui/female.png',
+  './icons/ui/unk.png',
   'https://cdn.tailwindcss.com',
   'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js',
   'https://unpkg.com/html5-qrcode'
