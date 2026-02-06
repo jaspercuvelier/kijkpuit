@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Paddentrek Teller Pro v10</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; overflow-x: hidden; }
+        .active-tab { border-bottom: 3px solid #10b981; color: #10b981; }
+        .counter-btn { transition: transform 0.1s active; position: relative; overflow: hidden; }
+        .counter-btn:active { transform: scale(0.95); }
+        .minus-btn { font-size: 0.8rem; }
+        ::-webkit-scrollbar { display: none; }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+        #canvas-fx { position: fixed; top: 0; left: 0; pointer-events: none; z-index: 100; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 pb-24">
+
+    <canvas id="canvas-fx"></canvas>
+
+    <!-- Header -->
+    <header class="bg-gray-800 p-4 shadow-lg sticky top-0 z-50">
+        <div class="flex justify-between items-center mb-1">
+            <h1 class="text-xl font-bold flex items-center gap-2 text-white text-shadow-sm">
+                🐸 <span class="text-emerald-400">Padden</span>Teller
+            </h1>
+            <div id="pwa-status" class="flex flex-col items-end gap-1">
+                <div class="flex items-center gap-2 text-[10px] text-gray-400 bg-gray-900/60 px-2 py-1 rounded-full border border-gray-700">
+                    <span id="status-icon" class="status-dot bg-gray-600 shadow-[0_0_5px_rgba(0,0,0,0.5)]"></span>
+                    <span id="status-text">Laden...</span>
+                </div>
+                <div class="text-[9px] font-bold text-gray-500 uppercase tracking-tighter mr-2">Versie <span id="app-version-display">v10</span></div>
+            </div>
+        </div>
+        <div class="flex justify-between items-center mt-2">
+            <input type="date" id="datePicker" class="bg-gray-700 border-none rounded px-2 py-1.5 text-sm focus:ring-2 focus:ring-emerald-500 text-white w-full shadow-inner">
+        </div>
+        
+        <div id="undo-container" class="mt-2 hidden">
+            <button onclick="undo()" class="w-full bg-orange-600/20 border border-orange-500 text-orange-400 text-[10px] py-2 rounded uppercase tracking-widest font-bold flex items-center justify-center gap-2 shadow-lg animate-pulse">
+                ↩️ Herstel laatste tik
+            </button>
+        </div>
+    </header>
+
+    <!-- Navigatie -->
+    <nav class="flex bg-gray-800 border-b border-gray-700 text-[10px] font-bold sticky top-[115px] z-40 overflow-x-auto whitespace-nowrap no-scrollbar shadow-md">
+        <button onclick="switchTab('count')" id="tab-count" class="px-5 py-3 active-tab uppercase tracking-tight">Tellen</button>
+        <button onclick="switchTab('varia')" id="tab-varia" class="px-5 py-3 uppercase tracking-tight">Extra</button>
+        <button onclick="switchTab('log')" id="tab-log" class="px-5 py-3 uppercase tracking-tight">Log & Weer</button>
+        <button onclick="switchTab('report')" id="tab-report" class="px-5 py-3 uppercase tracking-tight">Rapport</button>
+        <button onclick="switchTab('share')" id="tab-share" class="px-5 py-3 uppercase tracking-tight">Delen</button>
+        <button onclick="switchTab('help')" id="tab-help" class="px-5 py-3 uppercase tracking-tight">Hulp</button>
+    </nav>
+
+    <main class="p-4">
+        <!-- TAB 1: TELLEN -->
+        <section id="view-count" class="space-y-6">
+            <div id="render-target" class="space-y-6"></div>
+            <div id="custom-species-render" class="space-y-6"></div>
+            
+            <button onclick="resetCurrentDate()" class="w-full py-8 text-gray-600 text-[10px] uppercase tracking-widest font-bold border-2 border-dashed border-gray-800 rounded-xl mt-10 hover:text-red-500 hover:border-red-500/30 transition-colors">
+                Alles wissen voor deze datum
+            </button>
+        </section>
+
+        <!-- TAB 2: EXTRA -->
+        <section id="view-varia" class="hidden space-y-6">
+            <div class="bg-gray-800 p-6 rounded-xl border border-emerald-500/30">
+                <h3 class="font-bold mb-4 text-emerald-400">Extra diersoort toevoegen</h3>
+                <div class="flex gap-2">
+                    <input type="text" id="new-species-name" placeholder="Bijv: Boomkikker..." class="flex-grow bg-gray-700 border-none rounded px-3 py-2 text-sm text-white focus:ring-1 focus:ring-emerald-500 shadow-inner">
+                    <button onclick="addCustomSpecies()" class="bg-emerald-600 px-4 py-2 rounded font-bold text-sm shadow-lg active:scale-95 transition-transform">Voeg toe</button>
+                </div>
+            </div>
+            <div id="custom-species-list" class="space-y-2"></div>
+        </section>
+
+        <!-- TAB 3: LOG & WEER -->
+        <section id="view-log" class="hidden space-y-6">
+            <div class="bg-gray-800 p-4 rounded-xl border border-yellow-500/30 shadow-md">
+                <h3 class="font-bold mb-3 text-yellow-400 flex items-center justify-between">
+                    🌤️ Weerbericht (Open-Meteo)
+                    <button onclick="fetchWeather()" class="text-[10px] bg-yellow-600 text-white px-3 py-1 rounded active:bg-yellow-700 shadow-md uppercase font-bold">Update via GPS</button>
+                </h3>
+                <div id="weather-display" class="text-sm text-gray-300 italic mb-2 border-l-2 border-yellow-500/50 pl-2">Laden...</div>
+            </div>
+
+            <div class="bg-gray-800 p-4 rounded-xl border border-blue-500/30 shadow-md">
+                <h3 class="font-bold mb-4 text-blue-400">📝 Notities over de trek</h3>
+                <textarea id="daily-notes" oninput="saveNotes()" placeholder="Beschrijf de avond..." class="w-full bg-gray-700 border-none rounded p-3 text-sm h-24 focus:ring-1 focus:ring-blue-500 text-white shadow-inner"></textarea>
+            </div>
+
+            <div class="bg-gray-800 p-4 rounded-xl border border-purple-500/30 text-center shadow-md">
+                <h3 class="font-bold mb-4 text-purple-400 text-sm">📸 Foto Logboek</h3>
+                <label class="block mb-4">
+                    <span class="bg-purple-600 text-white px-8 py-3 rounded-full font-bold text-sm inline-block cursor-pointer active:bg-purple-700 shadow-xl transition-all">📸 Foto nemen</span>
+                    <input type="file" accept="image/*" capture="environment" onchange="handlePhoto(event)" class="hidden">
+                </label>
+                <div id="photo-gallery" class="grid grid-cols-2 gap-2 mt-2"></div>
+            </div>
+        </section>
+
+        <!-- TAB 4: RAPPORT -->
+        <section id="view-report" class="hidden space-y-4 text-center">
+            <h2 class="text-xl font-bold text-emerald-400">WhatsApp Rapport</h2>
+            <div id="report-text" class="bg-gray-800 p-4 rounded-lg font-mono text-left text-[11px] border border-emerald-500/30 whitespace-pre-wrap shadow-inner overflow-x-auto"></div>
+            <button onclick="copyReport()" class="w-full bg-emerald-600 py-4 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg active:bg-emerald-700 transition-colors uppercase tracking-widest">
+                📋 Kopieer voor Groepsapp
+            </button>
+        </section>
+
+        <!-- TAB 5: DELEN -->
+        <section id="view-share" class="hidden space-y-6 text-center">
+            <div class="bg-gray-800 p-6 rounded-xl border border-purple-500/30 shadow-md">
+                <h3 class="font-bold mb-2">QR-code van mijn telling</h3>
+                <div id="qrcode-area" class="bg-white p-3 rounded-lg inline-block mx-auto mb-4 border-4 border-purple-500 shadow-xl"></div>
+                <button onclick="generateQR()" class="w-full bg-purple-600 py-3 rounded-lg font-bold uppercase text-xs shadow-md">Vernieuw QR</button>
+            </div>
+            <div class="bg-gray-800 p-6 rounded-xl border border-emerald-500/30 shadow-md">
+                <h3 class="font-bold mb-2 text-emerald-300">Scan code van partner</h3>
+                <div id="reader" class="rounded-lg overflow-hidden bg-black mb-4 mx-auto w-full max-w-[300px] border border-gray-700"></div>
+                <button id="scan-btn" onclick="startScanner()" class="w-full bg-emerald-600 py-3 rounded-lg font-bold uppercase text-xs shadow-md">Activeer Camera</button>
+            </div>
+        </section>
+
+        <!-- TAB 6: HELP -->
+        <section id="view-help" class="hidden space-y-6">
+            <div class="bg-gray-800 p-4 rounded-xl border-l-4 border-emerald-500">
+                <h3 class="font-bold text-emerald-400 mb-1 underline italic">Wat is Amplexus? ❤️</h3>
+                <p class="text-xs">Paarvorming waarbij het mannetje op het vrouwtje klimt. In de app telt dit als 1 paartje (vandaar de knop '❤️'), maar in de eindsom telt de app dit automatisch als 2 individuen (1M en 1V).</p>
+            </div>
+            <div class="space-y-4">
+                 <div class="bg-gray-800 p-3 rounded border-l-4 border-blue-500">
+                    <h4 class="font-bold text-blue-400 mb-1">Alpenwatersalamander</h4>
+                    <p class="text-xs">Fel oranje buik, gladde ongevlekte keel. Blauwe gemarmerde flanken.</p>
+                </div>
+                <div class="bg-gray-800 p-3 rounded border-l-4 border-orange-500">
+                    <h4 class="font-bold text-orange-400 mb-1">Kleine Watersalamander</h4>
+                    <p class="text-xs">Oranje buik met vlekken. Keel is ook altijd gevlekt.</p>
+                </div>
+                <div class="bg-gray-800 p-3 rounded border-l-4 border-pink-500">
+                    <h4 class="font-bold text-pink-400 mb-1">Vinpootsalamander</h4>
+                    <p class="text-xs">Ongevlekte vleeskleurige keel. Mannetje heeft kleine draad aan staart.</p>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Toast UI -->
+    <div id="toast" class="fixed bottom-10 left-1/2 transform -translate-x-1/2 bg-emerald-600 text-white px-6 py-3 rounded-full shadow-2xl hidden z-[110] transition-all opacity-0 font-bold border border-emerald-400/30">
+        Actie gelukt!
+    </div>
+
+    <script>
+        const APP_VERSION = 'v10';
+        document.getElementById('app-version-display').innerText = APP_VERSION;
+
+        // --- SERVICE WORKER VOOR OFFLINE GEBRUIK ---
+        if ('serviceWorker' in navigator) {
+            const swCode = `
+                const NAME = 'paddentrek-${APP_VERSION}';
+                const URLS = ['/', '/index.html', 'https://cdn.tailwindcss.com', 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js', 'https://unpkg.com/html5-qrcode'];
+                self.addEventListener('install', e => {
+                    self.skipWaiting();
+                    e.waitUntil(caches.open(NAME).then(c => c.addAll(URLS)));
+                });
+                self.addEventListener('activate', e => {
+                    e.waitUntil(caches.keys().then(keys => Promise.all(keys.map(k => k !== NAME && caches.delete(k)))));
+                });
+                self.addEventListener('fetch', e => e.respondWith(caches.match(e.request).then(r => r || fetch(e.request))));
+            `;
+            const blob = new Blob([swCode], {type:'text/javascript'});
+            navigator.serviceWorker.register(URL.createObjectURL(blob)).then(() => {
+                document.getElementById('status-icon').className = 'status-dot bg-emerald-500 shadow-[0_0_8px_#10b981]';
+                document.getElementById('status-text').innerText = 'Offline Gereed';
+            });
+        }
+
+        // --- VISUAL FX (VUURWERK) ---
+        const canvas = document.getElementById('canvas-fx');
+        const ctx = canvas.getContext('2d');
+        let particles = [];
+        function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+        window.onresize = resize; resize();
+
+        class Particle {
+            constructor(x, y, color) {
+                this.x = x; this.y = y; this.color = color;
+                this.size = Math.random() * 3 + 1;
+                this.vX = (Math.random() - 0.5) * 10;
+                this.vY = (Math.random() - 0.5) * 10;
+                this.life = 1.0;
+            }
+            update() { this.x += this.vX; this.y += this.vY; this.vY += 0.2; this.life -= 0.02; }
+            draw() { ctx.globalAlpha = this.life; ctx.fillStyle = this.color; ctx.beginPath(); ctx.arc(this.x, this.y, this.size, 0, Math.PI*2); ctx.fill(); }
+        }
+
+        function celebrate(e) {
+            const colors = ['#10b981', '#60a5fa', '#fcd34d', '#f472b6', '#ffffff'];
+            const x = e ? e.clientX : window.innerWidth / 2;
+            const y = e ? e.clientY : window.innerHeight / 2;
+            for(let i=0; i<25; i++) particles.push(new Particle(x, y, colors[Math.floor(Math.random()*colors.length)]));
+        }
+
+        function animate() {
+            ctx.clearRect(0,0,canvas.width,canvas.height);
+            particles = particles.filter(p => p.life > 0);
+            particles.forEach(p => { p.update(); p.draw(); });
+            requestAnimationFrame(animate);
+        }
+        animate();
+
+        // --- DATA & LOGICA ---
+        const SPECIES = [
+            { id: 'pad', name: 'Gewone Pad', color: 'emerald' },
+            { id: 'alpen', name: 'Alpenwatersalamander', color: 'blue' },
+            { id: 'kleine', name: 'Kleine Watersalamander', color: 'orange' },
+            { id: 'vin', name: 'Vinpootsalamander', color: 'pink' },
+            { id: 'br_kikker', name: 'Bruine Kikker', color: 'amber' },
+            { id: 'kam', name: 'Kamsalamander', color: 'yellow' }
+        ];
+
+        const WMO = { 0: "Helder", 1: "Licht bewolkt", 3: "Bewolkt", 51: "Motregen", 61: "Regen", 80: "Buien", 95: "Onweer" };
+
+        let storage = JSON.parse(localStorage.getItem(`paddentrek_${APP_VERSION}`)) || {};
+        let lastAction = null;
+        const picker = document.getElementById('datePicker');
+        picker.value = new Date().toISOString().split('T')[0];
+
+        function buildUI() {
+            document.getElementById('render-target').innerHTML = SPECIES.map(s => renderCard(s)).join('');
+            renderCustom();
+            renderPhotos();
+            loadNotes();
+            updateWeather();
+        }
+
+        function renderCard(s, custom = false) {
+            return `
+                <div class="bg-gray-800 p-4 rounded-xl shadow-lg border-l-4 border-${s.color}-500 mb-6 transition-transform">
+                    <h2 class="text-sm font-bold mb-3 flex justify-between items-center text-white">
+                        ${s.name} ${custom ? '<span class="text-[8px] opacity-40 uppercase">Extra</span>' : ''}
+                        <span class="text-[9px] bg-black/40 px-2 py-1 rounded text-gray-400">TOT: <span id="tot-${s.id}" class="text-white font-bold">0</span></span>
+                    </h2>
+                    <div class="space-y-3">
+                        <div class="bg-emerald-950/20 p-2 rounded-lg border border-emerald-500/10">
+                            ${btn(s.id, 'p_l', 'emerald', 'PAARTJE ❤️')}
+                        </div>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="space-y-1">
+                                <p class="text-[8px] text-emerald-500 font-bold uppercase tracking-widest italic">Levend</p>
+                                ${['m_l','v_l','o_l'].map(k => btn(s.id, k, s.color, k[0].toUpperCase())).join('')}
+                            </div>
+                            <div class="space-y-1">
+                                <p class="text-[8px] text-red-500 font-bold uppercase tracking-widest italic">Dood</p>
+                                ${['m_d','v_d','o_d'].map(k => btn(s.id, k, 'red', k[0].toUpperCase(), true)).join('')}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function btn(sid, type, color, label, dood = false) {
+            const key = `${sid}_${type}`;
+            let cls = dood ? 'bg-red-950/40 border-red-900/40 text-red-300' : `bg-${color}-700 border-white/5 text-white shadow-sm`;
+            if(color==='emerald' && type==='p_l') cls = 'bg-emerald-600 border-emerald-400/20 shadow-emerald-900/40';
+            if(color==='amber') cls = dood ? 'bg-red-950/40' : 'bg-amber-700';
+            if(color==='yellow') cls = dood ? 'bg-red-950/40' : 'bg-yellow-700';
+
+            return `
+                <div class="flex items-center gap-1">
+                    <button onclick="mod('${key}', 1, event)" class="counter-btn flex-grow ${cls} h-10 rounded-lg font-bold text-xs border active:scale-95 transition-all">
+                        ${label}: <span id="${key}">0</span>
+                    </button>
+                    <button onclick="mod('${key}', -1, event)" class="minus-btn bg-gray-700/40 w-8 h-10 rounded-lg text-gray-500 border border-gray-600/20 active:bg-gray-600">-</button>
+                </div>
+            `;
+        }
+
+        function mod(key, val, e) {
+            const d = picker.value;
+            if(!storage[d]) storage[d] = { counts: {}, custom: [], photos: [], notes: "" };
+            lastAction = { d, key, val };
+            document.getElementById('undo-container').classList.remove('hidden');
+            storage[d].counts[key] = (storage[d].counts[key] || 0) + val;
+            if(storage[d].counts[key] < 0) storage[d].counts[key] = 0;
+            save(); render();
+            if(val > 0) {
+                if(navigator.vibrate) navigator.vibrate(25);
+                if(key.includes('_l')) celebrate(e);
+            }
+        }
+
+        function undo() {
+            if(!lastAction) return;
+            storage[lastAction.d].counts[lastAction.key] -= lastAction.val;
+            if(storage[lastAction.d].counts[lastAction.key] < 0) storage[lastAction.d].counts[lastAction.key] = 0;
+            lastAction = null; document.getElementById('undo-container').classList.add('hidden');
+            save(); render(); showToast("Correctie uitgevoerd");
+        }
+
+        function save() { localStorage.setItem(`paddentrek_${APP_VERSION}`, JSON.stringify(storage)); }
+
+        function render() {
+            const d = storage[picker.value] || { counts: {}, custom: [] };
+            const up = s => {
+                let t = 0;
+                ['p_l','m_l','v_l','o_l','m_d','v_d','o_d'].forEach(k => {
+                    const v = d.counts[`${s.id}_${k}`] || 0;
+                    if(document.getElementById(`${s.id}_${k}`)) document.getElementById(`${s.id}_${k}`).innerText = v;
+                    t += (k==='p_l' ? v*2 : v);
+                });
+                if(document.getElementById(`tot-${s.id}`)) document.getElementById(`tot-${s.id}`).innerText = t;
+            };
+            SPECIES.forEach(up);
+            (d.custom || []).forEach(up);
+            updateReport(); updateWeather();
+        }
+
+        async function fetchWeather() {
+            if(!navigator.geolocation) return;
+            showToast("GPS zoekt locatie...");
+            navigator.geolocation.getCurrentPosition(async p => {
+                try {
+                    const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${p.coords.latitude}&longitude=${p.coords.longitude}&current_weather=true`);
+                    const j = await r.json();
+                    if(!storage[picker.value]) storage[picker.value] = {};
+                    storage[picker.value].weather = { t: j.current_weather.temperature, c: j.current_weather.weathercode };
+                    save(); render(); showToast("Weer bijgewerkt");
+                } catch(e) { alert("API Fout"); }
+            });
+        }
+
+        function updateWeather() {
+            const w = storage[picker.value]?.weather;
+            document.getElementById('weather-display').innerText = w ? `${w.t}°C - ${WMO[w.c] || "OK"}` : "Geen weerdata voor deze datum.";
+        }
+
+        function addCustomSpecies() {
+            const n = document.getElementById('new-species-name').value.trim();
+            if(!n) return;
+            if(!storage[picker.value]) storage[picker.value] = { custom: [] };
+            if(!storage[picker.value].custom) storage[picker.value].custom = [];
+            storage[picker.value].custom.push({ id: 'c_'+Date.now(), name: n, color: 'gray' });
+            document.getElementById('new-species-name').value = '';
+            save(); buildUI(); render();
+        }
+
+        function renderCustom() {
+            const d = storage[picker.value] || {};
+            document.getElementById('custom-species-render').innerHTML = (d.custom || []).map(s => renderCard(s, true)).join('');
+            document.getElementById('custom-species-list').innerHTML = (d.custom || []).map(s => `
+                <div class="flex justify-between items-center bg-gray-800 p-2 rounded text-[10px] mb-1 border border-gray-700 shadow-sm uppercase font-bold">
+                    <span>${s.name}</span> <button onclick="removeC('${s.id}')" class="text-red-400 px-3 py-1 bg-red-900/20 rounded">Wis</button>
+                </div>
+            `).join('');
+        }
+        function removeC(id) { if(confirm("Soort verwijderen?")) { storage[picker.value].custom = storage[picker.value].custom.filter(c => c.id!==id); save(); buildUI(); render(); } }
+
+        function handlePhoto(e) {
+            const f = e.target.files[0]; if(!f) return;
+            const r = new FileReader(); r.onload = ev => {
+                const img = new Image(); img.onload = () => {
+                    const c = document.createElement('canvas'); const m = 600;
+                    const fct = Math.min(1, m/Math.max(img.width, img.height));
+                    c.width = img.width*fct; c.height = img.height*fct;
+                    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+                    if(!storage[picker.value].photos) storage[picker.value].photos = [];
+                    storage[picker.value].photos.push(c.toDataURL('image/jpeg', 0.6));
+                    save(); renderPhotos();
+                }; img.src = ev.target.result;
+            }; r.readAsDataURL(f);
+        }
+        function renderPhotos() {
+            const p = storage[picker.value]?.photos || [];
+            document.getElementById('photo-gallery').innerHTML = p.map((s,i) => `
+                <div class="relative shadow-lg"><img src="${s}" class="rounded w-full aspect-square object-cover">
+                <button onclick="remP(${i})" class="absolute top-1 right-1 bg-red-600 rounded-full w-6 h-6 text-[9px] font-bold shadow-md">X</button></div>
+            `).join('');
+        }
+        function remP(i) { storage[picker.value].photos.splice(i,1); save(); renderPhotos(); }
+        function saveNotes() { if(!storage[picker.value]) storage[picker.value] = {}; storage[picker.value].notes = document.getElementById('daily-notes').value; save(); updateReport(); }
+        function loadNotes() { document.getElementById('daily-notes').value = storage[picker.value]?.notes || ""; }
+
+        function updateReport() {
+            const d = picker.value; const data = storage[d] || {}; const c = data.counts || {};
+            let txt = `🐸 *PADDENTREK - ${d}*\n\n`;
+            if(data.weather) txt += `🌤️ *Weer:* ${data.weather.t}°C, ${WMO[data.weather.c] || "OK"}\n\n`;
+            const all = [...SPECIES, ...(data.custom || [])]; let h = false;
+            all.forEach(s => {
+                const pl = c[`${s.id}_p_l`]||0, ml = c[`${s.id}_m_l`]||0, vl = c[`${s.id}_v_l`]||0, ol = c[`${s.id}_o_l`]||0;
+                const md = c[`${s.id}_m_d`]||0, vd = c[`${s.id}_v_d`]||0, od = c[`${s.id}_o_d`]||0;
+                if(pl+ml+vl+ol+md+vd+od > 0) { h = true;
+                    txt += `*${s.name}:*\n${pl>0 ? '  ❤️ '+pl+' Paartjes\n':''}  - L: ${ml}m, ${vl}v, ${ol}o\n  - D: ${md}m, ${vd}v, ${od}o\n`;
+                }
+            });
+            if(data.notes) txt += `\n📝 *Nota:* ${data.notes}\n`;
+            txt += `\n#Paddentrek #Amfibieën`;
+            document.getElementById('report-text').innerText = h || data.notes ? txt : "Nog geen data ingevoerd.";
+        }
+
+        function copyReport() {
+            const t = document.getElementById('report-text').innerText;
+            const el = document.createElement('textarea'); el.value = t; document.body.appendChild(el);
+            el.select(); document.execCommand('copy'); document.body.removeChild(el); showToast("Rapport gekopieerd!");
+        }
+
+        function showToast(m) {
+            const t = document.getElementById('toast'); t.innerText = m; t.classList.remove('hidden');
+            setTimeout(() => t.style.opacity = '1', 10);
+            setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.classList.add('hidden'), 500); }, 2000);
+        }
+
+        function generateQR() {
+            const d = picker.value; const container = document.getElementById("qrcode-area"); container.innerHTML = "";
+            const p = JSON.stringify({ d, c: storage[d]?.counts || {}, s: storage[d]?.custom || [] });
+            new QRCode(container, { text: p, width: 160, height: 160, correctLevel: QRCode.CorrectLevel.L });
+        }
+
+        function startScanner() {
+            const sc = new Html5Qrcode("reader");
+            sc.start({ facingMode: "environment" }, { fps: 10, qrbox: 200 }, t => {
+                try {
+                    const i = JSON.parse(t); if(!storage[i.d]) storage[i.d] = { counts: {}, custom: [] };
+                    for(let k in i.c) storage[i.d].counts[k] = (storage[i.d].counts[k] || 0) + i.c[k];
+                    (i.s||[]).forEach(si => { if(!storage[i.d].custom.some(c => c.name===si.name)) storage[i.d].custom.push(si); });
+                    save(); buildUI(); render(); sc.stop(); showToast("Partner gesynct!"); switchTab('count');
+                } catch(e) { alert("QR fout"); }
+            }).catch(() => alert("Camera fout"));
+        }
+
+        function switchTab(t) {
+            document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
+            document.getElementById('view-' + t).classList.remove('hidden');
+            document.querySelectorAll('nav button').forEach(b => b.classList.remove('active-tab'));
+            document.getElementById('tab-' + t).classList.add('active-tab');
+            if(t==='share') generateQR();
+            if(t==='log') { renderPhotos(); loadNotes(); }
+        }
+
+        function resetCurrentDate() { if(confirm("Wis alle data voor vandaag? Dit kan niet ongedaan worden gemaakt.")) { delete storage[picker.value]; save(); buildUI(); render(); } }
+
+        picker.onchange = () => { buildUI(); render(); };
+        buildUI(); render();
+    </script>
+</body>
+</html>
+
