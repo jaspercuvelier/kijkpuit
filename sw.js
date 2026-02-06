@@ -1,4 +1,4 @@
-const APP_VERSION = 'v11';
+const APP_VERSION = 'v12';
 const NAME = `paddentrek-${APP_VERSION}`;
 const URLS = [
   '/',
