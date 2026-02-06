@@ -104,6 +104,7 @@
                     <span class="bg-purple-600 text-white px-8 py-3 rounded-full font-bold text-sm inline-block cursor-pointer active:bg-purple-700 shadow-lg">📸 Foto nemen</span>
                     <input type="file" accept="image/*" capture="environment" onchange="handlePhoto(event)" class="hidden">
                 </label>
+                <button onclick="sharePhotos()" class="w-full mb-3 bg-purple-700/70 border border-purple-400/40 text-white text-[11px] py-2 rounded-lg font-bold uppercase tracking-widest">Deel foto's via WhatsApp</button>
                 <div id="photo-gallery" class="grid grid-cols-2 gap-2 mt-2"></div>
             </div>
         </section>
@@ -159,22 +160,12 @@
 
         // --- SERVICE WORKER ---
         if ('serviceWorker' in navigator) {
-            const swCode = `
-                const NAME = 'paddentrek-${APP_VERSION}';
-                const URLS = ['/', '/index.html', 'https://cdn.tailwindcss.com', 'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js', 'https://unpkg.com/html5-qrcode'];
-                self.addEventListener('install', e => {
-                    self.skipWaiting();
-                    e.waitUntil(caches.open(NAME).then(c => c.addAll(URLS)));
-                });
-                self.addEventListener('activate', e => {
-                    e.waitUntil(caches.keys().then(keys => Promise.all(keys.map(k => k !== NAME && caches.delete(k)))));
-                });
-                self.addEventListener('fetch', e => e.respondWith(caches.match(e.request).then(r => r || fetch(e.request))));
-            `;
-            const blob = new Blob([swCode], {type:'text/javascript'});
-            navigator.serviceWorker.register(URL.createObjectURL(blob)).then(() => {
+            navigator.serviceWorker.register(`./sw.js?v=${APP_VERSION}`).then(() => {
                 document.getElementById('status-icon').className = 'status-dot bg-emerald-500 shadow-[0_0_8px_#10b981]';
                 document.getElementById('status-text').innerText = 'Offline Gereed';
+            }).catch(() => {
+                document.getElementById('status-icon').className = 'status-dot bg-red-500';
+                document.getElementById('status-text').innerText = 'SW fout';
             });
         }
 
@@ -222,12 +213,23 @@
             { id: 'kam', name: 'Kamsalamander', color: 'yellow', hasAmplexus: false }
         ];
 
-        const WMO = { 0: "Helder", 1: "Licht bewolkt", 3: "Bewolkt", 61: "Regen", 80: "Buien" };
+        const WMO = { 0: "Helder", 1: "Licht bewolkt", 2:"Half bewolkt", 3: "Bewolkt", 61: "Regen", 80: "Buien" };
 
         let storage = JSON.parse(localStorage.getItem(`paddentrek_${APP_VERSION}`)) || {};
         let lastAction = null;
         const picker = document.getElementById('datePicker');
         picker.value = new Date().toISOString().split('T')[0];
+
+        // Zorgt dat een dag-object altijd alle sleutels heeft voordat we ermee werken
+        function ensureDay(d = picker.value) {
+            if(!storage[d]) storage[d] = { counts: {}, custom: [], photos: [], notes: "" };
+            const day = storage[d];
+            if(!day.counts) day.counts = {};
+            if(!day.custom) day.custom = [];
+            if(!day.photos) day.photos = [];
+            if(typeof day.notes !== 'string') day.notes = "";
+            return day;
+        }
 
         function buildUI() {
             document.getElementById('render-target').innerHTML = SPECIES.map(s => renderCard(s)).join('');
@@ -282,11 +284,11 @@
 
         function mod(key, val, e) {
             const d = picker.value;
-            if(!storage[d]) storage[d] = { counts: {}, custom: [], photos: [], notes: "" };
+            const day = ensureDay(d);
             lastAction = { d, key, val };
             document.getElementById('undo-container').classList.remove('hidden');
-            storage[d].counts[key] = (storage[d].counts[key] || 0) + val;
-            if(storage[d].counts[key] < 0) storage[d].counts[key] = 0;
+            day.counts[key] = (day.counts[key] || 0) + val;
+            if(day.counts[key] < 0) day.counts[key] = 0;
             save(); render();
             if(val > 0) {
                 if(navigator.vibrate) navigator.vibrate(20);
@@ -296,8 +298,9 @@
 
         function undo() {
             if(!lastAction) return;
-            storage[lastAction.d].counts[lastAction.key] -= lastAction.val;
-            if(storage[lastAction.d].counts[lastAction.key] < 0) storage[lastAction.d].counts[lastAction.key] = 0;
+            const day = ensureDay(lastAction.d);
+            day.counts[lastAction.key] -= lastAction.val;
+            if(day.counts[lastAction.key] < 0) day.counts[lastAction.key] = 0;
             lastAction = null; document.getElementById('undo-container').classList.add('hidden');
             save(); render(); showToast("Correctie doorgevoerd");
         }
@@ -305,7 +308,7 @@
         function save() { localStorage.setItem(`paddentrek_${APP_VERSION}`, JSON.stringify(storage)); }
 
         function render() {
-            const d = storage[picker.value] || { counts: {}, custom: [] };
+            const d = ensureDay();
             const up = s => {
                 let t = 0;
                 ['p_l','m_l','v_l','o_l','m_d','v_d','o_d'].forEach(k => {
@@ -327,10 +330,10 @@
                 try {
                     const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${p.coords.latitude}&longitude=${p.coords.longitude}&current_weather=true`);
                     const j = await r.json();
-                    if(!storage[picker.value]) storage[picker.value] = {};
-                    storage[picker.value].weather = { t: j.current_weather.temperature, c: j.current_weather.weathercode };
+                    const day = ensureDay();
+                    day.weather = { t: j.current_weather.temperature, c: j.current_weather.weathercode };
                     save(); render(); showToast("Weer OK");
-                } catch(e) { alert("API Fout"); }
+                } catch(e) { alert("API Fout"); console.log(e) }
             });
         }
 
@@ -342,48 +345,77 @@
         function addCustomSpecies() {
             const n = document.getElementById('new-species-name').value.trim();
             if(!n) return;
-            if(!storage[picker.value]) storage[picker.value] = { custom: [] };
-            if(!storage[picker.value].custom) storage[picker.value].custom = [];
-            storage[picker.value].custom.push({ id: 'c_'+Date.now(), name: n, color: 'gray', hasAmplexus: true });
+            const day = ensureDay();
+            day.custom.push({ id: 'c_'+Date.now(), name: n, color: 'gray', hasAmplexus: true });
             document.getElementById('new-species-name').value = '';
             save(); buildUI(); render();
         }
 
         function renderCustom() {
-            const d = storage[picker.value] || {};
-            document.getElementById('custom-species-render').innerHTML = (d.custom || []).map(s => renderCard(s, true)).join('');
-            document.getElementById('custom-species-list').innerHTML = (d.custom || []).map(s => `
+            const d = ensureDay();
+            document.getElementById('custom-species-render').innerHTML = d.custom.map(s => renderCard(s, true)).join('');
+            document.getElementById('custom-species-list').innerHTML = d.custom.map(s => `
                 <div class="flex justify-between items-center bg-gray-800 p-2 rounded text-[10px] mb-1 border border-gray-700 shadow-sm uppercase font-bold">
                     <span>${s.name}</span> <button onclick="removeC('${s.id}')" class="text-red-400 px-3 py-1 bg-red-900/20 rounded">Verwijder</button>
                 </div>
             `).join('');
         }
-        function removeC(id) { if(confirm("Soort wissen?")) { storage[picker.value].custom = storage[picker.value].custom.filter(c => c.id!==id); save(); buildUI(); render(); } }
+        function removeC(id) { if(confirm("Soort wissen?")) { const day = ensureDay(); day.custom = day.custom.filter(c => c.id!==id); save(); buildUI(); render(); } }
 
         function handlePhoto(e) {
             const f = e.target.files[0]; if(!f) return;
+            const day = ensureDay();
             const r = new FileReader(); r.onload = ev => {
                 const img = new Image(); img.onload = () => {
                     const c = document.createElement('canvas'); const m = 600;
                     const fct = Math.min(1, m/Math.max(img.width, img.height));
                     c.width = img.width*fct; c.height = img.height*fct;
                     c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-                    if(!storage[picker.value].photos) storage[picker.value].photos = [];
-                    storage[picker.value].photos.push(c.toDataURL('image/jpeg', 0.6));
+                    day.photos.push(c.toDataURL('image/jpeg', 0.6));
                     save(); renderPhotos();
                 }; img.src = ev.target.result;
             }; r.readAsDataURL(f);
         }
         function renderPhotos() {
-            const p = storage[picker.value]?.photos || [];
+            const p = ensureDay().photos;
             document.getElementById('photo-gallery').innerHTML = p.map((s,i) => `
                 <div class="relative"><img src="${s}" class="rounded w-full aspect-square object-cover shadow-lg">
                 <button onclick="remP(${i})" class="absolute top-1 right-1 bg-red-600 rounded-full w-5 h-5 text-[9px] font-bold">X</button></div>
             `).join('');
         }
-        function remP(i) { storage[picker.value].photos.splice(i,1); save(); renderPhotos(); }
-        function saveNotes() { if(!storage[picker.value]) storage[picker.value] = {}; storage[picker.value].notes = document.getElementById('daily-notes').value; save(); updateReport(); }
-        function loadNotes() { document.getElementById('daily-notes').value = storage[picker.value]?.notes || ""; }
+        function remP(i) { const day = ensureDay(); day.photos.splice(i,1); save(); renderPhotos(); }
+        function saveNotes() { const day = ensureDay(); day.notes = document.getElementById('daily-notes').value; save(); updateReport(); }
+        function loadNotes() { document.getElementById('daily-notes').value = ensureDay().notes; }
+
+        async function sharePhotos() {
+            const day = ensureDay();
+            const photos = day.photos || [];
+            if(!photos.length) { alert('Geen foto\'s beschikbaar voor deze dag.'); return; }
+
+            // Bouw FormData voor WhatsApp share intent
+            const fd = new FormData();
+            photos.forEach((dataUrl, idx) => {
+                const res = dataURLToBlob(dataUrl);
+                fd.append('files', res.blob, `paddentrek-${idx+1}.${res.ext}`);
+            });
+            const txt = `Paddentrek foto\'s ${picker.value}`;
+
+            try {
+                await navigator.share({ title: 'Paddentrek', text: txt, files: fd.getAll('files') });
+            } catch(err) {
+                if(err?.name !== 'AbortError') alert('Delen mislukt of niet ondersteund door deze browser.');
+            }
+        }
+
+        function dataURLToBlob(dataUrl) {
+            const [meta, b64] = dataUrl.split(',');
+            const mime = meta.match(/data:(.*);base64/)[1] || 'image/jpeg';
+            const ext = mime.split('/')[1] || 'jpg';
+            const bin = atob(b64);
+            const arr = new Uint8Array(bin.length);
+            for(let i=0;i<bin.length;i++) arr[i] = bin.charCodeAt(i);
+            return { blob: new Blob([arr], { type: mime }), ext };
+        }
 
         function updateReport() {
             const d = picker.value; const data = storage[d] || {}; const c = data.counts || {};
@@ -420,14 +452,44 @@
             new QRCode(container, { text: p, width: 160, height: 160, correctLevel: QRCode.CorrectLevel.L });
         }
 
+        function describeSync(incoming) {
+            const label = {
+                p_l: '❤️ koppels', m_l: 'm levend', v_l: 'v levend', o_l: 'o levend',
+                m_d: 'm dood',   v_d: 'v dood',   o_d: 'o dood'
+            };
+            const nameFor = id => {
+                const base = SPECIES.find(s => s.id === id);
+                if(base) return base.name;
+                const inc = (incoming.s || []).find(s => s.id === id);
+                return inc ? inc.name : id;
+            };
+
+            const perSpecies = {};
+            for(const k in incoming.c || {}) {
+                const [sid, suf] = k.split('_');
+                if(!perSpecies[sid]) perSpecies[sid] = [];
+                perSpecies[sid].push(`${incoming.c[k]} × ${label[suf] || suf}`);
+            }
+
+            const lines = Object.entries(perSpecies).map(([sid, items]) => `- ${nameFor(sid)}: ${items.join(', ')}`);
+
+            const existingCustom = (storage[incoming.d]?.custom) || [];
+            const newCustom = (incoming.s || []).filter(s => !existingCustom.some(c => c.name === s.name));
+            if(newCustom.length) lines.push(`+ Nieuwe soorten: ${newCustom.map(s => s.name).join(', ')}`);
+
+            return lines.length ? `Toegevoegd op ${incoming.d}:\n${lines.join('\n')}` : 'Geen teldata ontvangen.';
+        }
+
         function startScanner() {
             const sc = new Html5Qrcode("reader");
             sc.start({ facingMode: "environment" }, { fps: 10, qrbox: 200 }, t => {
                 try {
-                    const i = JSON.parse(t); if(!storage[i.d]) storage[i.d] = { counts: {}, custom: [] };
-                    for(let k in i.c) storage[i.d].counts[k] = (storage[i.d].counts[k] || 0) + i.c[k];
-                    (i.s||[]).forEach(si => { if(!storage[i.d].custom.some(c => c.name===si.name)) storage[i.d].custom.push(si); });
-                    save(); buildUI(); render(); sc.stop(); showToast("Partner gesynct!"); switchTab('count');
+                    const i = JSON.parse(t);
+                    const summary = describeSync(i);
+                    const day = ensureDay(i.d);
+                    for(let k in i.c) day.counts[k] = (day.counts[k] || 0) + i.c[k];
+                    (i.s||[]).forEach(si => { if(!day.custom.some(c => c.name===si.name)) day.custom.push(si); });
+                    save(); buildUI(); render(); sc.stop(); alert(summary); showToast("Partner gesynct!"); switchTab('count');
                 } catch(e) { alert("QR fout"); }
             }).catch(() => alert("Camera fout"));
         }
@@ -448,4 +510,3 @@
     </script>
 </body>
 </html>
-
