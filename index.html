@@ -23,6 +23,10 @@
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         #update-btn { z-index: 120; }
+        @keyframes recPulse { 0% { transform: scale(0.9); opacity: 0.6; } 50% { transform: scale(1.1); opacity: 1; } 100% { transform: scale(0.9); opacity: 0.6; } }
+        .animate-rec { animation: recPulse 1s infinite; }
+        .record-btn { width: 34px; height: 34px; border-radius: 9999px; border: 1px solid rgba(248,113,113,0.5); background: rgba(248,113,113,0.12); display: inline-flex; align-items: center; justify-content: center; }
+        .record-btn:active { transform: scale(0.96); }
         /* Emojis en letters */
         .icon-lg { font-size: 18px; line-height: 1; display: inline-block; color: #fff; vertical-align: -3px; }
         .icon-img { width: 24px; height: 24px; display: inline-block; vertical-align: -4px; }
@@ -41,44 +45,31 @@
     <input type="file" accept="image/*" capture="environment" onchange="handlePhoto(event)" id="photo-input" class="hidden">
 
     <!-- Header -->
-    <header class="bg-gray-800 p-4 shadow-lg sticky top-0 z-50">
-        <div class="flex justify-between items-center mb-1">
-            <h1 class="text-xl font-bold text-white brand-wrap">
-                <span class="text-lg">🐸</span>
-                <span class="text-emerald-400 brand-title text-lg">Paddentelominator</span>
-                <span class="text-[11px] uppercase tracking-[0.2em] text-gray-400 brand-sub">Ultra Pro Xtreme 2026</span>
+    <header class="bg-gray-800 px-3 py-2 shadow-lg sticky top-0 z-50">
+        <div class="flex justify-between items-center">
+            <h1 class="text-lg font-bold text-white brand-wrap leading-tight">
+                <span class="text-base">🐸</span>
+                <span class="text-emerald-400 brand-title text-base">Paddentelominator</span>
+                <span class="text-[10px] uppercase tracking-[0.18em] text-gray-400 brand-sub">Ultra Pro Xtreme 2026</span>
             </h1>
-            <div id="pwa-status" class="flex flex-col items-end gap-1">
-                <div class="flex items-center gap-2 text-[10px] text-gray-400 bg-gray-900/60 px-2 py-1 rounded-full border border-gray-700">
+            <div id="pwa-status" class="flex flex-col items-end gap-0.5 text-[9px]">
+                <div class="flex items-center gap-1 text-gray-400 bg-gray-900/60 px-2 py-1 rounded-full border border-gray-700">
                     <span id="status-icon" class="status-dot bg-gray-600"></span>
                     <span id="status-text">Laden...</span>
                 </div>
-                <div class="text-[9px] font-bold text-gray-500 uppercase tracking-tighter mr-2">Versie <span id="app-version-display">v11</span></div>
+                <div class="font-bold text-gray-500 uppercase tracking-tight">v<span id="app-version-display">11</span></div>
             </div>
         </div>
-        <div class="space-y-2 mt-2">
+        <div class="mt-2 flex flex-col gap-2">
             <div class="flex gap-2 items-center">
                 <input type="date" id="datePicker" class="bg-gray-700 border-none rounded px-2 py-1.5 text-sm focus:ring-2 focus:ring-emerald-500 text-white w-full shadow-inner">
-                <button id="new-session-btn" onclick="startSession(true)" class="bg-emerald-700 px-3 py-2 rounded text-[10px] font-bold uppercase tracking-widest">Nieuwe sessie</button>
-            </div>
-            <div id="session-panel" class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-[11px] flex flex-col gap-2">
-                <div class="flex items-center gap-2">
-                    <label class="text-[10px] text-gray-400 uppercase font-bold">Toon sessie</label>
-                    <select id="session-view-select" class="bg-gray-700 border border-gray-600 rounded px-2 py-1 flex-1 text-white text-[11px]" onchange="setViewedSession(this.value)"></select>
-                </div>
-                <div class="flex justify-between items-center text-gray-200 font-bold bg-gray-900/60 px-3 py-2 rounded border border-gray-700">
-                    <div>
-                        <div id="session-status" class="text-xs text-gray-400">Geen sessie</div>
-                        <div id="session-summary" class="text-lg">0 stuks</div>
-                    </div>
-                    <div class="flex gap-2 items-center">
-                        <button onclick="triggerPhoto()" class="bg-purple-700 text-white rounded px-3 py-2 text-[11px] font-bold flex items-center justify-center gap-1">
-                            📸
-                        </button>
-                        <button onclick="endSession()" class="bg-gray-700 px-2 py-1 rounded text-[10px] flex items-center gap-1" id="stop-btn">
-                            <span class="text-red-400">⏹</span> Stop
-                        </button>
-                    </div>
+                <div class="flex items-center gap-1.5">
+                    <button id="record-btn" onclick="endSession()" class="hidden record-btn" title="Stop sessie">
+                        <span id="record-dot" class="w-3 h-3 rounded-full bg-red-500 shadow-[0_0_0_6px_rgba(248,113,113,0.25)] animate-rec"></span>
+                    </button>
+                    <button id="new-session-btn" onclick="startSession(true)" class="bg-emerald-700 px-3 py-2 rounded text-[10px] font-bold uppercase tracking-widest flex items-center gap-1">
+                        <span class="text-xs">⏺</span> Nieuwe sessie
+                    </button>
                 </div>
             </div>
         </div>
@@ -91,7 +82,7 @@
     </header>
 
     <!-- Navigatie -->
-    <nav class="flex bg-gray-800 border-b border-gray-700 text-[10px] font-bold sticky top-[115px] z-40 overflow-x-auto whitespace-nowrap no-scrollbar shadow-md">
+    <nav class="flex bg-gray-800 border-b border-gray-700 text-[10px] font-bold sticky top-[78px] z-40 overflow-x-auto whitespace-nowrap no-scrollbar shadow-md">
         <button onclick="switchTab('count')" id="tab-count" class="px-5 py-3 active-tab uppercase tracking-tight">🧮 Tellen</button>
         <button onclick="switchTab('sessions')" id="tab-sessions" class="px-5 py-3 uppercase tracking-tight">📒 Sessie log</button>
         <button onclick="switchTab('report')" id="tab-report" class="px-5 py-3 uppercase tracking-tight">📊 Rapport</button>
@@ -101,6 +92,7 @@
     </nav>
 
     <main class="p-4">
+        <button id="camera-fab" onclick="triggerPhoto()" class="fixed right-3 bottom-24 bg-purple-700 text-white w-12 h-12 rounded-full shadow-2xl flex items-center justify-center text-2xl z-[105] border border-purple-400/60">📸</button>
         <!-- TAB 1: TELLEN -->
         <section id="view-count" class="space-y-6">
             <div id="render-target" class="space-y-6"></div>
@@ -122,6 +114,10 @@
 
         <!-- TAB 2: SESSIE LOG -->
         <section id="view-sessions" class="hidden space-y-4">
+            <div class="flex items-center gap-2 text-[11px] text-gray-300 bg-gray-800/70 border border-gray-700 px-3 py-2 rounded">
+                <span class="uppercase font-bold text-gray-400 text-[10px]">Sessie</span>
+                <select id="session-log-select" class="bg-gray-700 border border-gray-600 rounded px-2 py-1 flex-1 text-white text-[11px]" onchange="setViewedSession(this.value)"></select>
+            </div>
             <div class="text-[11px] text-gray-400">
                 Beheer per sessie: weer, trajectnaam, notities en foto's.
             </div>
@@ -144,7 +140,7 @@
                         📋 Kopieer rapport
                     </button>
                     <button onclick="shareReport()" class="w-full bg-purple-700 py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg active:bg-purple-800 text-sm">
-                        📤 Deel naar WhatsApp
+                        📤 Deel via toestel
                     </button>
                     <button onclick="shareReport(true)" class="w-full bg-purple-900/70 border border-purple-400/30 py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg active:bg-purple-900 text-xs uppercase tracking-widest">
                         📸 Deel met foto's
@@ -453,7 +449,25 @@
         // session object: { id, start, end?, counts: {}, notes: '' }
         let lastAction = null;
         const picker = document.getElementById('datePicker');
-        picker.value = new Date().toISOString().split('T')[0];
+
+        // Gebruik lokale datum (niet UTC) zodat dag juist blijft rond middernacht en tijdzones
+        const todayISO = () => {
+            const now = new Date();
+            const offsetMs = now.getTimezoneOffset() * 60000;
+            const local = new Date(now.getTime() - offsetMs);
+            return local.toISOString().split('T')[0];
+        };
+
+        function setDateInputsToToday() {
+            const today = todayISO();
+            picker.value = today;
+            const sd = document.getElementById('sessionDate');
+            if(sd) sd.value = today;
+            const pd = document.getElementById('photo-clean-date');
+            if(pd) pd.value = today;
+        }
+
+        setDateInputsToToday();
 
         // Zorgt dat een dag-object altijd alle sleutels heeft voordat we ermee werken
         function ensureDay(d = picker.value) {
@@ -473,6 +487,41 @@
                 if(!s.weather) s.weather = null;
             });
             return day;
+        }
+
+        function findRunningSessionAcrossDays() {
+            for(const d in storage) {
+                const day = ensureDay(d);
+                const sess = day.sessions.find(s => !s.end);
+                if(sess) return { dayKey: d, session: sess };
+            }
+            return null;
+        }
+
+        function splitSessionOverMidnightIfNeeded() {
+            const today = todayISO();
+            const running = findRunningSessionAcrossDays();
+            if(!running) return;
+            if(running.dayKey === today) return;
+
+            const prevDay = ensureDay(running.dayKey);
+            const sess = prevDay.sessions.find(s => s.id === running.session.id);
+            if(!sess) return;
+
+            // sluit vorige dag af op 23:59
+            const prevEnd = new Date(`${running.dayKey}T23:59:00`).toISOString();
+            sess.end = prevEnd;
+            recalcDayFromSessions(prevDay);
+
+            // start nieuwe sessie op nieuwe dag, leeg zodat nieuwe tellingen correct landen
+            const newDay = ensureDay(today);
+            const newSession = { id: 'sess_'+Date.now(), start: new Date(`${today}T00:00:00`).toISOString(), counts: {}, notes: '', weather: null, photos: [], routeName: sess.routeName || '' };
+            newDay.sessions.push(newSession);
+            activeSessionId = newSession.id;
+            viewedSessionId = newSession.id;
+            setDateInputsToToday();
+            save();
+            showToast('Sessie gesplitst om middernacht');
         }
 
         function migrateOldSchema() {
@@ -573,11 +622,12 @@
         }
 
         function mod(key, val, e) {
+            splitSessionOverMidnightIfNeeded();
             const d = picker.value;
             const day = ensureDay(d);
             let active = getActiveSession(day);
             if(!active) {
-                startSession(true, false, d);
+                startSession(true, false, d, false); // auto-start zonder redirect
                 active = getActiveSession(day);
             }
             day.counts[key] = (day.counts[key] || 0) + val;
@@ -678,34 +728,33 @@
 
         function renderSessions() {
             const day = ensureDay();
-            const status = document.getElementById('session-status');
             const active = getActiveSession(day);
             const dayTotal = sumCounts(day.counts);
             const activeTotal = active ? sumCounts(active.counts) : null;
-            status.innerText = active
-                ? `Actief sinds ${fmtTime(active.start)} · Sessie: ${activeTotal} · Dag: ${dayTotal}`
-                : `Geen sessie actief · Dag: ${dayTotal}`;
-            const summary = document.getElementById('session-summary');
-            if(summary) summary.innerText = active ? `${activeTotal} stuks` : `${dayTotal} stuks vandaag`;
-            const stopBtn = document.getElementById('stop-btn');
-            if(stopBtn) stopBtn.classList.toggle('hidden', !active);
             const newBtn = document.getElementById('new-session-btn');
             if(newBtn) newBtn.classList.toggle('hidden', !!active);
+            const camFab = document.getElementById('camera-fab');
+            if(camFab) camFab.classList.toggle('hidden', !active);
+            const recBtn = document.getElementById('record-btn');
+            if(recBtn) recBtn.classList.toggle('hidden', !active);
             buildViewedSessionOptions();
             buildRouteSuggestions();
         }
 
         function buildViewedSessionOptions() {
-            const sel = document.getElementById('session-view-select');
-            if(!sel) return;
+            const sels = ['session-view-select','session-log-select'].map(id => document.getElementById(id)).filter(Boolean);
+            if(!sels.length) return;
             const day = ensureDay();
             const sessions = day.sessions.slice().sort((a,b)=>new Date(a.start)-new Date(b.start));
-            sel.innerHTML = sessions.map(s => {
+            const opts = sessions.map(s => {
                 const label = `${fmtTime(s.start)} ${s.end ? '– '+fmtTime(s.end) : '(live)'}`;
                 return `<option value="${s.id}" ${s.id === (viewedSessionId || '') ? 'selected' : ''}>${label}</option>`;
             }).join('') || '<option value=\"\">Geen sessies</option>';
-            if(!viewedSessionId && sessions.length) viewedSessionId = sessions[sessions.length-1].id;
-            if(sel && viewedSessionId) sel.value = viewedSessionId;
+            sels.forEach(sel => {
+                sel.innerHTML = opts;
+                if(!viewedSessionId && sessions.length) viewedSessionId = sessions[sessions.length-1].id;
+                if(sel && viewedSessionId) sel.value = viewedSessionId;
+            });
         }
 
         function setViewedSession(id) {
@@ -804,7 +853,7 @@
             box.appendChild(mergeBtn);
         }
 
-        function startSession(force = false, fromSessionPage = false, dayKeyOverride = null) {
+        function startSession(force = false, fromSessionPage = false, dayKeyOverride = null, redirect = true) {
             const dayKey = dayKeyOverride || (fromSessionPage ? (document.getElementById('sessionDate').value || picker.value) : picker.value);
             const day = ensureDay(dayKey);
             const existing = day.sessions.find(s => !s.end);
@@ -815,6 +864,7 @@
             activeSessionId = session.id;
             viewedSessionId = session.id;
             save(); render(); renderSessionAdmin(); showToast('Sessie gestart');
+            if(redirect) switchTab('sessions');
             fetchWeather(dayKey, session.id); // capture weather at start
         }
 
@@ -1089,23 +1139,35 @@
             let files = [];
             if(includePhotos) {
                 const photos = reportMode === 'session' && session ? (session.photos||[]) : (day.photos||[]);
+                if(!photos.length) { alert('Geen foto’s beschikbaar voor deze selectie.'); return; }
                 files = photos.map((dataUrl, idx) => {
                     const res = dataURLToBlob(dataUrl);
                     return new File([res.blob], `paddentrek-${picker.value}-${idx+1}.${res.ext}`, { type: res.blob.type });
                 });
             }
+
             const shareData = includePhotos ? { title: 'Paddentrek', text, files } : { title: 'Paddentrek', text };
             try {
                 if(navigator.share) {
+                    if(includePhotos) {
+                        if(navigator.canShare && !navigator.canShare({ files })) {
+                            throw new Error('FILES_NOT_SUPPORTED');
+                        }
+                    }
                     await navigator.share(shareData);
                     return;
                 }
             } catch(err) {
                 if(err?.name === 'AbortError') return;
+                if(err?.message === 'FILES_NOT_SUPPORTED') {
+                    alert('Je toestel ondersteunt geen delen met foto’s. Probeer zonder foto’s.');
+                    return;
+                }
             }
-            // Fallback: WhatsApp tekst
-            const wa = `https://wa.me/?text=${encodeURIComponent(text)}`;
-            window.open(wa, '_blank');
+            // Fallback: kopieer tekst zodat gebruiker zelf kan plakken in een app naar keuze
+            const el = document.createElement('textarea'); el.value = text; document.body.appendChild(el);
+            el.select(); document.execCommand('copy'); document.body.removeChild(el);
+            alert('Rapport gekopieerd. Plak het in je favoriete app (Signal/WhatsApp/Messenger).');
         }
 
         function exportReportCSV(forceDay = false) {
@@ -1601,6 +1663,7 @@
 
         picker.onchange = () => { buildUI(); render(); buildQRSessionOptions(); buildReportSessionOptions(); renderSessionAdmin(); };
         document.getElementById('sessionDate').onchange = () => renderSessionAdmin();
+        splitSessionOverMidnightIfNeeded();
         buildUI(); render(); renderSessionAdmin(); buildQRSessionOptions(); buildReportSessionOptions();
     </script>
 </body>
