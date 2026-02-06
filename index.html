@@ -42,8 +42,24 @@
                 <div class="text-[9px] font-bold text-gray-500 uppercase tracking-tighter mr-2">Versie <span id="app-version-display">v11</span></div>
             </div>
         </div>
-        <div class="flex justify-between items-center mt-2">
-            <input type="date" id="datePicker" class="bg-gray-700 border-none rounded px-2 py-1.5 text-sm focus:ring-2 focus:ring-emerald-500 text-white w-full shadow-inner">
+        <div class="space-y-2 mt-2">
+            <div class="flex gap-2 items-center">
+                <input type="date" id="datePicker" class="bg-gray-700 border-none rounded px-2 py-1.5 text-sm focus:ring-2 focus:ring-emerald-500 text-white w-full shadow-inner">
+                <button id="new-session-btn" onclick="startSession(true)" class="bg-emerald-700 px-3 py-2 rounded text-[10px] font-bold uppercase tracking-widest">Nieuwe sessie</button>
+            </div>
+            <div id="session-panel" class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-[11px] flex flex-col gap-1">
+                <div class="flex justify-between items-center text-gray-200 font-bold">
+                    <span id="session-status">Geen sessie</span>
+                    <div class="flex gap-1">
+                        <button onclick="endSession()" class="bg-gray-700 px-2 py-1 rounded text-[10px]">Stop</button>
+                    </div>
+                </div>
+                <div class="flex items-center gap-2 text-[10px] text-gray-300">
+                    <span>Actieve sessie:</span>
+                    <select id="active-session-select" class="bg-gray-700 border border-gray-600 rounded px-2 py-1 flex-1" onchange="setActiveSession(this.value)"></select>
+                </div>
+                <div id="session-list" class="text-[10px] text-gray-400 space-y-1 max-h-24 overflow-y-auto"></div>
+            </div>
         </div>
         
         <div id="undo-container" class="mt-2 hidden">
@@ -56,11 +72,10 @@
     <!-- Navigatie -->
     <nav class="flex bg-gray-800 border-b border-gray-700 text-[10px] font-bold sticky top-[115px] z-40 overflow-x-auto whitespace-nowrap no-scrollbar shadow-md">
         <button onclick="switchTab('count')" id="tab-count" class="px-5 py-3 active-tab uppercase tracking-tight">Tellen</button>
-        <button onclick="switchTab('varia')" id="tab-varia" class="px-5 py-3 uppercase tracking-tight">Extra</button>
         <button onclick="switchTab('log')" id="tab-log" class="px-5 py-3 uppercase tracking-tight">Log & Weer</button>
-        <button onclick="switchTab('report')" id="tab-report" class="px-5 py-3 uppercase tracking-tight">Rapport</button>
         <button onclick="switchTab('share')" id="tab-share" class="px-5 py-3 uppercase tracking-tight">Delen</button>
-        <button onclick="switchTab('help')" id="tab-help" class="px-5 py-3 uppercase tracking-tight">Hulp</button>
+        <button onclick="switchTab('settings')" id="tab-settings" class="px-5 py-3 uppercase tracking-tight">⚙️ Instellingen</button>
+        <button onclick="switchTab('help')" id="tab-help" class="px-5 py-3 uppercase tracking-tight">Determinatiehulp</button>
     </nav>
 
     <main class="p-4">
@@ -68,25 +83,22 @@
         <section id="view-count" class="space-y-6">
             <div id="render-target" class="space-y-6"></div>
             <div id="custom-species-render" class="space-y-6"></div>
+
+            <div class="bg-gray-800 p-6 rounded-xl border border-emerald-500/30 space-y-3">
+                <h3 class="font-bold mb-4 text-emerald-400">Nieuwe soort toevoegen</h3>
+                <div class="flex gap-2">
+                    <input type="text" id="new-species-name" placeholder="Bijv: Groene Kikker..." class="flex-grow bg-gray-700 border-none rounded px-3 py-2 text-sm text-white">
+                    <button onclick="addCustomSpecies()" class="bg-emerald-600 px-4 py-2 rounded font-bold text-sm">OK</button>
+                </div>
+                <div id="custom-species-list" class="space-y-2"></div>
+            </div>
             
             <button onclick="resetCurrentDate()" class="w-full py-8 text-gray-600 text-[10px] uppercase tracking-widest font-bold border-2 border-dashed border-gray-800 rounded-xl mt-10">
                 Alles wissen voor vandaag
             </button>
         </section>
 
-        <!-- TAB 2: EXTRA -->
-        <section id="view-varia" class="hidden space-y-6">
-            <div class="bg-gray-800 p-6 rounded-xl border border-emerald-500/30">
-                <h3 class="font-bold mb-4 text-emerald-400">Nieuwe soort toevoegen</h3>
-                <div class="flex gap-2">
-                    <input type="text" id="new-species-name" placeholder="Bijv: Groene Kikker..." class="flex-grow bg-gray-700 border-none rounded px-3 py-2 text-sm text-white">
-                    <button onclick="addCustomSpecies()" class="bg-emerald-600 px-4 py-2 rounded font-bold text-sm">OK</button>
-                </div>
-            </div>
-            <div id="custom-species-list" class="space-y-2"></div>
-        </section>
-
-        <!-- TAB 3: LOG & WEER -->
+        <!-- TAB 2: LOG & WEER -->
         <section id="view-log" class="hidden space-y-6 text-center">
             <div class="bg-gray-800 p-4 rounded-xl border border-yellow-500/30 text-left">
                 <h3 class="font-bold mb-3 text-yellow-400 flex items-center justify-between">
@@ -107,31 +119,22 @@
                     <span class="bg-purple-600 text-white px-8 py-3 rounded-full font-bold text-sm inline-block cursor-pointer active:bg-purple-700 shadow-lg">📸 Foto nemen</span>
                     <input type="file" accept="image/*" capture="environment" onchange="handlePhoto(event)" class="hidden">
                 </label>
+                <div class="flex justify-between items-center mb-2 text-[10px] text-gray-400">
+                    <span>Alle foto's lokaal</span>
+                    <button onclick="clearAllPhotos()" class="bg-red-900/30 text-red-300 px-2 py-1 rounded">Wis alles</button>
+                </div>
                 <div id="photo-gallery" class="grid grid-cols-2 gap-2 mt-2"></div>
             </div>
         </section>
 
-        <!-- TAB 4: RAPPORT -->
-        <section id="view-report" class="hidden space-y-4">
-            <h2 class="text-xl font-bold text-emerald-400 text-center">Dagoverzicht</h2>
-            <div id="report-text" class="bg-gray-800 p-4 rounded-lg font-mono text-left text-[11px] border border-emerald-500/30 whitespace-pre-wrap leading-relaxed"></div>
-            <div class="grid grid-cols-1 gap-3">
-                <button onclick="copyReport()" class="w-full bg-emerald-600 py-4 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg active:bg-emerald-700">
-                    📋 Kopieer rapport
-                </button>
-                <button onclick="sharePhotos(true)" class="w-full bg-purple-700 py-4 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg active:bg-purple-800 text-sm">
-                    📤 Deel rapport + foto's
-                </button>
-                <button onclick="sharePhotos(false)" class="w-full bg-purple-900/70 border border-purple-400/30 py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg active:bg-purple-900 text-xs uppercase tracking-widest">
-                    📸 Deel alleen foto's
-                </button>
-            </div>
-        </section>
-
-        <!-- TAB 5: DELEN -->
+        <!-- TAB 4: DELEN (incl. rapport) -->
         <section id="view-share" class="hidden space-y-6 text-center">
             <div class="bg-gray-800 p-6 rounded-xl border border-purple-500/30">
                 <h3 class="font-bold mb-2">QR van mijn data</h3>
+                <div class="flex gap-2 mb-3 text-[10px] text-gray-300 items-center">
+                    <span>Data:</span>
+                    <select id="qr-session-select" class="bg-gray-700 border border-gray-600 rounded px-2 py-1 flex-1 text-left text-white" onchange="generateQR()"></select>
+                </div>
                 <div id="qrcode-area" class="bg-white p-3 rounded-lg inline-block mx-auto mb-4 border-4 border-purple-500"></div>
                 <button onclick="generateQR()" class="w-full bg-purple-600 py-3 rounded-lg font-bold uppercase text-xs">Refresh QR</button>
             </div>
@@ -140,9 +143,53 @@
                 <div id="reader" class="rounded-lg overflow-hidden bg-black mb-4 mx-auto w-full max-w-[300px]"></div>
                 <button id="scan-btn" onclick="startScanner()" class="w-full bg-emerald-600 py-3 rounded-lg font-bold uppercase text-xs">Start Camera</button>
             </div>
+            <div class="bg-gray-800 p-4 rounded-xl border border-emerald-500/30 space-y-3 text-left">
+                <div class="flex items-center gap-2 text-[10px] text-gray-300">
+                    <span>Sessie:</span>
+                    <select id="report-session-select" class="bg-gray-700 border border-gray-600 rounded px-2 py-1 flex-1 text-left text-white" onchange="updateReport()"></select>
+                </div>
+                <div id="report-text" class="bg-gray-900 p-3 rounded-lg font-mono text-left text-[11px] border border-emerald-500/30 whitespace-pre-wrap leading-relaxed"></div>
+                <div class="bg-gray-900 p-3 rounded-lg font-mono text-left text-[11px] border border-blue-500/30 whitespace-pre-wrap leading-relaxed" id="all-report-text"></div>
+                <div class="grid grid-cols-1 gap-3">
+                    <button onclick="copyReport()" class="w-full bg-emerald-600 py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg active:bg-emerald-700 text-sm">
+                        📋 Kopieer rapport
+                    </button>
+                    <button onclick="copyAllReport()" class="w-full bg-blue-700 py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg active:bg-blue-800 text-sm">
+                        📋 Kopieer alle dagen
+                    </button>
+                    <button onclick="sharePhotos(true)" class="w-full bg-purple-700 py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg active:bg-purple-800 text-sm">
+                        📤 Deel rapport + foto's
+                    </button>
+                    <button onclick="sharePhotos(false)" class="w-full bg-purple-900/70 border border-purple-400/30 py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg active:bg-purple-900 text-xs uppercase tracking-widest">
+                        📸 Deel alleen foto's
+                    </button>
+                </div>
+            </div>
         </section>
 
-        <!-- TAB 6: HELP -->
+        <!-- TAB 6: INSTELLINGEN -->
+        <section id="view-settings" class="hidden space-y-4">
+            <h2 class="text-xl font-bold text-emerald-400 text-center">⚙️ Instellingen</h2>
+            <div class="bg-gray-800 p-4 rounded-xl border border-emerald-500/30 space-y-3">
+                <h3 class="font-bold text-emerald-300 text-sm">Sessiemanagement</h3>
+                <div class="flex gap-2 items-center">
+                    <input type="date" id="sessionDate" class="bg-gray-700 border-none rounded px-2 py-1.5 text-sm focus:ring-2 focus:ring-emerald-500 text-white w-full shadow-inner">
+                    <button onclick="startSession(true, true)" class="bg-emerald-700 px-3 py-2 rounded text-[10px] font-bold uppercase tracking-widest">Start op datum</button>
+                </div>
+                <div id="session-admin-list" class="space-y-2 text-[11px]"></div>
+            </div>
+            <div class="bg-gray-800 p-4 rounded-xl border border-purple-500/30">
+                <h3 class="font-bold mb-2 text-purple-300">QR Import (sessies)</h3>
+                <div id="session-reader" class="rounded-lg overflow-hidden bg-black mb-4 mx-auto w-full max-w-[300px]"></div>
+                <button onclick="startSessionScanner()" class="w-full bg-purple-600 py-3 rounded-lg font-bold uppercase text-xs">Scan QR</button>
+            </div>
+            <div class="bg-gray-800 p-4 rounded-xl border border-red-500/30 space-y-2">
+                <h3 class="font-bold text-red-300 text-sm">Databeheer</h3>
+                <button onclick="clearAllPhotos()" class="w-full bg-red-900/40 border border-red-700 text-red-200 py-2 rounded text-[11px]">Wis alle foto's</button>
+            </div>
+        </section>
+
+        <!-- TAB 7: DETERMINATIEHULP -->
         <section id="view-help" class="hidden space-y-4 text-sm">
             <h2 class="text-xl font-bold text-emerald-400 text-center italic">Hulp bij determinatie</h2>
             <div class="bg-gray-800 p-3 rounded-lg border-l-4 border-emerald-500">
@@ -178,8 +225,16 @@
                 document.getElementById('status-text').innerText = 'Offline Gereed';
 
                 // Luister naar nieuwe versies
-                reg.addEventListener('updatefound', () => showUpdateBadge(APP_VERSION));
-                navigator.serviceWorker.addEventListener('controllerchange', () => showUpdateBadge(APP_VERSION));
+                reg.addEventListener('updatefound', () => {
+                    const u = reg.installing?.scriptURL || '';
+                    const m = u.match(/v=([^&]+)/);
+                    showUpdateBadge(m ? m[1] : null);
+                });
+                navigator.serviceWorker.addEventListener('controllerchange', () => {
+                    const u = reg.active?.scriptURL || '';
+                    const m = u.match(/v=([^&]+)/);
+                    showUpdateBadge(m ? m[1] : null);
+                });
             }).catch(() => {
                 document.getElementById('status-icon').className = 'status-dot bg-red-500';
                 document.getElementById('status-text').innerText = 'SW fout';
@@ -209,6 +264,21 @@
             draw() { ctx.globalAlpha = this.life; ctx.fillStyle = this.color; ctx.beginPath(); ctx.arc(this.x, this.y, this.size, 0, Math.PI*2); ctx.fill(); }
         }
 
+        class EmojiParticle extends Particle {
+            constructor(x, y, emoji) {
+                super(x, y, '#9ca3af');
+                this.emoji = emoji;
+                this.size = 18 + Math.random()*8;
+            }
+            draw() {
+                ctx.save();
+                ctx.font = `${this.size}px Arial`;
+                ctx.globalAlpha = Math.max(this.life, 0);
+                ctx.fillText(this.emoji, this.x, this.y);
+                ctx.restore();
+            }
+        }
+
         class HeartParticle extends Particle {
             constructor(x, y, color) { super(x, y, color); this.size = Math.random() * 4 + 4; }
             draw() {
@@ -223,13 +293,17 @@
             }
         }
 
-        function celebrate(e, hearts = false) {
-            const colors = hearts ? ['#fb7185', '#f472b6', '#ef4444', '#f87171'] : ['#10b981', '#60a5fa', '#fcd34d', '#f472b6', '#ffffff'];
+        function celebrate(e, hearts = false, sad = false) {
+            const colors = hearts ? ['#fb7185', '#f472b6', '#ef4444', '#f87171']
+                                  : sad ? ['#60a5fa', '#94a3b8', '#a5b4fc', '#22d3ee']
+                                        : ['#10b981', '#60a5fa', '#fcd34d', '#f472b6', '#ffffff'];
             const x = e ? e.clientX : window.innerWidth / 2;
             const y = e ? e.clientY : window.innerHeight / 2;
             for(let i=0; i<20; i++) {
                 const color = colors[Math.floor(Math.random()*colors.length)];
-                particles.push(hearts ? new HeartParticle(x, y, color) : new Particle(x, y, color));
+                if(hearts) particles.push(new HeartParticle(x, y, color));
+                else if(sad) particles.push(new EmojiParticle(x, y, '☹️'));
+                else particles.push(new Particle(x, y, color));
             }
         }
 
@@ -254,19 +328,34 @@
         const WMO = { 0: "Helder", 1: "Licht bewolkt", 2:"Half bewolkt", 3: "Bewolkt", 61: "Regen", 80: "Buien" };
 
         let storage = JSON.parse(localStorage.getItem(`paddentrek_${APP_VERSION}`)) || {};
+        let activeSessionId = null;
+        // Schema v2: per day stores counts, custom, photos, notes, weather, sessions
+        // session object: { id, start, end?, counts: {}, notes: '' }
         let lastAction = null;
         const picker = document.getElementById('datePicker');
         picker.value = new Date().toISOString().split('T')[0];
 
         // Zorgt dat een dag-object altijd alle sleutels heeft voordat we ermee werken
         function ensureDay(d = picker.value) {
-            if(!storage[d]) storage[d] = { counts: {}, custom: [], photos: [], notes: "" };
+            if(!storage[d]) storage[d] = { counts: {}, custom: [], photos: [], notes: "", sessions: [] };
             const day = storage[d];
             if(!day.counts) day.counts = {};
             if(!day.custom) day.custom = [];
             if(!day.photos) day.photos = [];
             if(typeof day.notes !== 'string') day.notes = "";
+            if(!day.sessions) day.sessions = [];
             return day;
+        }
+
+        function migrateOldSchema() {
+            for(const d in storage) {
+                const day = storage[d];
+                if(!day.sessions) day.sessions = [];
+                if(!day.custom) day.custom = [];
+                if(!day.photos) day.photos = [];
+                if(typeof day.notes !== 'string') day.notes = "";
+            }
+            save();
         }
 
         function buildUI() {
@@ -323,13 +412,24 @@
             const day = ensureDay(d);
             lastAction = { d, key, val };
             document.getElementById('undo-container').classList.remove('hidden');
+            let active = getActiveSession(day);
+            if(!active) {
+                startSession(true, false, d);
+                active = getActiveSession(day);
+            }
             day.counts[key] = (day.counts[key] || 0) + val;
             if(day.counts[key] < 0) day.counts[key] = 0;
+            // Also bump active session if running
+            if(active) {
+                active.counts[key] = (active.counts[key] || 0) + val;
+                if(active.counts[key] < 0) active.counts[key] = 0;
+            }
             save(); render();
             if(val > 0) {
                 if(navigator.vibrate) navigator.vibrate(20);
                 if(key.includes('_p_l')) celebrate(e, true);
                 else if(key.includes('_l')) celebrate(e);
+                else if(key.includes('_d')) celebrate(e, false, true);
             }
         }
 
@@ -357,18 +457,185 @@
             };
             SPECIES.forEach(up);
             (d.custom || []).forEach(up);
+            renderSessions();
             updateReport(); updateWeather();
         }
 
-        async function fetchWeather() {
+        function renderSessions() {
+            const day = ensureDay();
+            const list = document.getElementById('session-list');
+            const status = document.getElementById('session-status');
+            const select = document.getElementById('active-session-select');
+            const active = getActiveSession(day);
+            status.innerText = active ? `Actief sinds ${fmtTime(active.start)}` : 'Geen sessie actief';
+            const rows = day.sessions
+                .slice()
+                .sort((a,b) => new Date(a.start) - new Date(b.start))
+                .map(s => {
+                    const title = `${fmtTime(s.start)} - ${s.end ? fmtTime(s.end) : 'lopend'}`;
+                    const total = sumCounts(s.counts);
+                    const weather = s.weather ? ` • ${s.weather.t}°C ${WMO[s.weather.c] || 'OK'}` : '';
+                    return `<div class="flex justify-between items-center bg-gray-900/50 px-2 py-1 rounded border border-gray-800">
+                        <span>${title} · ${total} stuks${weather}</span>
+                        <div class="flex gap-1">
+                            <button onclick="mergeSession('${s.id}')" class="bg-gray-700 px-2 py-1 rounded text-[9px]">Voeg samen</button>
+                            ${s.end ? '' : '<span class="text-emerald-400 text-[9px]">live</span>'}
+                        </div>
+                    </div>`;
+                }).join('') || '<div class="text-gray-500">Nog geen sessies</div>';
+            if(list) list.innerHTML = rows;
+            if(select) {
+                select.innerHTML = '<option value=\"\">Geen</option>' + day.sessions.map(s => {
+                    const label = `${fmtTime(s.start)} ${s.end ? '– '+fmtTime(s.end) : '(live)'}`;
+                    return `<option value="${s.id}" ${(active && s.id===active.id) ? 'selected' : ''}>${label}</option>`;
+                }).join('');
+                select.value = active ? active.id : (select.options[0]?.value || '');
+            }
+        }
+
+        function setActiveSession(id) {
+            const day = ensureDay();
+            if(id && day.sessions.find(s => s.id === id)) activeSessionId = id;
+            else activeSessionId = null;
+            save(); renderSessions(); showToast(activeSessionId ? 'Actieve sessie gekozen' : 'Geen sessie actief');
+        }
+
+        function sumCounts(obj = {}) {
+            return Object.values(obj).reduce((a,b) => a + b, 0);
+        }
+
+        function getActiveSession(day) {
+            return day.sessions.find(s => s.id === activeSessionId && !s.end) || day.sessions.find(s => !s.end);
+        }
+
+        function renderSessionAdmin() {
+            const dayKey = document.getElementById('sessionDate')?.value || picker.value;
+            const day = ensureDay(dayKey);
+            const box = document.getElementById('session-admin-list');
+            if(!box) return;
+            const items = day.sessions.slice().sort((a,b)=>new Date(a.start)-new Date(b.start)).map(s => {
+                const total = sumCounts(s.counts);
+                const weather = s.weather ? `<div class="text-[10px] text-sky-300">🌤️ ${s.weather.t}°C ${WMO[s.weather.c]||'OK'}</div>` : '';
+                return `<label class="bg-gray-900 p-3 rounded border border-gray-800 flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" class="session-merge-checkbox accent-emerald-500" value="${s.id}">
+                    <div class="flex-1">
+                        <div class="font-bold text-gray-100">${fmtTime(s.start)} - ${s.end ? fmtTime(s.end) : 'lopend'}</div>
+                        <div class="text-gray-400 text-[10px]">${total} stuks</div>
+                        ${weather}
+                    </div>
+                    <button class="bg-red-700 px-2 py-1 rounded text-[9px]" onclick="deleteSession('${s.id}','${dayKey}')">Del</button>
+                </label>`;
+            }).join('') || '<div class="text-gray-500">Geen sessies voor deze dag.</div>';
+            box.innerHTML = items;
+            // merge action button
+            const mergeBtn = document.createElement('button');
+            mergeBtn.innerText = 'Merge selectie';
+            mergeBtn.className = 'w-full bg-gray-700 mt-2 py-2 rounded text-[11px] font-bold';
+            mergeBtn.onclick = () => mergeSelectedSessions(dayKey);
+            box.appendChild(mergeBtn);
+        }
+
+        function startSession(force = false, fromSessionPage = false, dayKeyOverride = null) {
+            const dayKey = dayKeyOverride || (fromSessionPage ? (document.getElementById('sessionDate').value || picker.value) : picker.value);
+            const day = ensureDay(dayKey);
+            const existing = day.sessions.find(s => !s.end);
+            if(existing && !force) { alert('Er draait al een sessie. Stop eerst.'); return; }
+            const now = new Date();
+            const session = { id: 'sess_'+now.getTime(), start: now.toISOString(), counts: {}, notes: '', weather: null };
+            day.sessions.push(session);
+            activeSessionId = session.id;
+            save(); renderSessions(); renderSessionAdmin(); showToast('Sessie gestart');
+            fetchWeather(dayKey, session.id); // capture weather at start
+        }
+
+        function endSession() {
+            const day = ensureDay();
+            const active = day.sessions.find(s => !s.end);
+            if(!active) return alert('Geen actieve sessie');
+            active.end = new Date().toISOString();
+            save(); renderSessions(); renderSessionAdmin(); showToast('Sessie gestopt');
+        }
+
+        // legacy single merge fallback (unused in UI now but kept for safety)
+        function mergeSession(id, dayKey = picker.value) {
+            const day = ensureDay(dayKey);
+            const target = day.sessions.find(s => s.id === id);
+            if(!target) return;
+            const others = day.sessions.filter(s => s.id !== id);
+            if(!others.length) { alert('Minstens 2 sessies nodig.'); return; }
+            const master = target;
+            others.forEach(s => {
+                for(const k in s.counts) master.counts[k] = (master.counts[k]||0) + s.counts[k];
+                if(new Date(s.start) < new Date(master.start)) master.start = s.start;
+                if(s.end && (!master.end || new Date(s.end) > new Date(master.end))) master.end = s.end;
+                if(s.weather && !master.weather) master.weather = s.weather;
+            });
+            day.sessions = [master];
+            recalcDayFromSessions(day);
+            save(); render(); renderSessionAdmin(); showToast('Sessies samengevoegd');
+        }
+
+        function mergeSelectedSessions(dayKey = picker.value) {
+            const day = ensureDay(dayKey);
+            const boxes = Array.from(document.querySelectorAll('.session-merge-checkbox')).filter(cb => cb.checked);
+            if(boxes.length < 2) { alert('Selecteer minstens 2 sessies.'); return; }
+            const ids = boxes.map(b => b.value);
+            const masterId = ids[0];
+            const master = day.sessions.find(s => s.id === masterId);
+            const others = day.sessions.filter(s => ids.includes(s.id) && s.id !== masterId);
+            others.forEach(s => {
+                for(const k in s.counts) master.counts[k] = (master.counts[k]||0) + s.counts[k];
+                if(new Date(s.start) < new Date(master.start)) master.start = s.start;
+                if(s.end && (!master.end || new Date(s.end) > new Date(master.end))) master.end = s.end;
+                if(s.weather && !master.weather) master.weather = s.weather;
+            });
+            day.sessions = day.sessions.filter(s => !others.includes(s));
+            recalcDayFromSessions(day);
+            save(); render(); renderSessionAdmin(); showToast('Sessies samengevoegd');
+        }
+
+        function recalcDayFromSessions(day) {
+            day.counts = {};
+            day.sessions.forEach(s => {
+                for(const k in s.counts) day.counts[k] = (day.counts[k]||0) + s.counts[k];
+            });
+        }
+
+        function deleteSession(id, dayKey = picker.value) {
+            const day = ensureDay(dayKey);
+            day.sessions = day.sessions.filter(s => s.id !== id);
+            recalcDayFromSessions(day);
+            if(activeSessionId === id) activeSessionId = null;
+            save(); render(); renderSessionAdmin(); showToast('Sessie verwijderd');
+        }
+
+        function confirmMerge(id) {
+            return confirm(`Sessies samenvoegen met ${id}?`);
+        }
+
+        function fmtTime(iso) {
+            const d = new Date(iso);
+            return d.toLocaleTimeString('nl-BE', { hour: '2-digit', minute: '2-digit' });
+        }
+
+        async function fetchWeather(dayOverride, sessionId) {
             if(!navigator.geolocation) return;
             showToast("GPS zoekt...");
             navigator.geolocation.getCurrentPosition(async p => {
                 try {
                     const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${p.coords.latitude}&longitude=${p.coords.longitude}&current_weather=true`);
                     const j = await r.json();
-                    const day = ensureDay();
-                    day.weather = { t: j.current_weather.temperature, c: j.current_weather.weathercode };
+                    const dayKey = dayOverride || picker.value;
+                    const day = ensureDay(dayKey);
+                    const w = { t: j.current_weather.temperature, c: j.current_weather.weathercode, ts: Date.now() };
+                    day.weather = w;
+                    if(sessionId) {
+                        const sess = day.sessions.find(s => s.id === sessionId);
+                        if(sess) sess.weather = w;
+                    } else {
+                        const active = day.sessions.find(s => !s.end);
+                        if(active) active.weather = active.weather || w;
+                    }
                     save(); render(); showToast("Weer OK");
                 } catch(e) { alert("API Fout"); console.log(e) }
             });
@@ -421,6 +688,12 @@
             `).join('');
         }
         function remP(i) { const day = ensureDay(); day.photos.splice(i,1); save(); renderPhotos(); }
+
+        function clearAllPhotos() {
+            if(!confirm('Alle foto\'s in alle dagen wissen?')) return;
+            for(const d in storage) { const day = ensureDay(d); day.photos = []; }
+            save(); renderPhotos(); showToast('Alle foto\'s gewist');
+        }
         function saveNotes() { const day = ensureDay(); day.notes = document.getElementById('daily-notes').value; save(); updateReport(); }
         function loadNotes() { document.getElementById('daily-notes').value = ensureDay().notes; }
 
@@ -458,9 +731,14 @@
         }
 
         function updateReport() {
-            const d = picker.value; const data = storage[d] || {}; const c = data.counts || {};
+            const d = picker.value; const data = storage[d] || {};
+            const sel = document.getElementById('report-session-select');
+            const sessionId = sel ? sel.value : '';
+            const session = sessionId ? (data.sessions || []).find(s => s.id === sessionId) : null;
+            const c = session ? (session.counts || {}) : (data.counts || {});
             let txt = `🐸 *OVERZET-UPDATE - ${d}*\n\n`;
-            if(data.weather) txt += `🌤️ *Weer:* ${data.weather.t}°C, ${WMO[data.weather.c] || "OK"}\n\n`;
+            const w = session?.weather || data.weather;
+            if(w) txt += `🌤️ *Weer:* ${w.t}°C, ${WMO[w.c] || "OK"}\n\n`;
             const all = [...SPECIES, ...(data.custom || [])]; let h = false;
             all.forEach(s => {
                 const pl = c[`${s.id}_p_l`]||0, pd = c[`${s.id}_p_d`]||0;
@@ -472,8 +750,25 @@
             });
             txt += `\nℹ️ Koppels (❤️/☠️) worden niet dubbel geteld bij de losse man/vrouw-aantallen.\n`;
             if(data.notes) txt += `\n📝 *Nota:* ${data.notes}\n`;
+            const sessionsToShow = session ? [session] : (data.sessions || []);
+            if(sessionsToShow.length) {
+                txt += `\n⏱️ *Sessies:*\n`;
+                sessionsToShow.sort((a,b)=>new Date(a.start)-new Date(b.start)).forEach(s => {
+                    const total = sumCounts(s.counts);
+                    const wtxt = s.weather ? ` | 🌤️ ${s.weather.t}°C ${WMO[s.weather.c]||'OK'}` : '';
+                    txt += `  - ${fmtTime(s.start)} - ${s.end ? fmtTime(s.end) : 'lopend'}: ${total} stuks${wtxt}\n`;
+                });
+            }
             txt += `\n#Paddentrek #Telling`;
             document.getElementById('report-text').innerText = h || data.notes ? txt : "Nog geen data ingevoerd.";
+
+            let allTxt = '🐸 *OVERZET - ALLE DAGEN*\n\n';
+            Object.keys(storage).sort().forEach(day => {
+                const ddata = storage[day]; if(!ddata) return;
+                const total = sumCounts(ddata.counts);
+                allTxt += `- ${day}: ${total} stuks\n`;
+            });
+            document.getElementById('all-report-text').innerText = allTxt;
         }
 
         function copyReport() {
@@ -482,9 +777,16 @@
             el.select(); document.execCommand('copy'); document.body.removeChild(el); showToast("Gekopieerd!");
         }
 
+        function copyAllReport() {
+            const t = document.getElementById('all-report-text').innerText;
+            const el = document.createElement('textarea'); el.value = t; document.body.appendChild(el);
+            el.select(); document.execCommand('copy'); document.body.removeChild(el); showToast("Alle dagen gekopieerd");
+        }
+
         // --- UPDATE BADGE ---
         const updateBtn = document.getElementById('update-btn');
         function showUpdateBadge(version) {
+            if(!version || version === APP_VERSION) return; // niets nieuw
             updateBtn.classList.remove('hidden');
             updateBtn.innerText = `UPDATE ${version}`;
         }
@@ -500,10 +802,37 @@
             setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.classList.add('hidden'), 500); }, 2000);
         }
 
+        function buildQRSessionOptions() {
+            const sel = document.getElementById('qr-session-select');
+            if(!sel) return;
+            const day = ensureDay();
+            sel.innerHTML = '<option value=\"\">Alle sessies (dagtotaal)</option>' + day.sessions.map(s => {
+                const label = `${fmtTime(s.start)} ${s.end ? '– '+fmtTime(s.end) : '(live)'}`;
+                return `<option value="${s.id}">${label}</option>`;
+            }).join('');
+        }
+
+        function buildReportSessionOptions() {
+            const sel = document.getElementById('report-session-select');
+            if(!sel) return;
+            const day = ensureDay();
+            sel.innerHTML = '<option value=\"\">Alle sessies</option>' + day.sessions.map(s => {
+                const label = `${fmtTime(s.start)} ${s.end ? '– '+fmtTime(s.end) : '(live)'}`;
+                return `<option value="${s.id}">${label}</option>`;
+            }).join('');
+            sel.value = '';
+        }
+
         function generateQR() {
-            const d = picker.value; const container = document.getElementById("qrcode-area"); container.innerHTML = "";
-            const p = JSON.stringify({ d, c: storage[d]?.counts || {}, s: storage[d]?.custom || [] });
-            new QRCode(container, { text: p, width: 160, height: 160, correctLevel: QRCode.CorrectLevel.L });
+            const d = picker.value;
+            const container = document.getElementById("qrcode-area"); if(container) container.innerHTML = "";
+            const sel = document.getElementById('qr-session-select');
+            const sessionId = sel ? sel.value : '';
+            const day = ensureDay(d);
+            const session = sessionId ? day.sessions.find(s => s.id === sessionId) : null;
+            const counts = session ? session.counts || {} : day.counts || {};
+            const payload = { d, c: counts, s: day.custom || [], sess: sessionId || null };
+            new QRCode(container, { text: JSON.stringify(payload), width: 160, height: 160, correctLevel: QRCode.CorrectLevel.L });
         }
 
         function describeSync(incoming) {
@@ -548,19 +877,39 @@
             }).catch(() => alert("Camera fout"));
         }
 
+        function startSessionScanner() {
+            const sc = new Html5Qrcode("session-reader");
+            sc.start({ facingMode: "environment" }, { fps: 10, qrbox: 200 }, t => {
+                try {
+                    const i = JSON.parse(t);
+                    const summary = describeSync(i);
+                    const day = ensureDay(i.d);
+                    for(let k in i.c) day.counts[k] = (day.counts[k] || 0) + i.c[k];
+                    (i.s||[]).forEach(si => { if(!day.custom.some(c => c.name===si.name)) day.custom.push(si); });
+                    save(); buildUI(); render(); sc.stop(); alert(summary); showToast("Sessies geïmporteerd"); switchTab('sessions');
+                } catch(e) { alert("QR fout"); }
+            }).catch(() => alert("Camera fout"));
+        }
+
         function switchTab(t) {
             document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
             document.getElementById('view-' + t).classList.remove('hidden');
             document.querySelectorAll('nav button').forEach(b => b.classList.remove('active-tab'));
             document.getElementById('tab-' + t).classList.add('active-tab');
-            if(t==='share') generateQR();
+            if(t==='share') { buildQRSessionOptions(); buildReportSessionOptions(); generateQR(); updateReport(); }
             if(t==='log') { renderPhotos(); loadNotes(); }
+            if(t==='settings') {
+                const sd = document.getElementById('sessionDate');
+                if(sd) sd.value = picker.value;
+                renderSessionAdmin();
+            }
         }
 
         function resetCurrentDate() { if(confirm("Alles wissen voor vandaag?")) { delete storage[picker.value]; save(); buildUI(); render(); } }
 
-        picker.onchange = () => { buildUI(); render(); };
-        buildUI(); render();
+        picker.onchange = () => { buildUI(); render(); buildQRSessionOptions(); buildReportSessionOptions(); renderSessionAdmin(); };
+        document.getElementById('sessionDate').onchange = () => renderSessionAdmin();
+        buildUI(); render(); renderSessionAdmin(); buildQRSessionOptions(); buildReportSessionOptions();
     </script>
 </body>
 </html>

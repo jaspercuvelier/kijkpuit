@@ -1,9 +1,10 @@
-importScripts('/version.js');
+// Load version from same directory to keep GitHub Pages repo paths working
+importScripts('./version.js');
 const NAME = `paddentrek-${APP_VERSION}`;
 const URLS = [
-  '/',
-  '/index.html',
-  '/version.js',
+  './',
+  './index.html',
+  './version.js',
   'https://cdn.tailwindcss.com',
   'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js',
   'https://unpkg.com/html5-qrcode'
