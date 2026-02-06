@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Paddentrek Teller Pro v10</title>
+    <title>Paddentrek Teller Pro v11</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script src="https://unpkg.com/html5-qrcode"></script>
@@ -28,15 +28,15 @@
     <!-- Header -->
     <header class="bg-gray-800 p-4 shadow-lg sticky top-0 z-50">
         <div class="flex justify-between items-center mb-1">
-            <h1 class="text-xl font-bold flex items-center gap-2 text-white text-shadow-sm">
+            <h1 class="text-xl font-bold flex items-center gap-2 text-white">
                 🐸 <span class="text-emerald-400">Padden</span>Teller
             </h1>
             <div id="pwa-status" class="flex flex-col items-end gap-1">
                 <div class="flex items-center gap-2 text-[10px] text-gray-400 bg-gray-900/60 px-2 py-1 rounded-full border border-gray-700">
-                    <span id="status-icon" class="status-dot bg-gray-600 shadow-[0_0_5px_rgba(0,0,0,0.5)]"></span>
+                    <span id="status-icon" class="status-dot bg-gray-600"></span>
                     <span id="status-text">Laden...</span>
                 </div>
-                <div class="text-[9px] font-bold text-gray-500 uppercase tracking-tighter mr-2">Versie <span id="app-version-display">v10</span></div>
+                <div class="text-[9px] font-bold text-gray-500 uppercase tracking-tighter mr-2">Versie <span id="app-version-display">v11</span></div>
             </div>
         </div>
         <div class="flex justify-between items-center mt-2">
@@ -44,7 +44,7 @@
         </div>
         
         <div id="undo-container" class="mt-2 hidden">
-            <button onclick="undo()" class="w-full bg-orange-600/20 border border-orange-500 text-orange-400 text-[10px] py-2 rounded uppercase tracking-widest font-bold flex items-center justify-center gap-2 shadow-lg animate-pulse">
+            <button onclick="undo()" class="w-full bg-orange-600/20 border border-orange-500 text-orange-400 text-[10px] py-2 rounded uppercase tracking-widest font-bold flex items-center justify-center gap-2 shadow-lg">
                 ↩️ Herstel laatste tik
             </button>
         </div>
@@ -66,42 +66,42 @@
             <div id="render-target" class="space-y-6"></div>
             <div id="custom-species-render" class="space-y-6"></div>
             
-            <button onclick="resetCurrentDate()" class="w-full py-8 text-gray-600 text-[10px] uppercase tracking-widest font-bold border-2 border-dashed border-gray-800 rounded-xl mt-10 hover:text-red-500 hover:border-red-500/30 transition-colors">
-                Alles wissen voor deze datum
+            <button onclick="resetCurrentDate()" class="w-full py-8 text-gray-600 text-[10px] uppercase tracking-widest font-bold border-2 border-dashed border-gray-800 rounded-xl mt-10">
+                Alles wissen voor vandaag
             </button>
         </section>
 
         <!-- TAB 2: EXTRA -->
         <section id="view-varia" class="hidden space-y-6">
             <div class="bg-gray-800 p-6 rounded-xl border border-emerald-500/30">
-                <h3 class="font-bold mb-4 text-emerald-400">Extra diersoort toevoegen</h3>
+                <h3 class="font-bold mb-4 text-emerald-400">Nieuwe soort toevoegen</h3>
                 <div class="flex gap-2">
-                    <input type="text" id="new-species-name" placeholder="Bijv: Boomkikker..." class="flex-grow bg-gray-700 border-none rounded px-3 py-2 text-sm text-white focus:ring-1 focus:ring-emerald-500 shadow-inner">
-                    <button onclick="addCustomSpecies()" class="bg-emerald-600 px-4 py-2 rounded font-bold text-sm shadow-lg active:scale-95 transition-transform">Voeg toe</button>
+                    <input type="text" id="new-species-name" placeholder="Bijv: Groene Kikker..." class="flex-grow bg-gray-700 border-none rounded px-3 py-2 text-sm text-white">
+                    <button onclick="addCustomSpecies()" class="bg-emerald-600 px-4 py-2 rounded font-bold text-sm">OK</button>
                 </div>
             </div>
             <div id="custom-species-list" class="space-y-2"></div>
         </section>
 
         <!-- TAB 3: LOG & WEER -->
-        <section id="view-log" class="hidden space-y-6">
-            <div class="bg-gray-800 p-4 rounded-xl border border-yellow-500/30 shadow-md">
+        <section id="view-log" class="hidden space-y-6 text-center">
+            <div class="bg-gray-800 p-4 rounded-xl border border-yellow-500/30 text-left">
                 <h3 class="font-bold mb-3 text-yellow-400 flex items-center justify-between">
-                    🌤️ Weerbericht (Open-Meteo)
-                    <button onclick="fetchWeather()" class="text-[10px] bg-yellow-600 text-white px-3 py-1 rounded active:bg-yellow-700 shadow-md uppercase font-bold">Update via GPS</button>
+                    🌤️ Weerbericht
+                    <button onclick="fetchWeather()" class="text-[10px] bg-yellow-600 text-white px-3 py-1 rounded">GPS Update</button>
                 </h3>
-                <div id="weather-display" class="text-sm text-gray-300 italic mb-2 border-l-2 border-yellow-500/50 pl-2">Laden...</div>
+                <div id="weather-display" class="text-sm text-gray-300 italic">Laden...</div>
             </div>
 
-            <div class="bg-gray-800 p-4 rounded-xl border border-blue-500/30 shadow-md">
-                <h3 class="font-bold mb-4 text-blue-400">📝 Notities over de trek</h3>
-                <textarea id="daily-notes" oninput="saveNotes()" placeholder="Beschrijf de avond..." class="w-full bg-gray-700 border-none rounded p-3 text-sm h-24 focus:ring-1 focus:ring-blue-500 text-white shadow-inner"></textarea>
+            <div class="bg-gray-800 p-4 rounded-xl border border-blue-500/30 text-left">
+                <h3 class="font-bold mb-4 text-blue-400 italic">📝 Notities</h3>
+                <textarea id="daily-notes" oninput="saveNotes()" placeholder="Beschrijf de avond..." class="w-full bg-gray-700 border-none rounded p-3 text-sm h-24 text-white focus:ring-1 focus:ring-blue-500"></textarea>
             </div>
 
-            <div class="bg-gray-800 p-4 rounded-xl border border-purple-500/30 text-center shadow-md">
-                <h3 class="font-bold mb-4 text-purple-400 text-sm">📸 Foto Logboek</h3>
+            <div class="bg-gray-800 p-4 rounded-xl border border-purple-500/30">
+                <h3 class="font-bold mb-4 text-purple-400">📸 Foto's</h3>
                 <label class="block mb-4">
-                    <span class="bg-purple-600 text-white px-8 py-3 rounded-full font-bold text-sm inline-block cursor-pointer active:bg-purple-700 shadow-xl transition-all">📸 Foto nemen</span>
+                    <span class="bg-purple-600 text-white px-8 py-3 rounded-full font-bold text-sm inline-block cursor-pointer active:bg-purple-700 shadow-lg">📸 Foto nemen</span>
                     <input type="file" accept="image/*" capture="environment" onchange="handlePhoto(event)" class="hidden">
                 </label>
                 <div id="photo-gallery" class="grid grid-cols-2 gap-2 mt-2"></div>
@@ -109,61 +109,55 @@
         </section>
 
         <!-- TAB 4: RAPPORT -->
-        <section id="view-report" class="hidden space-y-4 text-center">
-            <h2 class="text-xl font-bold text-emerald-400">WhatsApp Rapport</h2>
-            <div id="report-text" class="bg-gray-800 p-4 rounded-lg font-mono text-left text-[11px] border border-emerald-500/30 whitespace-pre-wrap shadow-inner overflow-x-auto"></div>
-            <button onclick="copyReport()" class="w-full bg-emerald-600 py-4 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg active:bg-emerald-700 transition-colors uppercase tracking-widest">
-                📋 Kopieer voor Groepsapp
+        <section id="view-report" class="hidden space-y-4">
+            <h2 class="text-xl font-bold text-emerald-400 text-center">Dagoverzicht</h2>
+            <div id="report-text" class="bg-gray-800 p-4 rounded-lg font-mono text-left text-[11px] border border-emerald-500/30 whitespace-pre-wrap leading-relaxed"></div>
+            <button onclick="copyReport()" class="w-full bg-emerald-600 py-4 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg active:bg-emerald-700">
+                📋 Kopieer voor WhatsApp
             </button>
         </section>
 
         <!-- TAB 5: DELEN -->
         <section id="view-share" class="hidden space-y-6 text-center">
-            <div class="bg-gray-800 p-6 rounded-xl border border-purple-500/30 shadow-md">
-                <h3 class="font-bold mb-2">QR-code van mijn telling</h3>
-                <div id="qrcode-area" class="bg-white p-3 rounded-lg inline-block mx-auto mb-4 border-4 border-purple-500 shadow-xl"></div>
-                <button onclick="generateQR()" class="w-full bg-purple-600 py-3 rounded-lg font-bold uppercase text-xs shadow-md">Vernieuw QR</button>
+            <div class="bg-gray-800 p-6 rounded-xl border border-purple-500/30">
+                <h3 class="font-bold mb-2">QR van mijn data</h3>
+                <div id="qrcode-area" class="bg-white p-3 rounded-lg inline-block mx-auto mb-4 border-4 border-purple-500"></div>
+                <button onclick="generateQR()" class="w-full bg-purple-600 py-3 rounded-lg font-bold uppercase text-xs">Refresh QR</button>
             </div>
-            <div class="bg-gray-800 p-6 rounded-xl border border-emerald-500/30 shadow-md">
-                <h3 class="font-bold mb-2 text-emerald-300">Scan code van partner</h3>
-                <div id="reader" class="rounded-lg overflow-hidden bg-black mb-4 mx-auto w-full max-w-[300px] border border-gray-700"></div>
-                <button id="scan-btn" onclick="startScanner()" class="w-full bg-emerald-600 py-3 rounded-lg font-bold uppercase text-xs shadow-md">Activeer Camera</button>
+            <div class="bg-gray-800 p-6 rounded-xl border border-emerald-500/30">
+                <h3 class="font-bold mb-2 text-emerald-300">Sync met partner</h3>
+                <div id="reader" class="rounded-lg overflow-hidden bg-black mb-4 mx-auto w-full max-w-[300px]"></div>
+                <button id="scan-btn" onclick="startScanner()" class="w-full bg-emerald-600 py-3 rounded-lg font-bold uppercase text-xs">Start Camera</button>
             </div>
         </section>
 
         <!-- TAB 6: HELP -->
-        <section id="view-help" class="hidden space-y-6">
-            <div class="bg-gray-800 p-4 rounded-xl border-l-4 border-emerald-500">
-                <h3 class="font-bold text-emerald-400 mb-1 underline italic">Wat is Amplexus? ❤️</h3>
-                <p class="text-xs">Paarvorming waarbij het mannetje op het vrouwtje klimt. In de app telt dit als 1 paartje (vandaar de knop '❤️'), maar in de eindsom telt de app dit automatisch als 2 individuen (1M en 1V).</p>
+        <section id="view-help" class="hidden space-y-4 text-sm">
+            <h2 class="text-xl font-bold text-emerald-400 text-center italic">Hulp bij determinatie</h2>
+            <div class="bg-gray-800 p-3 rounded-lg border-l-4 border-emerald-500">
+                <h4 class="font-bold text-emerald-400 uppercase text-xs">Gewone Pad</h4>
+                <p class="text-xs">Wratten, horizontale pupil. Amplexus (❤️) is zeer frequent.</p>
             </div>
-            <div class="space-y-4">
-                 <div class="bg-gray-800 p-3 rounded border-l-4 border-blue-500">
-                    <h4 class="font-bold text-blue-400 mb-1">Alpenwatersalamander</h4>
-                    <p class="text-xs">Fel oranje buik, gladde ongevlekte keel. Blauwe gemarmerde flanken.</p>
-                </div>
-                <div class="bg-gray-800 p-3 rounded border-l-4 border-orange-500">
-                    <h4 class="font-bold text-orange-400 mb-1">Kleine Watersalamander</h4>
-                    <p class="text-xs">Oranje buik met vlekken. Keel is ook altijd gevlekt.</p>
-                </div>
-                <div class="bg-gray-800 p-3 rounded border-l-4 border-pink-500">
-                    <h4 class="font-bold text-pink-400 mb-1">Vinpootsalamander</h4>
-                    <p class="text-xs">Ongevlekte vleeskleurige keel. Mannetje heeft kleine draad aan staart.</p>
-                </div>
+            <div class="bg-gray-800 p-3 rounded-lg border-l-4 border-blue-500">
+                <h4 class="font-bold text-blue-400 uppercase text-xs">Alpenwatersalamander</h4>
+                <p class="text-xs">Oranje buik, gladde ongevlekte keel. Geen amplexus tijdens trek.</p>
+            </div>
+            <div class="bg-gray-800 p-3 rounded-lg border-l-4 border-orange-500">
+                <h4 class="font-bold text-orange-400 uppercase text-xs">Kleine Watersalamander</h4>
+                <p class="text-xs">Oranje buik met vlekken. Keel is altijd gevlekt.</p>
             </div>
         </section>
     </main>
 
-    <!-- Toast UI -->
     <div id="toast" class="fixed bottom-10 left-1/2 transform -translate-x-1/2 bg-emerald-600 text-white px-6 py-3 rounded-full shadow-2xl hidden z-[110] transition-all opacity-0 font-bold border border-emerald-400/30">
         Actie gelukt!
     </div>
 
     <script>
-        const APP_VERSION = 'v10';
+        const APP_VERSION = 'v11';
         document.getElementById('app-version-display').innerText = APP_VERSION;
 
-        // --- SERVICE WORKER VOOR OFFLINE GEBRUIK ---
+        // --- SERVICE WORKER ---
         if ('serviceWorker' in navigator) {
             const swCode = `
                 const NAME = 'paddentrek-${APP_VERSION}';
@@ -184,7 +178,7 @@
             });
         }
 
-        // --- VISUAL FX (VUURWERK) ---
+        // --- FX ---
         const canvas = document.getElementById('canvas-fx');
         const ctx = canvas.getContext('2d');
         let particles = [];
@@ -207,7 +201,7 @@
             const colors = ['#10b981', '#60a5fa', '#fcd34d', '#f472b6', '#ffffff'];
             const x = e ? e.clientX : window.innerWidth / 2;
             const y = e ? e.clientY : window.innerHeight / 2;
-            for(let i=0; i<25; i++) particles.push(new Particle(x, y, colors[Math.floor(Math.random()*colors.length)]));
+            for(let i=0; i<20; i++) particles.push(new Particle(x, y, colors[Math.floor(Math.random()*colors.length)]));
         }
 
         function animate() {
@@ -218,17 +212,17 @@
         }
         animate();
 
-        // --- DATA & LOGICA ---
+        // --- DATA ---
         const SPECIES = [
-            { id: 'pad', name: 'Gewone Pad', color: 'emerald' },
-            { id: 'alpen', name: 'Alpenwatersalamander', color: 'blue' },
-            { id: 'kleine', name: 'Kleine Watersalamander', color: 'orange' },
-            { id: 'vin', name: 'Vinpootsalamander', color: 'pink' },
-            { id: 'br_kikker', name: 'Bruine Kikker', color: 'amber' },
-            { id: 'kam', name: 'Kamsalamander', color: 'yellow' }
+            { id: 'pad', name: 'Gewone Pad', color: 'emerald', hasAmplexus: true },
+            { id: 'br_kikker', name: 'Bruine Kikker', color: 'amber', hasAmplexus: true },
+            { id: 'alpen', name: 'Alpenwatersalamander', color: 'blue', hasAmplexus: false },
+            { id: 'kleine', name: 'Kleine Watersalamander', color: 'orange', hasAmplexus: false },
+            { id: 'vin', name: 'Vinpootsalamander', color: 'pink', hasAmplexus: false },
+            { id: 'kam', name: 'Kamsalamander', color: 'yellow', hasAmplexus: false }
         ];
 
-        const WMO = { 0: "Helder", 1: "Licht bewolkt", 3: "Bewolkt", 51: "Motregen", 61: "Regen", 80: "Buien", 95: "Onweer" };
+        const WMO = { 0: "Helder", 1: "Licht bewolkt", 3: "Bewolkt", 61: "Regen", 80: "Buien" };
 
         let storage = JSON.parse(localStorage.getItem(`paddentrek_${APP_VERSION}`)) || {};
         let lastAction = null;
@@ -240,23 +234,23 @@
             renderCustom();
             renderPhotos();
             loadNotes();
-            updateWeather();
         }
 
         function renderCard(s, custom = false) {
             return `
-                <div class="bg-gray-800 p-4 rounded-xl shadow-lg border-l-4 border-${s.color}-500 mb-6 transition-transform">
+                <div class="bg-gray-800 p-4 rounded-xl shadow-lg border-l-4 border-${s.color}-500 mb-6 transition-all">
                     <h2 class="text-sm font-bold mb-3 flex justify-between items-center text-white">
-                        ${s.name} ${custom ? '<span class="text-[8px] opacity-40 uppercase">Extra</span>' : ''}
-                        <span class="text-[9px] bg-black/40 px-2 py-1 rounded text-gray-400">TOT: <span id="tot-${s.id}" class="text-white font-bold">0</span></span>
+                        ${s.name} ${custom ? '<span class="text-[8px] opacity-40 italic">EXTRA</span>' : ''}
+                        <span class="text-[9px] bg-black/40 px-2 py-1 rounded">TOT: <span id="tot-${s.id}" class="text-white font-bold">0</span></span>
                     </h2>
                     <div class="space-y-3">
+                        ${s.hasAmplexus ? `
                         <div class="bg-emerald-950/20 p-2 rounded-lg border border-emerald-500/10">
                             ${btn(s.id, 'p_l', 'emerald', 'PAARTJE ❤️')}
-                        </div>
+                        </div>` : ''}
                         <div class="grid grid-cols-2 gap-4">
                             <div class="space-y-1">
-                                <p class="text-[8px] text-emerald-500 font-bold uppercase tracking-widest italic">Levend</p>
+                                <p class="text-[8px] text-emerald-400 font-bold uppercase tracking-widest italic">Levend</p>
                                 ${['m_l','v_l','o_l'].map(k => btn(s.id, k, s.color, k[0].toUpperCase())).join('')}
                             </div>
                             <div class="space-y-1">
@@ -272,13 +266,13 @@
         function btn(sid, type, color, label, dood = false) {
             const key = `${sid}_${type}`;
             let cls = dood ? 'bg-red-950/40 border-red-900/40 text-red-300' : `bg-${color}-700 border-white/5 text-white shadow-sm`;
-            if(color==='emerald' && type==='p_l') cls = 'bg-emerald-600 border-emerald-400/20 shadow-emerald-900/40';
+            if(color==='emerald' && type==='p_l') cls = 'bg-emerald-600 border-emerald-400/20';
             if(color==='amber') cls = dood ? 'bg-red-950/40' : 'bg-amber-700';
             if(color==='yellow') cls = dood ? 'bg-red-950/40' : 'bg-yellow-700';
 
             return `
                 <div class="flex items-center gap-1">
-                    <button onclick="mod('${key}', 1, event)" class="counter-btn flex-grow ${cls} h-10 rounded-lg font-bold text-xs border active:scale-95 transition-all">
+                    <button onclick="mod('${key}', 1, event)" class="counter-btn flex-grow ${cls} h-10 rounded-lg font-bold text-xs border active:scale-95">
                         ${label}: <span id="${key}">0</span>
                     </button>
                     <button onclick="mod('${key}', -1, event)" class="minus-btn bg-gray-700/40 w-8 h-10 rounded-lg text-gray-500 border border-gray-600/20 active:bg-gray-600">-</button>
@@ -295,7 +289,7 @@
             if(storage[d].counts[key] < 0) storage[d].counts[key] = 0;
             save(); render();
             if(val > 0) {
-                if(navigator.vibrate) navigator.vibrate(25);
+                if(navigator.vibrate) navigator.vibrate(20);
                 if(key.includes('_l')) celebrate(e);
             }
         }
@@ -305,7 +299,7 @@
             storage[lastAction.d].counts[lastAction.key] -= lastAction.val;
             if(storage[lastAction.d].counts[lastAction.key] < 0) storage[lastAction.d].counts[lastAction.key] = 0;
             lastAction = null; document.getElementById('undo-container').classList.add('hidden');
-            save(); render(); showToast("Correctie uitgevoerd");
+            save(); render(); showToast("Correctie doorgevoerd");
         }
 
         function save() { localStorage.setItem(`paddentrek_${APP_VERSION}`, JSON.stringify(storage)); }
@@ -328,21 +322,21 @@
 
         async function fetchWeather() {
             if(!navigator.geolocation) return;
-            showToast("GPS zoekt locatie...");
+            showToast("GPS zoekt...");
             navigator.geolocation.getCurrentPosition(async p => {
                 try {
                     const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${p.coords.latitude}&longitude=${p.coords.longitude}&current_weather=true`);
                     const j = await r.json();
                     if(!storage[picker.value]) storage[picker.value] = {};
                     storage[picker.value].weather = { t: j.current_weather.temperature, c: j.current_weather.weathercode };
-                    save(); render(); showToast("Weer bijgewerkt");
+                    save(); render(); showToast("Weer OK");
                 } catch(e) { alert("API Fout"); }
             });
         }
 
         function updateWeather() {
             const w = storage[picker.value]?.weather;
-            document.getElementById('weather-display').innerText = w ? `${w.t}°C - ${WMO[w.c] || "OK"}` : "Geen weerdata voor deze datum.";
+            document.getElementById('weather-display').innerText = w ? `${w.t}°C - ${WMO[w.c] || "OK"}` : "Geen weerdata bekend.";
         }
 
         function addCustomSpecies() {
@@ -350,7 +344,7 @@
             if(!n) return;
             if(!storage[picker.value]) storage[picker.value] = { custom: [] };
             if(!storage[picker.value].custom) storage[picker.value].custom = [];
-            storage[picker.value].custom.push({ id: 'c_'+Date.now(), name: n, color: 'gray' });
+            storage[picker.value].custom.push({ id: 'c_'+Date.now(), name: n, color: 'gray', hasAmplexus: true });
             document.getElementById('new-species-name').value = '';
             save(); buildUI(); render();
         }
@@ -360,11 +354,11 @@
             document.getElementById('custom-species-render').innerHTML = (d.custom || []).map(s => renderCard(s, true)).join('');
             document.getElementById('custom-species-list').innerHTML = (d.custom || []).map(s => `
                 <div class="flex justify-between items-center bg-gray-800 p-2 rounded text-[10px] mb-1 border border-gray-700 shadow-sm uppercase font-bold">
-                    <span>${s.name}</span> <button onclick="removeC('${s.id}')" class="text-red-400 px-3 py-1 bg-red-900/20 rounded">Wis</button>
+                    <span>${s.name}</span> <button onclick="removeC('${s.id}')" class="text-red-400 px-3 py-1 bg-red-900/20 rounded">Verwijder</button>
                 </div>
             `).join('');
         }
-        function removeC(id) { if(confirm("Soort verwijderen?")) { storage[picker.value].custom = storage[picker.value].custom.filter(c => c.id!==id); save(); buildUI(); render(); } }
+        function removeC(id) { if(confirm("Soort wissen?")) { storage[picker.value].custom = storage[picker.value].custom.filter(c => c.id!==id); save(); buildUI(); render(); } }
 
         function handlePhoto(e) {
             const f = e.target.files[0]; if(!f) return;
@@ -383,8 +377,8 @@
         function renderPhotos() {
             const p = storage[picker.value]?.photos || [];
             document.getElementById('photo-gallery').innerHTML = p.map((s,i) => `
-                <div class="relative shadow-lg"><img src="${s}" class="rounded w-full aspect-square object-cover">
-                <button onclick="remP(${i})" class="absolute top-1 right-1 bg-red-600 rounded-full w-6 h-6 text-[9px] font-bold shadow-md">X</button></div>
+                <div class="relative"><img src="${s}" class="rounded w-full aspect-square object-cover shadow-lg">
+                <button onclick="remP(${i})" class="absolute top-1 right-1 bg-red-600 rounded-full w-5 h-5 text-[9px] font-bold">X</button></div>
             `).join('');
         }
         function remP(i) { storage[picker.value].photos.splice(i,1); save(); renderPhotos(); }
@@ -393,25 +387,25 @@
 
         function updateReport() {
             const d = picker.value; const data = storage[d] || {}; const c = data.counts || {};
-            let txt = `🐸 *PADDENTREK - ${d}*\n\n`;
+            let txt = `🐸 *OVERZET-UPDATE - ${d}*\n\n`;
             if(data.weather) txt += `🌤️ *Weer:* ${data.weather.t}°C, ${WMO[data.weather.c] || "OK"}\n\n`;
             const all = [...SPECIES, ...(data.custom || [])]; let h = false;
             all.forEach(s => {
                 const pl = c[`${s.id}_p_l`]||0, ml = c[`${s.id}_m_l`]||0, vl = c[`${s.id}_v_l`]||0, ol = c[`${s.id}_o_l`]||0;
                 const md = c[`${s.id}_m_d`]||0, vd = c[`${s.id}_v_d`]||0, od = c[`${s.id}_o_d`]||0;
                 if(pl+ml+vl+ol+md+vd+od > 0) { h = true;
-                    txt += `*${s.name}:*\n${pl>0 ? '  ❤️ '+pl+' Paartjes\n':''}  - L: ${ml}m, ${vl}v, ${ol}o\n  - D: ${md}m, ${vd}v, ${od}o\n`;
+                    txt += `*${s.name}:*\n${pl>0 ? '  ❤️ '+pl+' Koppels\n':''}  - Levend: ${ml}m, ${vl}v, ${ol}o\n  - Dood: ${md}m, ${vd}v, ${od}o\n`;
                 }
             });
             if(data.notes) txt += `\n📝 *Nota:* ${data.notes}\n`;
-            txt += `\n#Paddentrek #Amfibieën`;
+            txt += `\n#Paddentrek #Telling`;
             document.getElementById('report-text').innerText = h || data.notes ? txt : "Nog geen data ingevoerd.";
         }
 
         function copyReport() {
             const t = document.getElementById('report-text').innerText;
             const el = document.createElement('textarea'); el.value = t; document.body.appendChild(el);
-            el.select(); document.execCommand('copy'); document.body.removeChild(el); showToast("Rapport gekopieerd!");
+            el.select(); document.execCommand('copy'); document.body.removeChild(el); showToast("Gekopieerd!");
         }
 
         function showToast(m) {
@@ -447,7 +441,7 @@
             if(t==='log') { renderPhotos(); loadNotes(); }
         }
 
-        function resetCurrentDate() { if(confirm("Wis alle data voor vandaag? Dit kan niet ongedaan worden gemaakt.")) { delete storage[picker.value]; save(); buildUI(); render(); } }
+        function resetCurrentDate() { if(confirm("Alles wissen voor vandaag?")) { delete storage[picker.value]; save(); buildUI(); render(); } }
 
         picker.onchange = () => { buildUI(); render(); };
         buildUI(); render();
