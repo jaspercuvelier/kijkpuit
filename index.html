@@ -421,6 +421,20 @@
         }
         animate();
 
+        // --- HAPTICS ---
+        let lastVibeTs = 0;
+        function vibe(ms = 15, force = false) {
+            if(!navigator.vibrate) return;
+            const now = Date.now();
+            if(!force && now - lastVibeTs < 60) return;
+            navigator.vibrate(ms);
+            lastVibeTs = now;
+        }
+        document.addEventListener('pointerdown', ev => {
+            const btn = ev.target.closest('button');
+            if(btn && !btn.disabled) vibe();
+        }, { passive: true });
+
         // --- DATA ---
         const SPECIES = [
             { id: 'pad', name: 'Gewone Pad', color: 'emerald', hasAmplexus: true },
@@ -644,7 +658,7 @@
             }
             save(); render();
             if(val > 0) {
-                if(navigator.vibrate) navigator.vibrate(20);
+                vibe(22, true);
                 if(key.includes('_p_l')) celebrate(e, true);
                 else if(key.includes('_l')) celebrate(e);
                 else if(key.includes('_d')) celebrate(e, false, true);
@@ -1022,6 +1036,7 @@
             const target = sessionId || (getActiveSession(day)?.id || null);
             if(!target) { alert('Start eerst een sessie om foto\'s toe te voegen.'); return; }
             photoTargetSession = target;
+            vibe(25, true);
             const input = document.getElementById('photo-input');
             input.value = '';
             input.click();
