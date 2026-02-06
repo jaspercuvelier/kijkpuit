@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Paddentrek Teller Pro</title>
+    <title>Paddentelominator Ultimate Pro Xtreme 2026</title>
     <link rel="manifest" href="manifest.webmanifest">
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext y='50' font-size='48'%3E🐸%3C/text%3E%3C/svg%3E">
     <script src="https://cdn.tailwindcss.com"></script>
@@ -11,7 +11,7 @@
     <script src="https://unpkg.com/html5-qrcode"></script>
     <script src="./version.js"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Orbitron:wght@600;700&display=swap');
         body { font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; overflow-x: hidden; }
         .active-tab { border-bottom: 3px solid #10b981; color: #10b981; }
         .counter-btn { transition: transform 0.1s active; position: relative; overflow: hidden; }
@@ -26,6 +26,13 @@
         /* Emojis en letters */
         .icon-lg { font-size: 18px; line-height: 1; display: inline-block; color: #fff; vertical-align: -3px; }
         .icon-img { width: 24px; height: 24px; display: inline-block; vertical-align: -4px; }
+        .brand-title { font-family: 'Orbitron', 'Inter', sans-serif; letter-spacing: 0.08em; text-transform: uppercase; }
+        .brand-wrap { display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap; }
+        .brand-sub { white-space: nowrap; }
+        @media (max-width: 480px) {
+            .brand-wrap { flex-direction: column; align-items: flex-start; }
+            .brand-sub { white-space: normal; margin-top: -4px; }
+        }
     </style>
 </head>
 <body class="bg-gray-900 text-gray-100 pb-24">
@@ -36,8 +43,10 @@
     <!-- Header -->
     <header class="bg-gray-800 p-4 shadow-lg sticky top-0 z-50">
         <div class="flex justify-between items-center mb-1">
-            <h1 class="text-xl font-bold flex items-center gap-2 text-white">
-                🐸 <span class="text-emerald-400">Padden</span>Teller
+            <h1 class="text-xl font-bold text-white brand-wrap">
+                <span class="text-lg">🐸</span>
+                <span class="text-emerald-400 brand-title text-lg">Paddentelominator</span>
+                <span class="text-[11px] uppercase tracking-[0.2em] text-gray-400 brand-sub">Ultra Pro Xtreme 2026</span>
             </h1>
             <div id="pwa-status" class="flex flex-col items-end gap-1">
                 <div class="flex items-center gap-2 text-[10px] text-gray-400 bg-gray-900/60 px-2 py-1 rounded-full border border-gray-700">
@@ -420,6 +429,7 @@
             { id: 'vin', name: 'Vinpootsalamander', color: 'pink', hasAmplexus: false },
             { id: 'kam', name: 'Kamsalamander', color: 'yellow', hasAmplexus: false }
         ];
+
 
         const WMO = { 0: "Helder", 1: "Licht bewolkt", 2:"Half bewolkt", 3: "Bewolkt", 61: "Regen", 80: "Buien" };
 
