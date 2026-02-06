@@ -3,11 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Paddentrek Teller Pro v11</title>
+    <title>Paddentrek Teller Pro</title>
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext y='50' font-size='48'%3E🐸%3C/text%3E%3C/svg%3E">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script src="https://unpkg.com/html5-qrcode"></script>
+    <script src="./version.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
         body { font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; overflow-x: hidden; }
@@ -20,6 +21,7 @@
         #canvas-fx { position: fixed; top: 0; left: 0; pointer-events: none; z-index: 100; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        #update-btn { z-index: 120; }
     </style>
 </head>
 <body class="bg-gray-900 text-gray-100 pb-24">
@@ -105,7 +107,6 @@
                     <span class="bg-purple-600 text-white px-8 py-3 rounded-full font-bold text-sm inline-block cursor-pointer active:bg-purple-700 shadow-lg">📸 Foto nemen</span>
                     <input type="file" accept="image/*" capture="environment" onchange="handlePhoto(event)" class="hidden">
                 </label>
-                <button onclick="sharePhotos()" class="w-full mb-3 bg-purple-700/70 border border-purple-400/40 text-white text-[11px] py-2 rounded-lg font-bold uppercase tracking-widest">Deel foto's via WhatsApp</button>
                 <div id="photo-gallery" class="grid grid-cols-2 gap-2 mt-2"></div>
             </div>
         </section>
@@ -114,9 +115,17 @@
         <section id="view-report" class="hidden space-y-4">
             <h2 class="text-xl font-bold text-emerald-400 text-center">Dagoverzicht</h2>
             <div id="report-text" class="bg-gray-800 p-4 rounded-lg font-mono text-left text-[11px] border border-emerald-500/30 whitespace-pre-wrap leading-relaxed"></div>
-            <button onclick="copyReport()" class="w-full bg-emerald-600 py-4 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg active:bg-emerald-700">
-                📋 Kopieer voor WhatsApp
-            </button>
+            <div class="grid grid-cols-1 gap-3">
+                <button onclick="copyReport()" class="w-full bg-emerald-600 py-4 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg active:bg-emerald-700">
+                    📋 Kopieer rapport
+                </button>
+                <button onclick="sharePhotos(true)" class="w-full bg-purple-700 py-4 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg active:bg-purple-800 text-sm">
+                    📤 Deel rapport + foto's
+                </button>
+                <button onclick="sharePhotos(false)" class="w-full bg-purple-900/70 border border-purple-400/30 py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg active:bg-purple-900 text-xs uppercase tracking-widest">
+                    📸 Deel alleen foto's
+                </button>
+            </div>
         </section>
 
         <!-- TAB 5: DELEN -->
@@ -154,19 +163,30 @@
     <div id="toast" class="fixed bottom-10 left-1/2 transform -translate-x-1/2 bg-emerald-600 text-white px-6 py-3 rounded-full shadow-2xl hidden z-[110] transition-all opacity-0 font-bold border border-emerald-400/30">
         Actie gelukt!
     </div>
+    <button id="update-btn" class="hidden fixed right-4 bottom-24 bg-emerald-600 text-white px-4 py-2 rounded-full shadow-2xl font-bold text-xs uppercase tracking-widest border border-emerald-300/40">
+        UPDATE
+    </button>
 
     <script>
-        const APP_VERSION = 'v11';
+        document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
         document.getElementById('app-version-display').innerText = APP_VERSION;
 
         // --- SERVICE WORKER ---
         if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register(`./sw.js?v=${APP_VERSION}`).then(() => {
+            navigator.serviceWorker.register(`./sw.js?v=${APP_VERSION}`).then(reg => {
                 document.getElementById('status-icon').className = 'status-dot bg-emerald-500 shadow-[0_0_8px_#10b981]';
                 document.getElementById('status-text').innerText = 'Offline Gereed';
+
+                // Luister naar nieuwe versies
+                reg.addEventListener('updatefound', () => showUpdateBadge(APP_VERSION));
+                navigator.serviceWorker.addEventListener('controllerchange', () => showUpdateBadge(APP_VERSION));
             }).catch(() => {
                 document.getElementById('status-icon').className = 'status-dot bg-red-500';
                 document.getElementById('status-text').innerText = 'SW fout';
+            });
+
+            navigator.serviceWorker.addEventListener('message', ev => {
+                if(ev.data?.type === 'NEW_VERSION') showUpdateBadge(ev.data.version || APP_VERSION);
             });
         }
 
@@ -404,23 +424,26 @@
         function saveNotes() { const day = ensureDay(); day.notes = document.getElementById('daily-notes').value; save(); updateReport(); }
         function loadNotes() { document.getElementById('daily-notes').value = ensureDay().notes; }
 
-        async function sharePhotos() {
+        async function sharePhotos(includeReportText = false) {
             const day = ensureDay();
             const photos = day.photos || [];
-            if(!photos.length) { alert('Geen foto\'s beschikbaar voor deze dag.'); return; }
+            if(!photos.length) { alert("Geen foto's beschikbaar voor deze dag."); return; }
 
-            // Bouw FormData voor WhatsApp share intent
-            const fd = new FormData();
-            photos.forEach((dataUrl, idx) => {
+            const files = photos.map((dataUrl, idx) => {
                 const res = dataURLToBlob(dataUrl);
-                fd.append('files', res.blob, `paddentrek-${idx+1}.${res.ext}`);
+                return new File([res.blob], `paddentrek-${picker.value}-${idx+1}.${res.ext}`, { type: res.blob.type });
             });
-            const txt = `Paddentrek foto\'s ${picker.value}`;
 
-            try {
-                await navigator.share({ title: 'Paddentrek', text: txt, files: fd.getAll('files') });
-            } catch(err) {
-                if(err?.name !== 'AbortError') alert('Delen mislukt of niet ondersteund door deze browser.');
+            const text = includeReportText ? document.getElementById('report-text').innerText : `Paddentrek foto's ${picker.value}`;
+
+            if(navigator.canShare && navigator.canShare({ files })) {
+                try {
+                    await navigator.share({ title: 'Paddentrek', text, files });
+                } catch(err) {
+                    if(err?.name !== 'AbortError') alert('Delen mislukt of niet ondersteund door deze browser.');
+                }
+            } else {
+                alert(`Deze browser ondersteunt delen van bestanden niet. Kopieer het rapport of stuur foto's handmatig.`);
             }
         }
 
@@ -458,6 +481,18 @@
             const el = document.createElement('textarea'); el.value = t; document.body.appendChild(el);
             el.select(); document.execCommand('copy'); document.body.removeChild(el); showToast("Gekopieerd!");
         }
+
+        // --- UPDATE BADGE ---
+        const updateBtn = document.getElementById('update-btn');
+        function showUpdateBadge(version) {
+            updateBtn.classList.remove('hidden');
+            updateBtn.innerText = `UPDATE ${version}`;
+        }
+        updateBtn.onclick = () => {
+            updateBtn.innerText = 'Bezig...';
+            updateBtn.disabled = true;
+            navigator.serviceWorker.getRegistration().then(reg => reg?.update()).finally(() => location.reload());
+        };
 
         function showToast(m) {
             const t = document.getElementById('toast'); t.innerText = m; t.classList.remove('hidden');
