@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Paddentrek Teller Pro v11</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext y='50' font-size='48'%3E🐸%3C/text%3E%3C/svg%3E">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script src="https://unpkg.com/html5-qrcode"></script>
@@ -188,11 +189,28 @@
             draw() { ctx.globalAlpha = this.life; ctx.fillStyle = this.color; ctx.beginPath(); ctx.arc(this.x, this.y, this.size, 0, Math.PI*2); ctx.fill(); }
         }
 
-        function celebrate(e) {
-            const colors = ['#10b981', '#60a5fa', '#fcd34d', '#f472b6', '#ffffff'];
+        class HeartParticle extends Particle {
+            constructor(x, y, color) { super(x, y, color); this.size = Math.random() * 4 + 4; }
+            draw() {
+                ctx.globalAlpha = this.life;
+                ctx.fillStyle = this.color;
+                const s = this.size;
+                ctx.beginPath();
+                ctx.moveTo(this.x, this.y);
+                ctx.bezierCurveTo(this.x - s, this.y - s, this.x - 2*s, this.y + s*0.8, this.x, this.y + s*1.8);
+                ctx.bezierCurveTo(this.x + 2*s, this.y + s*0.8, this.x + s, this.y - s, this.x, this.y);
+                ctx.fill();
+            }
+        }
+
+        function celebrate(e, hearts = false) {
+            const colors = hearts ? ['#fb7185', '#f472b6', '#ef4444', '#f87171'] : ['#10b981', '#60a5fa', '#fcd34d', '#f472b6', '#ffffff'];
             const x = e ? e.clientX : window.innerWidth / 2;
             const y = e ? e.clientY : window.innerHeight / 2;
-            for(let i=0; i<20; i++) particles.push(new Particle(x, y, colors[Math.floor(Math.random()*colors.length)]));
+            for(let i=0; i<20; i++) {
+                const color = colors[Math.floor(Math.random()*colors.length)];
+                particles.push(hearts ? new HeartParticle(x, y, color) : new Particle(x, y, color));
+            }
         }
 
         function animate() {
@@ -239,6 +257,7 @@
         }
 
         function renderCard(s, custom = false) {
+            const liveKeys = s.hasAmplexus ? ['p_l','m_l','v_l','o_l'] : ['m_l','v_l','o_l'];
             return `
                 <div class="bg-gray-800 p-4 rounded-xl shadow-lg border-l-4 border-${s.color}-500 mb-6 transition-all">
                     <h2 class="text-sm font-bold mb-3 flex justify-between items-center text-white">
@@ -246,17 +265,14 @@
                         <span class="text-[9px] bg-black/40 px-2 py-1 rounded">TOT: <span id="tot-${s.id}" class="text-white font-bold">0</span></span>
                     </h2>
                     <div class="space-y-3">
-                        ${s.hasAmplexus ? `
-                        <div class="bg-emerald-950/20 p-2 rounded-lg border border-emerald-500/10">
-                            ${btn(s.id, 'p_l', 'emerald', 'PAARTJE ❤️')}
-                        </div>` : ''}
                         <div class="grid grid-cols-2 gap-4">
                             <div class="space-y-1">
                                 <p class="text-[8px] text-emerald-400 font-bold uppercase tracking-widest italic">Levend</p>
-                                ${['m_l','v_l','o_l'].map(k => btn(s.id, k, s.color, k[0].toUpperCase())).join('')}
+                                ${liveKeys.map(k => btn(s.id, k, s.color, k==='p_l' ? '❤️' : k[0].toUpperCase())).join('')}
                             </div>
                             <div class="space-y-1">
                                 <p class="text-[8px] text-red-500 font-bold uppercase tracking-widest italic">Dood</p>
+                                ${s.hasAmplexus ? btn(s.id, 'p_d', 'red', 'PAARTJE ☠️', true) : ''}
                                 ${['m_d','v_d','o_d'].map(k => btn(s.id, k, 'red', k[0].toUpperCase(), true)).join('')}
                             </div>
                         </div>
@@ -292,7 +308,8 @@
             save(); render();
             if(val > 0) {
                 if(navigator.vibrate) navigator.vibrate(20);
-                if(key.includes('_l')) celebrate(e);
+                if(key.includes('_p_l')) celebrate(e, true);
+                else if(key.includes('_l')) celebrate(e);
             }
         }
 
@@ -311,10 +328,10 @@
             const d = ensureDay();
             const up = s => {
                 let t = 0;
-                ['p_l','m_l','v_l','o_l','m_d','v_d','o_d'].forEach(k => {
+                ['p_l','p_d','m_l','v_l','o_l','m_d','v_d','o_d'].forEach(k => {
                     const v = d.counts[`${s.id}_${k}`] || 0;
                     if(document.getElementById(`${s.id}_${k}`)) document.getElementById(`${s.id}_${k}`).innerText = v;
-                    t += (k==='p_l' ? v*2 : v);
+                    t += (k==='p_l' || k==='p_d') ? v*2 : v;
                 });
                 if(document.getElementById(`tot-${s.id}`)) document.getElementById(`tot-${s.id}`).innerText = t;
             };
@@ -423,12 +440,14 @@
             if(data.weather) txt += `🌤️ *Weer:* ${data.weather.t}°C, ${WMO[data.weather.c] || "OK"}\n\n`;
             const all = [...SPECIES, ...(data.custom || [])]; let h = false;
             all.forEach(s => {
-                const pl = c[`${s.id}_p_l`]||0, ml = c[`${s.id}_m_l`]||0, vl = c[`${s.id}_v_l`]||0, ol = c[`${s.id}_o_l`]||0;
+                const pl = c[`${s.id}_p_l`]||0, pd = c[`${s.id}_p_d`]||0;
+                const ml = c[`${s.id}_m_l`]||0, vl = c[`${s.id}_v_l`]||0, ol = c[`${s.id}_o_l`]||0;
                 const md = c[`${s.id}_m_d`]||0, vd = c[`${s.id}_v_d`]||0, od = c[`${s.id}_o_d`]||0;
-                if(pl+ml+vl+ol+md+vd+od > 0) { h = true;
-                    txt += `*${s.name}:*\n${pl>0 ? '  ❤️ '+pl+' Koppels\n':''}  - Levend: ${ml}m, ${vl}v, ${ol}o\n  - Dood: ${md}m, ${vd}v, ${od}o\n`;
+                if(pl+pd+ml+vl+ol+md+vd+od > 0) { h = true;
+                    txt += `*${s.name}:*\n${pl>0 ? '  ❤️ '+pl+' Koppels (levend)\n':''}${pd>0 ? '  ☠️ '+pd+' Koppels (dood)\n':''}  - Levend: ${ml}m, ${vl}v, ${ol}o\n  - Dood: ${md}m, ${vd}v, ${od}o\n`;
                 }
             });
+            txt += `\nℹ️ Koppels (❤️/☠️) worden niet dubbel geteld bij de losse man/vrouw-aantallen.\n`;
             if(data.notes) txt += `\n📝 *Nota:* ${data.notes}\n`;
             txt += `\n#Paddentrek #Telling`;
             document.getElementById('report-text').innerText = h || data.notes ? txt : "Nog geen data ingevoerd.";
@@ -454,7 +473,7 @@
 
         function describeSync(incoming) {
             const label = {
-                p_l: '❤️ koppels', m_l: 'm levend', v_l: 'v levend', o_l: 'o levend',
+                p_l: '❤️ koppels', p_d: '☠️ koppels', m_l: 'm levend', v_l: 'v levend', o_l: 'o levend',
                 m_d: 'm dood',   v_d: 'v dood',   o_d: 'o dood'
             };
             const nameFor = id => {
