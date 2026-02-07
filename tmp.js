@@ -82,13 +82,14 @@
             }
         }
 
-        function celebrate(e, hearts = false, sad = false) {
+        function celebrate(e, hearts = false, sad = false, boost = 0) {
             const colors = hearts ? ['#fb7185', '#f472b6', '#ef4444', '#f87171']
                                   : sad ? ['#60a5fa', '#94a3b8', '#a5b4fc', '#22d3ee']
                                         : ['#10b981', '#60a5fa', '#fcd34d', '#f472b6', '#ffffff'];
             const x = e ? e.clientX : window.innerWidth / 2;
             const y = e ? e.clientY : window.innerHeight / 2;
-            const count = hearts ? 35 : sad ? 18 : 30;
+            const base = hearts ? 50 : sad ? 25 : 60;
+            const count = base + boost;
             const sadEmojis = ['☠️','💀','🥀','😢','🪦','🙁'];
             for(let i=0; i<count; i++) {
                 const color = colors[Math.floor(Math.random()*colors.length)];
@@ -96,6 +97,13 @@
                 else if(sad) particles.push(new EmojiParticle(x, y, sadEmojis[Math.floor(Math.random()*sadEmojis.length)]));
                 else particles.push(new Particle(x, y, color));
             }
+            // extra confetti-golf
+            setTimeout(()=> {
+                for(let i=0;i<count/1.5;i++){
+                    const color = colors[Math.floor(Math.random()*colors.length)];
+                    particles.push(new Particle(x + (Math.random()-0.5)*200, y + (Math.random()-0.5)*200, color));
+                }
+            }, 350);
         }
 
         function animate() {
@@ -131,16 +139,32 @@
         ];
 
         let detEditing = false;
-async function fetchSpeciesThumb(name, w = 420) {
-    if(!name) return null;
-    try {
-        const url = `https://commons.wikimedia.org/w/api.php?action=query&format=json&origin=*&prop=pageimages|imageinfo|info&generator=search&gsrnamespace=6&gsrlimit=1&gsrsearch=intitle:${encodeURIComponent(name)}&pithumbsize=${w}&iiprop=url`;
-        const res = await fetch(url);
-        const j = await res.json();
-        const page = j.query?.pages ? Object.values(j.query.pages)[0] : null;
-        return page?.thumbnail?.source || page?.imageinfo?.[0]?.thumburl || null;
-    } catch(e) { return null; }
-}
+        function localSpeciesImg(name) {
+            if(!name) return null;
+            const file = name.toLowerCase().replace(/[^a-z0-9]+/g,'_') + '.jpg';
+            return `icons/det/${file}`;
+        }
+
+        function rarityFor(speciesId) {
+            const map = {
+                vuurs: ['Zeldzaam','bg-yellow-900 text-yellow-200'],
+                kam: ['Zeldzaam','bg-yellow-900 text-yellow-200'],
+                vroed: ['Zeer zeldzaam','bg-red-900 text-red-200'],
+                knoflook: ['Zeer zeldzaam','bg-red-900 text-red-200'],
+                boomkikker: ['Zeer zeldzaam','bg-red-900 text-red-200'],
+                rugstreep: ['Zeldzaam','bg-yellow-900 text-yellow-200'],
+                heikikker: ['Zeldzaam','bg-yellow-900 text-yellow-200'],
+                br_kikker: ['Algemeen','bg-emerald-900 text-emerald-200'],
+                pad: ['Algemeen','bg-emerald-900 text-emerald-200'],
+                alpen: ['Algemeen','bg-emerald-900 text-emerald-200'],
+                vin: ['Algemeen','bg-emerald-900 text-emerald-200'],
+                kleine: ['Algemeen','bg-emerald-900 text-emerald-200'],
+                groene: ['Algemeen','bg-emerald-900 text-emerald-200'],
+            };
+            return map[speciesId] || ['Onbekend','bg-gray-800 text-gray-200'];
+        }
+
+        function cleanSpeciesName(n) { return n ? n.split('(')[0].trim() : ''; }
 
 // Beslisboom (geactualiseerd op basis van veldkaart)
 
@@ -567,10 +591,7 @@ async function fetchSpeciesThumb(name, w = 420) {
             if(!sel.value && sessions.length) sel.value = sessions[sessions.length-1].id;
             const sess = getDetSession();
             if(sess && !sess.determinations) sess.determinations = [];
-            if(!sess && sessions.length) activeDeterminationId = null;
-            if(sess && sess.determinations && !sess.determinations.find(d => d.id === activeDeterminationId)) {
-                activeDeterminationId = sess.determinations[sess.determinations.length-1]?.id || null;
-            }
+            if(!sess) activeDeterminationId = null;
             if(label) label.innerText = sess ? sel.selectedOptions[0].textContent : 'Geen sessie';
             const hasActive = !!sessions.find(s => !s.end);
             if(btnStart) btnStart.classList.toggle('hidden', hasActive);
@@ -600,9 +621,8 @@ async function fetchSpeciesThumb(name, w = 420) {
 
         function currentDetermination() {
             const sess = getDetSession();
-            if(!sess) return null;
-            const found = sess.determinations.find(d => d.id === activeDeterminationId);
-            return found || sess.determinations[sess.determinations.length-1] || null;
+            if(!sess || !activeDeterminationId) return null;
+            return sess.determinations.find(d => d.id === activeDeterminationId) || null;
         }
 
         function triggerDetPhoto() {
@@ -649,7 +669,18 @@ async function fetchSpeciesThumb(name, w = 420) {
             renderDeterminationList();
         }
 
-        function answerDetermination(ans) {
+        
+        function goBackDetermination() {
+            const det = currentDetermination();
+            if(!det || !det.answers.length) return;
+            det.answers.pop();
+            const last = det.answers[det.answers.length-1];
+            det.node = last ? last.node : 'root';
+            det.result = null; det.resultName=''; det.completedAt=null; det.wikiThumb=null;
+            save(); renderDeterminationUI(); renderDeterminationList();
+        }
+
+function answerDetermination(ans) {
             const det = currentDetermination();
             if(!det) { alert('Start eerst een determinatie.'); return; }
             const nodeId = det.node || 'root';
@@ -680,18 +711,14 @@ async function fetchSpeciesThumb(name, w = 420) {
                 }
                 if(!det.completedAt) {
                     det.completedAt = Date.now();
-                    celebrate(null, true, false);
+                    celebrate(null, true, false, 80);
                     showToast(`Determinatie: ${det.resultName}`);
                     if(!det.wikiThumb) {
-                        fetchSpeciesThumb(det.resultName).then(url => {
-                            if(url) {
-                                det.wikiThumb = url;
-                                save();
-                                renderDeterminationUI();
-                                renderDeterminationList();
-                            }
-                        });
+                        const name = cleanSpeciesName(det.resultName || det.result);
+                        det.wikiThumb = localSpeciesImg(name);
+                        save();
                     }
+                    showDetModal(det);
                 }
             }
             save();
@@ -719,7 +746,10 @@ async function fetchSpeciesThumb(name, w = 420) {
             const progress = document.getElementById('det-progress');
             const btnY = document.getElementById('det-btn-yes');
             const btnN = document.getElementById('det-btn-no');
+            const btnBack = document.getElementById('det-btn-back');
+            const btnReset = document.getElementById('det-btn-reset');
             const strip = document.getElementById('det-photo-strip');
+            const qCard = document.getElementById('det-question-card');
             renderDetSessionOptions();
             if(strip) {
                 strip.innerHTML = det ? det.photos.map((p,i)=>`
@@ -735,9 +765,13 @@ async function fetchSpeciesThumb(name, w = 420) {
                 if(progress) progress.innerText = '';
                 if(applyBox) applyBox.classList.add('hidden');
                 if(warnBox) warnBox.classList.add('hidden');
+                if(btnBack) btnBack.disabled = true;
+                if(btnReset) btnReset.classList.add('hidden');
+                if(qCard) qCard.classList.add('hidden');
                 [btnY, btnN].forEach(b => b && (b.disabled = true));
                 return;
             }
+            if(qCard) qCard.classList.remove('hidden');
             const nodeId = det.node || 'root';
             const node = nodeId === 'root' ? DET_TREE : DET_NODES[nodeId];
             const atResult = node && node.result;
@@ -758,6 +792,8 @@ async function fetchSpeciesThumb(name, w = 420) {
                 }
             }
             if(progress) progress.innerText = `Vragen beantwoord: ${det.answers.length}`;
+            if(btnBack) btnBack.disabled = det.answers.length === 0;
+            if(btnReset) btnReset.classList.toggle('hidden', det.answers.length === 0);
             if(applyBox) applyBox.classList.toggle('hidden', !det.result);
             if(warnBox) warnBox.classList.toggle('hidden', !(detEditing && det.result));
             [btnY, btnN].forEach(b => b && (b.disabled = !!det.result));
@@ -1501,6 +1537,35 @@ function openDetermination(id) {
             const t = document.getElementById('toast'); t.innerText = m; t.classList.remove('hidden');
             setTimeout(() => t.style.opacity = '1', 10);
             setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.classList.add('hidden'), 500); }, 2000);
+        }
+
+        function showDetModal(det) {
+            const modal = document.getElementById('det-modal');
+            const title = document.getElementById('det-modal-title');
+            const rarity = document.getElementById('det-modal-rarity');
+            const img = document.getElementById('det-modal-img');
+            const addBtn = document.getElementById('det-modal-add');
+            if(!modal || !det) return;
+            title.innerText = det.resultName || 'Determinatie';
+            const [label, cls] = rarityFor(det.result || det.resultName || '');
+            rarity.className = `rarity-pill ${cls}`;
+            rarity.innerText = label;
+            if(det.wikiThumb) {
+                img.src = det.wikiThumb;
+                document.getElementById('det-modal-img-wrap').classList.remove('hidden');
+            } else {
+                img.src = '';
+                document.getElementById('det-modal-img-wrap').classList.add('hidden');
+            }
+            const sess = getDetSession();
+            addBtn.classList.toggle('hidden', !!sess?.detTemp); // verbergen bij losse determinatie
+            modal.classList.remove('hidden');
+        }
+
+        function closeDetModal(ev) {
+            if(ev) ev.stopPropagation();
+            const modal = document.getElementById('det-modal');
+            if(modal) modal.classList.add('hidden');
         }
 
         function buildQRSessionOptions() {
