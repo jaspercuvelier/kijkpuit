@@ -369,17 +369,17 @@
     </button>
     <!-- Determinatie modal -->
     <div id="det-modal" class="det-modal-backdrop hidden" onclick="closeDetModal(event)">
-        <div class="det-modal-card relative" onclick="event.stopPropagation();">
+        <div class="det-modal-card relative space-y-3" onclick="event.stopPropagation();">
             <button class="absolute right-3 top-3 text-gray-400 text-lg" onclick="closeDetModal(event)">✕</button>
-            <div id="det-modal-title" class="text-2xl font-extrabold text-white mb-2">Determinatie</div>
-            <div id="det-modal-rarity" class="rarity-pill bg-emerald-900 text-emerald-200 mb-3"></div>
-            <div id="det-modal-img-wrap" class="mb-3">
-                <img id="det-modal-img" src="" alt="Soort afbeelding" class="w-full max-h-60 object-cover rounded-xl border border-emerald-500/30 mx-auto">
-                <div class="text-[10px] text-gray-500 mt-1">Bron: Wikimedia Commons</div>
+            <div id="det-modal-title" class="text-2xl font-extrabold text-white">Determinatie</div>
+            <div id="det-modal-rarity" class="rarity-pill bg-emerald-900 text-emerald-200"></div>
+            <div id="det-modal-links" class="space-y-2">
+                <button id="det-modal-link" onclick="openDetLink('wiki')" class="w-full bg-emerald-900/40 text-emerald-100 border border-emerald-600/50 py-2 rounded text-sm hidden">Wikipedia zoekopdracht</button>
+                <button id="det-modal-link-np" onclick="openDetLink('np')" class="w-full bg-blue-900/40 text-blue-100 border border-blue-600/50 py-2 rounded text-sm hidden">Natuurpunt soortfiche</button>
             </div>
-            <div class="flex flex-col gap-2">
-                <button id="det-modal-add" class="bg-emerald-600 text-white py-2 rounded-lg font-bold uppercase text-xs" onclick="applyDeterminationToCounts(); closeDetModal();">Voeg toe aan teller</button>
-                <button class="bg-gray-700 text-white py-2 rounded-lg font-bold uppercase text-xs" onclick="closeDetModal()">Ok</button>
+            <div class="space-y-2 pt-2">
+                <button id="det-modal-add" class="bg-emerald-600 text-white py-2 rounded-lg font-bold uppercase text-xs w-full" onclick="applyDeterminationToCounts(); closeDetModal();">Voeg toe aan teller</button>
+                <button class="bg-gray-700 text-white py-2 rounded-lg font-bold uppercase text-xs w-full" onclick="closeDetModal()">Ok</button>
             </div>
         </div>
     </div>
@@ -545,11 +545,6 @@
         ];
 
         let detEditing = false;
-        function localSpeciesImg(name) {
-            if(!name) return null;
-            const file = name.toLowerCase().replace(/[^a-z0-9]+/g,'_') + '.jpg';
-            return `icons/det/${file}`;
-        }
 
         function rarityFor(speciesId) {
             const map = {
@@ -571,8 +566,16 @@
         }
 
         function cleanSpeciesName(n) { return n ? n.split('(')[0].trim() : ''; }
+        function toSlug(n) {
+            return cleanSpeciesName(n || '')
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, '-')
+                .replace(/^-+|-+$/g, '');
+        }
 
-// Beslisboom (geactualiseerd op basis van veldkaart)
+                // Beslisboom (geactualiseerd op basis van veldkaart)
 
         const DET_TREE = {
             id: 'root',
@@ -598,20 +601,20 @@
             frog_hechtschijf: { id:'frog_hechtschijf', question:'Zijn er hechtschijfjes aan de tenen?', yes:'res_boomkikker', no:'res_groenekikker' },
 
             // Resultaten
-            res_vuurs: { result:true, species:'vuurs', name:'Vuursalamander (zeldzaam)' },
-            res_alpen: { result:true, species:'alpen', name:'Alpenwatersalamander (algemeen)' },
-            res_vin: { result:true, species:'vin', name:'Vinpootsalamander (algemeen)' },
-            res_kam: { result:true, species:'kam', name:'Kamsalamander (zeldzaam)' },
-            res_kleine: { result:true, species:'kleine', name:'Kleine watersalamander (algemeen)' },
+            res_vuurs: { result:true, species:'vuurs', name:'Vuursalamander' },
+            res_alpen: { result:true, species:'alpen', name:'Alpenwatersalamander' },
+            res_vin: { result:true, species:'vin', name:'Vinpootsalamander' },
+            res_kam: { result:true, species:'kam', name:'Kamsalamander' },
+            res_kleine: { result:true, species:'kleine', name:'Kleine watersalamander' },
 
-            res_vroed: { result:true, species:'vroed', name:'Vroedmeesterpad (zeer zeldzaam)' },
-            res_rugstreep: { result:true, species:'rugstreep', name:'Rugstreeppad (zeldzaam)' },
-            res_pad: { result:true, species:'pad', name:'Gewone pad (algemeen)' },
-            res_knoflook: { result:true, species:'knoflook', name:'Knoflookpad (zeer zeldzaam)' },
-            res_heikikker: { result:true, species:'heikikker', name:'Heikikker (zeldzaam)' },
-            res_bruine: { result:true, species:'br_kikker', name:'Bruine kikker (algemeen)' },
-            res_boomkikker: { result:true, species:'boomkikker', name:'Boomkikker (zeer zeldzaam)' },
-            res_groenekikker: { result:true, species:'groene', name:'Groene kikker (algemeen*)' }
+            res_vroed: { result:true, species:'vroed', name:'Vroedmeesterpad' },
+            res_rugstreep: { result:true, species:'rugstreep', name:'Rugstreeppad' },
+            res_pad: { result:true, species:'pad', name:'Gewone pad' },
+            res_knoflook: { result:true, species:'knoflook', name:'Knoflookpad' },
+            res_heikikker: { result:true, species:'heikikker', name:'Heikikker' },
+            res_bruine: { result:true, species:'br_kikker', name:'Bruine kikker' },
+            res_boomkikker: { result:true, species:'boomkikker', name:'Boomkikker' },
+            res_groenekikker: { result:true, species:'groene', name:'Groene kikker' }
         };
 
         // helpers voor determinatie-rapporten
@@ -631,6 +634,8 @@
         let sessionScanner = null;
         let storage = JSON.parse(localStorage.getItem(STORAGE_KEY));
         let activeDeterminationId = null;
+        let activeDeterminationSessionId = null;
+        let detCredits = null;
         // Migreer indien versie is opgehoogd zodat data behouden blijft
         if(!storage) {
             const prevKey = Object.keys(localStorage)
@@ -975,10 +980,18 @@
         // --- DETERMINATIE FLOW ---
         function getDetSession() {
             const day = ensureDay();
-            const select = document.getElementById('det-session-select');
-            const chosen = select ? select.value : '';
-            if(chosen) return day.sessions.find(s => s.id === chosen) || null;
-            return getActiveSession(day) || day.sessions[day.sessions.length-1] || null;
+            if(activeDeterminationSessionId) {
+                const sessByState = day.sessions.find(s => s.id === activeDeterminationSessionId);
+                if(sessByState) return sessByState;
+            }
+            if(activeDeterminationId) {
+                const sessByDet = findSessionByDeterminationId(activeDeterminationId, day);
+                if(sessByDet) {
+                    activeDeterminationSessionId = sessByDet.id;
+                    return sessByDet;
+                }
+            }
+            return getActiveSession(day) || getLatestSession(day) || null;
         }
 
         function renderDetSessionOptions() {
@@ -994,20 +1007,33 @@
                 const l = `${fmtTime(s.start)} ${s.end ? '– '+fmtTime(s.end) : '(live)'}`;
                 return `<option value="${s.id}">${l}</option>`;
             }).join('') || '<option value=\"\">Geen sessies</option>';
-            if(!sel.value && sessions.length) sel.value = sessions[sessions.length-1].id;
             const sess = getDetSession();
             if(sess && !sess.determinations) sess.determinations = [];
-            if(!sess) activeDeterminationId = null;
-            if(label) label.innerText = sess ? sel.selectedOptions[0].textContent : 'Geen sessie';
-            const hasActive = !!sessions.find(s => !s.end);
-            if(btnStart) btnStart.classList.toggle('hidden', hasActive);
+            if(!sess) {
+                activeDeterminationId = null;
+                activeDeterminationSessionId = null;
+            }
+            if(sess) sel.value = sess.id;
+            if(label) label.innerText = sess ? `${fmtTime(sess.start)} ${sess.end ? '– '+fmtTime(sess.end) : '(live)'}` : 'Geen sessie';
+            const hasActive = !!getActiveSession(day);
+            if(btnStart) btnStart.classList.add('hidden');
             if(btnLoose) btnLoose.classList.toggle('hidden', hasActive);
             if(btnNew) btnNew.classList.toggle('hidden', !hasActive);
         }
 
         function beginDetermination(id = null) {
             const day = ensureDay();
-            const sess = getDetSession();
+            let sess = null;
+            if(id) {
+                sess = findSessionByDeterminationId(id, day);
+            } else {
+                sess = getActiveSession(day);
+                if(!sess) {
+                    // Zonder actieve sessie: maak tijdelijke sessie voor losse determinatie.
+                    startSession(true, false, picker.value, false, true);
+                    sess = getActiveSession(ensureDay());
+                }
+            }
             if(!sess) { alert('Start eerst een sessie.'); return; }
             let det = null;
             detEditing = !!id;
@@ -1020,6 +1046,7 @@
                 detEditing = false;
             }
             activeDeterminationId = det.id;
+            activeDeterminationSessionId = sess.id;
             save();
             renderDeterminationUI();
             renderDeterminationList();
@@ -1044,6 +1071,7 @@
             if(!file) return;
             const det = currentDetermination();
             const sess = getDetSession();
+            
             if(!det || !sess) { alert('Geen actieve determinatie.'); return; }
             const reader = new FileReader();
             reader.onload = r => {
@@ -1120,9 +1148,10 @@ function answerDetermination(ans) {
                     celebrate(null, true, false, 80);
                     showToast(`Determinatie: ${det.resultName}`);
                     if(!det.wikiThumb) {
-                        const name = cleanSpeciesName(det.resultName || det.result);
-                        det.wikiThumb = localSpeciesImg(name);
-                        save();
+                    const name = cleanSpeciesName(det.resultName || det.result);
+                    det.wikiThumb = null;
+                    det.wikiLink = `https://nl.wikipedia.org/w/index.php?search=${encodeURIComponent(name)}`;
+                    save();
                     }
                     showDetModal(det);
                 }
@@ -1189,13 +1218,9 @@ function answerDetermination(ans) {
             }
             const thumbBox = document.getElementById('det-thumb-box');
             const thumbImg = document.getElementById('det-thumb-img');
+            const thumbCap = document.getElementById('det-thumb-cap');
             if(thumbBox && thumbImg) {
-                if(det.wikiThumb) {
-                    thumbImg.src = det.wikiThumb;
-                    thumbBox.classList.remove('hidden');
-                } else {
-                    thumbBox.classList.add('hidden');
-                }
+                thumbBox.classList.add('hidden'); // geen afbeeldingen meer tonen
             }
             if(progress) progress.innerText = `Vragen beantwoord: ${det.answers.length}`;
             if(btnBack) btnBack.disabled = det.answers.length === 0;
@@ -1210,6 +1235,7 @@ function answerDetermination(ans) {
             const list = document.getElementById('det-list');
             if(!list) return;
             const sess = getDetSession();
+            
             if(!sess || !sess.determinations?.length) {
                 list.innerHTML = '<div class=\"text-gray-500\">Nog geen determinaties.</div>';
                 return;
@@ -1239,13 +1265,15 @@ function answerDetermination(ans) {
 
         function startLooseDetermination() {
             // start een tijdelijke sessie enkel voor determinatie
-            if(getDetSession()) { beginDetermination(); return; }
-            startSession(true, false, picker.value, false, true);
+            const day = ensureDay();
+            if(!getActiveSession(day)) startSession(true, false, picker.value, false, true);
             beginDetermination();
             renderDetSessionOptions();
         }
 function openDetermination(id) {
             activeDeterminationId = id;
+            const sess = findSessionByDeterminationId(id, ensureDay());
+            activeDeterminationSessionId = sess ? sess.id : null;
             detEditing = true;
             renderDeterminationUI();
             renderDeterminationList();
@@ -1419,7 +1447,21 @@ function openDetermination(id) {
         }
 
         function getActiveSession(day) {
-            return day.sessions.find(s => s.id === activeSessionId && !s.end) || day.sessions.find(s => !s.end);
+            const running = (day.sessions || [])
+                .filter(s => !s.end)
+                .sort((a,b)=>new Date(b.start) - new Date(a.start));
+            return running[0] || null;
+        }
+
+        function getLatestSession(day) {
+            const sessions = (day.sessions || []).slice()
+                .sort((a,b)=>new Date(b.start) - new Date(a.start));
+            return sessions[0] || null;
+        }
+
+        function findSessionByDeterminationId(detId, day = ensureDay()) {
+            if(!detId) return null;
+            return (day.sessions || []).find(s => (s.determinations || []).some(d => d.id === detId)) || null;
         }
 
         function renderSessionAdmin() {
@@ -1753,7 +1795,7 @@ function openDetermination(id) {
                                     '</div>' +
                                     `<div class="text-[10px] text-gray-400">${ts}</div>` +
                                 '</div>' +
-                                (wiki ? `<div class="flex gap-2 items-center">${wiki}<div class="text-[10px] text-gray-400">Bron: Wikimedia Commons</div></div>` : '') +
+                                (wiki ? `<div class="flex gap-2 items-center">${wiki}<div class="text-[10px] text-gray-400"></div></div>` : '') +
                                 (ansBadges ? `<div class="flex flex-wrap gap-1">${ansBadges}</div>` : '<div class="text-gray-500 text-[10px]">Geen antwoorden</div>') +
                                 (ansList ? `<div class="space-y-1 bg-black/20 border border-gray-800 rounded p-2">${ansList}</div>` : '') +
                                 `<div class="flex gap-2 flex-wrap">${photoList}</div>` +
@@ -1821,11 +1863,18 @@ function openDetermination(id) {
             const selected = Array.from(document.querySelectorAll('#report-dets .share-det-checkbox:checked')).map(cb => cb.value);
             if(selected.length) dets = dets.filter(d => selected.includes(d.id));
             if(!dets.length) { alert('Geen determinaties in deze selectie.'); return; }
-            const lines = dets.map((d,i) => {
+            const lines = dets.map(d => {
                 const ans = (d.answers||[]).map((a,idx)=>`${idx+1}. ${detQuestionText(a.node)} -> ${detAnswerLabel(a.answer)}`).join(' | ');
-                return `${i+1}. ${d.resultName || 'Onbekend'} (${new Date(d.updatedAt).toLocaleString('nl-BE')})\\n   Antwoorden: ${ans || 'n.v.t.'}\\n   Foto's: ${(d.photos||[]).length}`;
+                const ts = new Date(d.updatedAt).toLocaleString('nl-BE');
+                const fotos = (d.photos||[]).length;
+                return `🔎 ${d.resultName || 'Onbekend'}
+• Tijd: ${ts}
+• Antwoorden: ${ans || 'n.v.t.'}
+• Foto's: ${fotos}`;
             });
-            const text = `Determinaties ${picker.value} (${reportMode==='session' && session ? 'sessie' : 'dag'}):\\n\\n${lines.join('\\n')}`;
+            const text = `🐸 Determinaties ${picker.value} (${reportMode==='session' && session ? 'sessie' : 'dag'})
+
+${lines.join('\n\n')}`;
             let files = [];
             const photos = dets.flatMap(d => d.photos || []).slice(0,10); // limiet om share API vriendelijk te houden
             if(photos.length) {
@@ -1949,29 +1998,73 @@ function openDetermination(id) {
             const modal = document.getElementById('det-modal');
             const title = document.getElementById('det-modal-title');
             const rarity = document.getElementById('det-modal-rarity');
-            const img = document.getElementById('det-modal-img');
             const addBtn = document.getElementById('det-modal-add');
             if(!modal || !det) return;
-            title.innerText = det.resultName || 'Determinatie';
+            modal.classList.remove('hidden');
+            modal.style.display = 'flex';
+            if(title) title.innerText = cleanSpeciesName(det.resultName || det.result || 'Determinatie');
             const [label, cls] = rarityFor(det.result || det.resultName || '');
-            rarity.className = `rarity-pill ${cls}`;
-            rarity.innerText = label;
-            if(det.wikiThumb) {
-                img.src = det.wikiThumb;
-                document.getElementById('det-modal-img-wrap').classList.remove('hidden');
+            if(rarity) {
+                rarity.className = `rarity-pill ${cls}`;
+                rarity.innerText = label;
+            }
+            const query = cleanSpeciesName(det.resultName || det.result || '').trim();
+            const wikiBtn = document.getElementById('det-modal-link');
+            const npBtn = document.getElementById('det-modal-link-np');
+            currentDetLinks = { wiki: null, np: null };
+            if(query) {
+                const npName = toSlug(query);
+                currentDetLinks.wiki = `https://nl.wikipedia.org/w/index.php?search=${encodeURIComponent(query)}`;
+                currentDetLinks.np = `https://www.natuurpunt.be/soorten/amfibieen-reptielen/${npName}`;
+                if(wikiBtn) {
+                    wikiBtn.dataset.url = currentDetLinks.wiki;
+                    wikiBtn.classList.remove('hidden');
+                    wikiBtn.disabled = false;
+                }
+                if(npBtn) {
+                    npBtn.dataset.url = currentDetLinks.np;
+                    npBtn.classList.remove('hidden');
+                    npBtn.disabled = false;
+                }
             } else {
-                img.src = '';
-                document.getElementById('det-modal-img-wrap').classList.add('hidden');
+                if(wikiBtn) {
+                    wikiBtn.dataset.url = '';
+                    wikiBtn.classList.add('hidden');
+                    wikiBtn.disabled = true;
+                }
+                if(npBtn) {
+                    npBtn.dataset.url = '';
+                    npBtn.classList.add('hidden');
+                    npBtn.disabled = true;
+                }
             }
             const sess = getDetSession();
-            addBtn.classList.toggle('hidden', !!sess?.detTemp); // verbergen bij losse determinatie
-            modal.classList.remove('hidden');
+            if(addBtn) addBtn.classList.toggle('hidden', !!sess?.detTemp); // verbergen bij losse determinatie
         }
+
+        let currentDetLinks = { wiki:null, np:null };
+        function openDetLink(type) {
+            const id = type === 'np' ? 'det-modal-link-np' : 'det-modal-link';
+            const btn = document.getElementById(id);
+            let url = btn?.dataset?.url || currentDetLinks?.[type] || '';
+            if(!url) {
+                const q = (document.getElementById('det-modal-title')?.innerText || '').trim();
+                if(q) {
+                    if(type === 'np') url = `https://www.natuurpunt.be/soorten/amfibieen-reptielen/${toSlug(q)}`;
+                    else url = `https://nl.wikipedia.org/w/index.php?search=${encodeURIComponent(q)}`;
+                }
+            }
+            if(url) window.open(url, '_blank');
+        }
+
 
         function closeDetModal(ev) {
             if(ev) ev.stopPropagation();
             const modal = document.getElementById('det-modal');
-            if(modal) modal.classList.add('hidden');
+            if(modal) {
+                modal.classList.add('hidden');
+                modal.style.display = 'none';
+            }
         }
 
         function buildQRSessionOptions() {

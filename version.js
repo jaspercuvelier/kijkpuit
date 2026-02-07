@@ -1,2 +1,2 @@
 // Centrale versiebron voor app en service worker
-const APP_VERSION = '0.7';
+const APP_VERSION = '2.0.0';

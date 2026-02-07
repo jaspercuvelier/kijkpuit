@@ -139,11 +139,6 @@
         ];
 
         let detEditing = false;
-        function localSpeciesImg(name) {
-            if(!name) return null;
-            const file = name.toLowerCase().replace(/[^a-z0-9]+/g,'_') + '.jpg';
-            return `icons/det/${file}`;
-        }
 
         function rarityFor(speciesId) {
             const map = {
@@ -166,7 +161,7 @@
 
         function cleanSpeciesName(n) { return n ? n.split('(')[0].trim() : ''; }
 
-// Beslisboom (geactualiseerd op basis van veldkaart)
+                // Beslisboom (geactualiseerd op basis van veldkaart)
 
         const DET_TREE = {
             id: 'root',
@@ -225,6 +220,7 @@
         let sessionScanner = null;
         let storage = JSON.parse(localStorage.getItem(STORAGE_KEY));
         let activeDeterminationId = null;
+        let detCredits = null;
         // Migreer indien versie is opgehoogd zodat data behouden blijft
         if(!storage) {
             const prevKey = Object.keys(localStorage)
@@ -637,7 +633,7 @@
             const file = ev.target.files?.[0];
             if(!file) return;
             const det = currentDetermination();
-            const sess = getDetSession();
+            
             if(!det || !sess) { alert('Geen actieve determinatie.'); return; }
             const reader = new FileReader();
             reader.onload = r => {
@@ -714,9 +710,10 @@ function answerDetermination(ans) {
                     celebrate(null, true, false, 80);
                     showToast(`Determinatie: ${det.resultName}`);
                     if(!det.wikiThumb) {
-                        const name = cleanSpeciesName(det.resultName || det.result);
-                        det.wikiThumb = localSpeciesImg(name);
-                        save();
+                    const name = cleanSpeciesName(det.resultName || det.result);
+                    det.wikiThumb = null;
+                    det.wikiLink = `https://nl.wikipedia.org/w/index.php?search=${encodeURIComponent(name)}`;
+                    save();
                     }
                     showDetModal(det);
                 }
@@ -783,13 +780,9 @@ function answerDetermination(ans) {
             }
             const thumbBox = document.getElementById('det-thumb-box');
             const thumbImg = document.getElementById('det-thumb-img');
+            const thumbCap = document.getElementById('det-thumb-cap');
             if(thumbBox && thumbImg) {
-                if(det.wikiThumb) {
-                    thumbImg.src = det.wikiThumb;
-                    thumbBox.classList.remove('hidden');
-                } else {
-                    thumbBox.classList.add('hidden');
-                }
+                thumbBox.classList.add('hidden'); // geen afbeeldingen meer tonen
             }
             if(progress) progress.innerText = `Vragen beantwoord: ${det.answers.length}`;
             if(btnBack) btnBack.disabled = det.answers.length === 0;
@@ -803,7 +796,7 @@ function answerDetermination(ans) {
         function renderDeterminationList() {
             const list = document.getElementById('det-list');
             if(!list) return;
-            const sess = getDetSession();
+            
             if(!sess || !sess.determinations?.length) {
                 list.innerHTML = '<div class=\"text-gray-500\">Nog geen determinaties.</div>';
                 return;
@@ -1347,7 +1340,7 @@ function openDetermination(id) {
                                     '</div>' +
                                     `<div class="text-[10px] text-gray-400">${ts}</div>` +
                                 '</div>' +
-                                (wiki ? `<div class="flex gap-2 items-center">${wiki}<div class="text-[10px] text-gray-400">Bron: Wikimedia Commons</div></div>` : '') +
+                                (wiki ? `<div class="flex gap-2 items-center">${wiki}<div class="text-[10px] text-gray-400"></div></div>` : '') +
                                 (ansBadges ? `<div class="flex flex-wrap gap-1">${ansBadges}</div>` : '<div class="text-gray-500 text-[10px]">Geen antwoorden</div>') +
                                 (ansList ? `<div class="space-y-1 bg-black/20 border border-gray-800 rounded p-2">${ansList}</div>` : '') +
                                 `<div class="flex gap-2 flex-wrap">${photoList}</div>` +
@@ -1415,11 +1408,18 @@ function openDetermination(id) {
             const selected = Array.from(document.querySelectorAll('#report-dets .share-det-checkbox:checked')).map(cb => cb.value);
             if(selected.length) dets = dets.filter(d => selected.includes(d.id));
             if(!dets.length) { alert('Geen determinaties in deze selectie.'); return; }
-            const lines = dets.map((d,i) => {
+            const lines = dets.map(d => {
                 const ans = (d.answers||[]).map((a,idx)=>`${idx+1}. ${detQuestionText(a.node)} -> ${detAnswerLabel(a.answer)}`).join(' | ');
-                return `${i+1}. ${d.resultName || 'Onbekend'} (${new Date(d.updatedAt).toLocaleString('nl-BE')})\\n   Antwoorden: ${ans || 'n.v.t.'}\\n   Foto's: ${(d.photos||[]).length}`;
+                const ts = new Date(d.updatedAt).toLocaleString('nl-BE');
+                const fotos = (d.photos||[]).length;
+                return `🔎 ${d.resultName || 'Onbekend'}
+• Tijd: ${ts}
+• Antwoorden: ${ans || 'n.v.t.'}
+• Foto's: ${fotos}`;
             });
-            const text = `Determinaties ${picker.value} (${reportMode==='session' && session ? 'sessie' : 'dag'}):\\n\\n${lines.join('\\n')}`;
+            const text = `🐸 Determinaties ${picker.value} (${reportMode==='session' && session ? 'sessie' : 'dag'})
+
+${lines.join('\n\n')}`;
             let files = [];
             const photos = dets.flatMap(d => d.photos || []).slice(0,10); // limiet om share API vriendelijk te houden
             if(photos.length) {
@@ -1543,29 +1543,47 @@ function openDetermination(id) {
             const modal = document.getElementById('det-modal');
             const title = document.getElementById('det-modal-title');
             const rarity = document.getElementById('det-modal-rarity');
-            const img = document.getElementById('det-modal-img');
             const addBtn = document.getElementById('det-modal-add');
             if(!modal || !det) return;
+            modal.classList.remove('hidden');
+            modal.style.display = 'flex';
             title.innerText = det.resultName || 'Determinatie';
             const [label, cls] = rarityFor(det.result || det.resultName || '');
             rarity.className = `rarity-pill ${cls}`;
             rarity.innerText = label;
-            if(det.wikiThumb) {
-                img.src = det.wikiThumb;
-                document.getElementById('det-modal-img-wrap').classList.remove('hidden');
+            document.getElementById('det-modal-img-wrap').classList.add('hidden');
+            const query = (det.resultName || det.result || '').trim();
+            const wikiBtn = document.getElementById('det-modal-link');
+            const npBtn = document.getElementById('det-modal-link-np');
+            currentDetLinks = { wiki: null, np: null };
+            if(query) {
+                const npName = query.toLowerCase().replace(/[^a-z0-9]+/g,'-');
+                currentDetLinks.wiki = `https://nl.wikipedia.org/w/index.php?search=${encodeURIComponent(query)}`;
+                currentDetLinks.np = `https://www.natuurpunt.be/soorten/amfibieen-reptielen/${npName}`;
+                if(wikiBtn) { wikiBtn.classList.remove('hidden'); wikiBtn.disabled = false; }
+                if(npBtn) { npBtn.classList.remove('hidden'); npBtn.disabled = false; }
             } else {
-                img.src = '';
-                document.getElementById('det-modal-img-wrap').classList.add('hidden');
+                if(wikiBtn) { wikiBtn.classList.add('hidden'); wikiBtn.disabled = true; }
+                if(npBtn) { npBtn.classList.add('hidden'); npBtn.disabled = true; }
             }
             const sess = getDetSession();
-            addBtn.classList.toggle('hidden', !!sess?.detTemp); // verbergen bij losse determinatie
-            modal.classList.remove('hidden');
+            if(addBtn) addBtn.classList.toggle('hidden', !!sess?.detTemp); // verbergen bij losse determinatie
         }
+
+        let currentDetLinks = { wiki:null, np:null };
+        function openDetLink(type) {
+            const url = currentDetLinks?.[type];
+            if(url) window.open(url, '_blank');
+        }
+
 
         function closeDetModal(ev) {
             if(ev) ev.stopPropagation();
             const modal = document.getElementById('det-modal');
-            if(modal) modal.classList.add('hidden');
+            if(modal) {
+                modal.classList.add('hidden');
+                modal.style.display = 'none';
+            }
         }
 
         function buildQRSessionOptions() {
