@@ -665,6 +665,7 @@
                     const endIso = new Date(new Date(sess.start).getTime() + 60000).toISOString();
                     sess.end = endIso;
                     if(activeSessionId === sess.id) activeSessionId = null;
+                    render(); // refresh UI (record knop / nieuwe sessie knop)
                 }
                 if(!det.completedAt) {
                     det.completedAt = Date.now();
