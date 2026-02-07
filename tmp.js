@@ -131,8 +131,19 @@
         ];
 
         let detEditing = false;
+async function fetchSpeciesThumb(name, w = 420) {
+    if(!name) return null;
+    try {
+        const url = `https://commons.wikimedia.org/w/api.php?action=query&format=json&origin=*&prop=pageimages|imageinfo|info&generator=search&gsrnamespace=6&gsrlimit=1&gsrsearch=intitle:${encodeURIComponent(name)}&pithumbsize=${w}&iiprop=url`;
+        const res = await fetch(url);
+        const j = await res.json();
+        const page = j.query?.pages ? Object.values(j.query.pages)[0] : null;
+        return page?.thumbnail?.source || page?.imageinfo?.[0]?.thumburl || null;
+    } catch(e) { return null; }
+}
 
-        // Beslisboom (geactualiseerd op basis van veldkaart)
+// Beslisboom (geactualiseerd op basis van veldkaart)
+
         const DET_TREE = {
             id: 'root',
             question: 'Heeft het dier een staart?',
@@ -671,6 +682,16 @@
                     det.completedAt = Date.now();
                     celebrate(null, true, false);
                     showToast(`Determinatie: ${det.resultName}`);
+                    if(!det.wikiThumb) {
+                        fetchSpeciesThumb(det.resultName).then(url => {
+                            if(url) {
+                                det.wikiThumb = url;
+                                save();
+                                renderDeterminationUI();
+                                renderDeterminationList();
+                            }
+                        });
+                    }
                 }
             }
             save();
@@ -725,6 +746,16 @@
                 resBox.innerHTML = det.resultName
                     ? `<div class="det-result-banner">Determinatie: ${det.resultName}</div>`
                     : '';
+            }
+            const thumbBox = document.getElementById('det-thumb-box');
+            const thumbImg = document.getElementById('det-thumb-img');
+            if(thumbBox && thumbImg) {
+                if(det.wikiThumb) {
+                    thumbImg.src = det.wikiThumb;
+                    thumbBox.classList.remove('hidden');
+                } else {
+                    thumbBox.classList.add('hidden');
+                }
             }
             if(progress) progress.innerText = `Vragen beantwoord: ${det.answers.length}`;
             if(applyBox) applyBox.classList.toggle('hidden', !det.result);
@@ -1263,6 +1294,7 @@ function openDetermination(id) {
                         const label = det.resultName || 'Onbekend';
                         const answers = det.answers || [];
                         const ts = new Date(det.updatedAt).toLocaleString('nl-BE');
+                        const wiki = det.wikiThumb ? `<img src="${det.wikiThumb}" class="h-16 w-16 object-cover rounded-lg border border-gray-700 shadow" alt="${label}">` : '';
                         const ansBadges = answers.map((a,idx) =>
                             `<span class="px-2 py-1 rounded-full text-[10px] font-bold ${a.answer==='yes' ? 'bg-emerald-900/60 text-emerald-200' : 'bg-red-900/60 text-red-200'}">${idx+1}. ${detAnswerLabel(a.answer)}</span>`
                         ).join(' ');
@@ -1279,6 +1311,7 @@ function openDetermination(id) {
                                     '</div>' +
                                     `<div class="text-[10px] text-gray-400">${ts}</div>` +
                                 '</div>' +
+                                (wiki ? `<div class="flex gap-2 items-center">${wiki}<div class="text-[10px] text-gray-400">Bron: Wikimedia Commons</div></div>` : '') +
                                 (ansBadges ? `<div class="flex flex-wrap gap-1">${ansBadges}</div>` : '<div class="text-gray-500 text-[10px]">Geen antwoorden</div>') +
                                 (ansList ? `<div class="space-y-1 bg-black/20 border border-gray-800 rounded p-2">${ansList}</div>` : '') +
                                 `<div class="flex gap-2 flex-wrap">${photoList}</div>` +
