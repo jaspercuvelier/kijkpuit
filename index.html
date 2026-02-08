@@ -8,22 +8,22 @@
     <meta name="robots" content="index,follow">
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff">
     <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0f172a">
-    <meta name="application-name" content="Paddentrekteller">
+    <meta name="application-name" content="Paddentrek Teller Pro">
     <meta property="og:locale" content="nl_NL">
     <meta property="og:type" content="website">
-    <meta property="og:title" content="Paddentelominator Ultimate Pro Xtreme 2026">
+    <meta property="og:title" content="Paddentrek Teller Pro">
     <meta property="og:description" content="Sluit aan bij de paddentrek: tel en red amfibieën, houd sessies bij en deel rapporten.">
     <meta property="og:image" content="/icons/icon-512.png">
     <meta property="og:image:alt" content="Kikkerpictogram van de Paddentrek app">
-    <meta property="og:site_name" content="Paddentrekteller">
+    <meta property="og:site_name" content="Paddentrek Teller Pro">
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="Paddentelominator Ultimate Pro Xtreme 2026">
+    <meta name="twitter:title" content="Paddentrek Teller Pro">
     <meta name="twitter:description" content="Vrijwilligersapp voor paddentrek en paddenoverzet: tel, registreer, deel.">
     <meta name="twitter:image" content="/icons/icon-512.png">
     <link rel="apple-touch-icon" href="/icons/icon-192.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <title>Paddentelominator Ultimate Pro Xtreme 2026</title>
+    <title>Paddentrek Teller Pro</title>
     <link rel="manifest" href="manifest.webmanifest">
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext y='50' font-size='48'%3E🐸%3C/text%3E%3C/svg%3E">
     <!-- Local-first libraries; falls back to CDN if local vendor files are missing -->
@@ -81,15 +81,20 @@
         <div class="flex justify-between items-center">
             <h1 class="text-lg font-bold text-white brand-wrap leading-tight">
                 <span class="text-base">🐸</span>
-                <span class="text-emerald-400 brand-title text-base">Paddentrekteller</span>
+                <span class="text-emerald-400 brand-title text-base">Paddentrek Teller Pro</span>
                 <span class="text-[10px] uppercase tracking-[0.18em] text-gray-400 brand-sub">Ultra Pro Xtreme 2026</span>
             </h1>
-            <div id="pwa-status" class="flex flex-col items-end gap-0.5 text-[9px] cursor-pointer" title="Offline gereed">
-                <div class="flex items-center gap-1 text-gray-400 bg-gray-900/60 px-2 py-1 rounded-full border border-gray-700">
-                    <span id="status-icon" class="status-dot bg-gray-600"></span>
-                    <span id="status-text" class="hidden"></span>
+            <div class="flex flex-col items-end gap-1 text-[9px]">
+                <div id="pwa-status" class="flex flex-col items-end gap-0.5 text-[9px] cursor-pointer" title="Offline gereed">
+                    <div class="flex items-center gap-1 text-gray-400 bg-gray-900/60 px-2 py-1 rounded-full border border-gray-700">
+                        <span id="status-icon" class="status-dot bg-gray-600"></span>
+                        <span id="status-text" class="hidden"></span>
+                    </div>
+                    <div class="font-bold text-gray-500 uppercase tracking-tight">v<span id="app-version-display">11</span></div>
                 </div>
-                <div class="font-bold text-gray-500 uppercase tracking-tight">v<span id="app-version-display">11</span></div>
+                <button class="install-app-btn hidden bg-emerald-700 text-white px-3 py-1.5 rounded text-[10px] font-bold uppercase tracking-widest flex items-center gap-1">
+                    📲 Installeer app
+                </button>
             </div>
         </div>
         <div class="mt-2 flex flex-col gap-2">
@@ -194,9 +199,6 @@
         <!-- TAB 6: INSTELLINGEN -->
         <section id="view-settings" class="hidden space-y-4">
             <h2 class="text-xl font-bold text-emerald-400 text-center">⚙️ Instellingen</h2>
-            <button class="install-app-btn hidden w-full bg-emerald-700 text-white px-3 py-2 rounded text-[11px] font-bold uppercase tracking-widest">
-                📲 Installeer app
-            </button>
             <div class="bg-gray-800 p-4 rounded-xl border border-emerald-500/30 space-y-3">
                 <h3 class="font-bold text-emerald-300 text-sm">Sessiemanagement</h3>
                 <div class="flex gap-2 items-center">
@@ -437,6 +439,33 @@
             </div>
             <div id="session-reader-modal" class="rounded-lg overflow-hidden bg-black aspect-square"></div>
             <div class="text-[10px] text-gray-400 mt-2">Richt de camera op de QR-code.</div>
+        </div>
+    </div>
+
+    <!-- Session info modal -->
+    <div id="session-info-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm hidden z-[220] flex items-center justify-center p-4" onclick="event.target.id==='session-info-modal' && closeSessionInfoModal()">
+        <div class="bg-gradient-to-br from-gray-900 via-gray-850 to-gray-800 border border-emerald-500/40 shadow-2xl rounded-2xl max-w-md w-full p-5 space-y-4 relative">
+            <div class="flex items-start gap-3">
+                <div class="w-10 h-10 rounded-full bg-emerald-600/20 border border-emerald-400/40 flex items-center justify-center text-xl">📝</div>
+                <div class="space-y-1">
+                    <h3 class="text-emerald-200 font-bold text-lg">Sessiedetails invullen</h3>
+                    <div class="text-gray-200 text-sm leading-relaxed space-y-1.5">
+                        <div><span class="text-emerald-300 font-semibold">1.</span> Kies het traject dat je loopt.</div>
+                        <div><span class="text-emerald-300 font-semibold">2.</span> Controleer het weerbericht — we halen het automatisch op met je locatie.</div>
+                        <div><span class="text-emerald-300 font-semibold">3.</span> Voeg optioneel notities toe voor bijzonderheden.</div>
+                        <div class="text-gray-400 text-[13px] pt-1">Deze gegevens komen mee in je rapportage.</div>
+                    </div>
+                </div>
+                <button class="absolute top-3 right-3 text-gray-400 hover:text-white" onclick="closeSessionInfoModal()">✕</button>
+            </div>
+            <div class="flex gap-3 flex-wrap">
+                <button class="flex-1 min-w-[120px] bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg py-2.5 font-bold text-sm shadow-lg active:scale-[0.98]" onclick="switchTab('sessions'); closeSessionInfoModal();">
+                    Naar sessie
+                </button>
+                <button class="flex-1 min-w-[120px] bg-gray-800 border border-gray-700 text-gray-200 rounded-lg py-2.5 font-bold text-sm active:scale-[0.98]" onclick="closeSessionInfoModal()">
+                    Later
+                </button>
+            </div>
         </div>
     </div>
 
@@ -1619,8 +1648,21 @@ function openDetermination(id) {
             activeSessionId = session.id;
             viewedSessionId = session.id;
             save(); render(); renderSessionAdmin(); renderDetSessionOptions(); renderDeterminationUI(); renderDeterminationList(); showToast('Sessie gestart');
+            if(!tempDet) showSessionInfoModal();
             if(redirect) switchTab('sessions');
             fetchWeather(dayKey, session.id); // capture weather at start
+        }
+
+        function showSessionInfoModal() {
+            const modal = document.getElementById('session-info-modal');
+            if(!modal) return;
+            modal.classList.remove('hidden');
+        }
+
+        function closeSessionInfoModal() {
+            const modal = document.getElementById('session-info-modal');
+            if(!modal) return;
+            modal.classList.add('hidden');
         }
 
         function endSession() {
@@ -1832,7 +1874,7 @@ function openDetermination(id) {
                 return new File([res.blob], `paddentrek-${picker.value}-${sessionId}-${idx+1}.${res.ext}`, { type: res.blob.type });
             });
             const text = `Foto's ${picker.value} (${fmtTime(session.start)}): ${photos.length} stuks`;
-            const shareData = { title: 'Paddentrek', text, files };
+            const shareData = { title: 'Paddentrek Teller Pro', text, files };
             try {
                 if (navigator.share) {
                     await navigator.share(shareData);
@@ -1955,7 +1997,7 @@ function openDetermination(id) {
                 });
             }
 
-            const shareData = includePhotos ? { title: 'Paddentrek', text, files } : { title: 'Paddentrek', text };
+            const shareData = includePhotos ? { title: 'Paddentrek Teller Pro', text, files } : { title: 'Paddentrek Teller Pro', text };
             try {
                 if(navigator.share) {
                     if(includePhotos) {
