@@ -6,9 +6,13 @@
     <title>Paddentelominator Ultimate Pro Xtreme 2026</title>
     <link rel="manifest" href="manifest.webmanifest">
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext y='50' font-size='48'%3E🐸%3C/text%3E%3C/svg%3E">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-    <script src="https://unpkg.com/html5-qrcode"></script>
+    <!-- Local-first libraries; falls back to CDN if local vendor files are missing -->
+    <script src="./vendor/tailwindcss.cdn.js"></script>
+    <script>if(!window.tailwind){window.__cdnFallbackUsed=true;document.write('<script src="https://cdn.tailwindcss.com"><\/script>');}</script>
+    <script src="./vendor/QRCode.js"></script>
+    <script>if(typeof window.QRCode==='undefined'){window.__cdnFallbackUsed=true;document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>');}</script>
+    <script src="./vendor/html5-qrcode.js"></script>
+    <script>if(typeof window.Html5Qrcode==='undefined'){window.__cdnFallbackUsed=true;document.write('<script src="https://unpkg.com/html5-qrcode"><\/script>');}</script>
     <script src="./version.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Orbitron:wght@600;700&display=swap');
@@ -57,7 +61,7 @@
         <div class="flex justify-between items-center">
             <h1 class="text-lg font-bold text-white brand-wrap leading-tight">
                 <span class="text-base">🐸</span>
-                <span class="text-emerald-400 brand-title text-base">Paddentelominator</span>
+                <span class="text-emerald-400 brand-title text-base">Paddentrekteller</span>
                 <span class="text-[10px] uppercase tracking-[0.18em] text-gray-400 brand-sub">Ultra Pro Xtreme 2026</span>
             </h1>
             <div id="pwa-status" class="flex flex-col items-end gap-0.5 text-[9px] cursor-pointer" title="Offline gereed">
@@ -93,9 +97,9 @@
     <nav class="flex bg-gray-800 border-b border-gray-700 text-[10px] font-bold sticky top-[78px] z-40 overflow-x-auto whitespace-nowrap no-scrollbar shadow-md">
         <button onclick="switchTab('count')" id="tab-count" class="px-5 py-3 active-tab uppercase tracking-tight">🧮 Tellen</button>
         <button onclick="switchTab('sessions')" id="tab-sessions" class="px-5 py-3 uppercase tracking-tight">📒 Sessie log</button>
+        <button onclick="switchTab('help')" id="tab-help" class="px-5 py-3 uppercase tracking-tight">🔍 Determinatiehulp</button>
         <button onclick="switchTab('report')" id="tab-report" class="px-5 py-3 uppercase tracking-tight">📊 Rapport</button>
         <button onclick="switchTab('settings')" id="tab-settings" class="px-5 py-3 uppercase tracking-tight">⚙️ Instellingen</button>
-        <button onclick="switchTab('help')" id="tab-help" class="px-5 py-3 uppercase tracking-tight">🔍 Determinatiehulp</button>
         <button onclick="switchTab('info')" id="tab-info" class="px-5 py-3 uppercase tracking-tight">ℹ️ Info</button>
     </nav>
 
@@ -170,6 +174,9 @@
         <!-- TAB 6: INSTELLINGEN -->
         <section id="view-settings" class="hidden space-y-4">
             <h2 class="text-xl font-bold text-emerald-400 text-center">⚙️ Instellingen</h2>
+            <button class="install-app-btn hidden w-full bg-emerald-700 text-white px-3 py-2 rounded text-[11px] font-bold uppercase tracking-widest">
+                📲 Installeer app
+            </button>
             <div class="bg-gray-800 p-4 rounded-xl border border-emerald-500/30 space-y-3">
                 <h3 class="font-bold text-emerald-300 text-sm">Sessiemanagement</h3>
                 <div class="flex gap-2 items-center">
@@ -270,10 +277,10 @@
                 <div class="bg-gray-900/60 border border-gray-700 rounded-lg p-3 space-y-2">
                     <div class="flex items-center justify-between text-[10px] uppercase text-gray-400 font-bold">
                         <span>Foto's (max 3)</span>
-                        <button onclick="triggerDetPhoto()" class="bg-gray-700 px-2 py-1 rounded text-[10px] text-white">➕ Foto</button>
+                        <button onclick="triggerDetPhoto()" class="bg-emerald-600 hover:bg-emerald-500 px-4 py-2 rounded-lg text-[11px] text-white font-bold shadow">📸 Voeg foto toe</button>
                     </div>
                     <div id="det-photo-strip" class="grid grid-cols-3 gap-2"></div>
-                    <div class="text-[10px] text-gray-500">Tik op een foto om te vergroten.</div>
+                    <div class="text-[10px] text-gray-400">📸 Voeg hier foto's toe voor betere determinatie. Tik op een foto om te vergroten.</div>
                 </div>
 
                 <!-- Vraagkaart -->
@@ -282,21 +289,18 @@
                     <div class="flex flex-col md:flex-row gap-3 items-start">
                         <div class="flex-1 space-y-2 det-question-wrap">
                             <div id="det-question" class="text-base font-bold text-white min-h-[48px] flex items-center justify-center text-center">Start een determinatie.</div>
-                            <div class="grid grid-cols-2 gap-4 px-4">
+                            <div id="det-answer-buttons" class="grid grid-cols-2 gap-4 px-4">
                                 <button id="det-btn-yes" onclick="answerDetermination('yes')" class="bg-emerald-700 hover:bg-emerald-600 text-white py-3 px-4 rounded-xl font-bold uppercase text-sm disabled:opacity-40">JA</button>
                                 <button id="det-btn-no" onclick="answerDetermination('no')" class="bg-red-700 hover:bg-red-600 text-white py-3 px-4 rounded-xl font-bold uppercase text-sm disabled:opacity-40">NEE</button>
                             </div>
-                            <div class="flex gap-2 px-2">
-                                <button id="det-btn-back" onclick="goBackDetermination()" class="flex-1 bg-gray-800 text-white py-2 rounded-lg text-[11px]">⬅︎ Vorige vraag</button>
-                                <button id="det-btn-reset" onclick="resetDetermination()" class="flex-1 bg-gray-700 text-white py-2 rounded-lg text-[11px]">🔄 Herstart</button>
-                            </div>
                             <div id="det-progress" class="text-[10px] text-gray-400"></div>
                             <div id="det-result" class="space-y-2"></div>
+                            <div id="det-next-hint" class="text-[11px] text-gray-400 text-center hidden">Klik bovenaan op Nieuwe determinatie om opnieuw te beginnen.</div>
                             <div id="det-thumb-box" class="det-thumb hidden">
                                 <img id="det-thumb-img" src="" alt="Soort afbeelding" class="w-full max-w-sm mx-auto object-cover">
                             </div>
                         <div id="det-apply" class="hidden space-y-2">
-                            <button onclick="applyDeterminationToCounts()" class="w-full bg-emerald-600 py-2 rounded-lg font-bold uppercase text-xs">Voeg toe aan teller</button>
+                            <button onclick="applyDeterminationToCounts()" class="w-full bg-emerald-600 py-3 px-8 rounded-lg font-bold uppercase text-sm">Voeg toe aan teller</button>
                             <div id="det-warning" class="text-[10px] text-orange-300 bg-orange-900/30 border border-orange-700 rounded p-2 hidden">Let op: bij her-determinatie wordt de vorige telling niet automatisch gecorrigeerd. Pas zelf -1/+1 aan indien nodig.</div>
                         </div>
                         </div>
@@ -316,46 +320,58 @@
 
         <!-- TAB 8: INFO -->
         <section id="view-info" class="hidden space-y-4 text-sm">
-            <h2 class="text-xl font-bold text-emerald-400 text-center">ℹ️ Info & Werking</h2>
+            <h2 class="text-xl font-bold text-emerald-400 text-center">ℹ️ Info & Hulp</h2>
+            <button class="install-app-btn hidden w-full bg-emerald-700 text-white px-3 py-2 rounded text-[11px] font-bold uppercase tracking-widest">
+                📲 Installeer app
+            </button>
             <div class="bg-gray-800 p-4 rounded-xl border border-emerald-500/30 space-y-3">
-                <h3 class="font-bold text-emerald-300 text-sm">Tellen</h3>
+                <h3 class="font-bold text-emerald-300 text-sm">🐸 Tellen (stap voor stap)</h3>
                 <ul class="list-disc list-inside text-gray-200 space-y-1">
-                    <li>Kies de dag bovenaan; start een sessie om te tellen.</li>
-                    <li>Knoppen links = levend, rechts = dood. Paartje telt automatisch als 2 stuks.</li>
-                    <li>Foto maken: knop in Tellen of via Sessie log per sessie.</li>
+                    <li>Kies eerst een datum bovenaan.</li>
+                    <li>Start daarna een sessie en begin te tellen.</li>
+                    <li>Links tel je levende dieren. Rechts tel je dode dieren.</li>
+                    <li>Een paartje telt automatisch als 2 dieren.</li>
+                    <li>Foto maken kan met de cameraknop.</li>
                 </ul>
             </div>
             <div class="bg-gray-800 p-4 rounded-xl border border-blue-500/30 space-y-3">
-                <h3 class="font-bold text-blue-300 text-sm">Sessies & Log</h3>
+                <h3 class="font-bold text-blue-300 text-sm">🕒 Sessies & logboek</h3>
                 <ul class="list-disc list-inside text-gray-200 space-y-1">
-                    <li>Sessies splitsen een avond in tijdsblokken (bijv. shift 1 en 2) zodat aantallen per blok zichtbaar blijven.</li>
-                    <li>In Sessie log zie je per sessie totaal, weer, traject en foto’s.</li>
-                    <li>Traject heeft suggestielijst van eerder gelopen routes.</li>
-                    <li>Foto aanklikken = grote weergave; delen kan per sessie.</li>
-                    <li>Sessies samenvoegen kan via Instellingen → Sessiemanagement.</li>
+                    <li>Een sessie is een telmoment (bijvoorbeeld deel 1 en deel 2 van je avond).</li>
+                    <li>In het logboek zie je per sessie: totaal, weer, route, foto's en determinaties.</li>
+                    <li>Tik op een foto om die groot te bekijken.</li>
+                    <li>Je kan een sessie delen of verwijderen via Instellingen → Sessiemanagement.</li>
                 </ul>
             </div>
             <div class="bg-gray-800 p-4 rounded-xl border border-purple-500/30 space-y-3">
-                <h3 class="font-bold text-purple-300 text-sm">Rapport & Delen</h3>
+                <h3 class="font-bold text-purple-300 text-sm">📤 Rapport delen</h3>
                 <ul class="list-disc list-inside text-gray-200 space-y-1">
-                    <li>Kies sessie of hele dag; delen via Share/WhatsApp met of zonder foto’s.</li>
-                    <li>QR-export toont wat ontvangers zullen bijtellen.</li>
+                    <li>Kies of je 1 sessie of de hele dag wil delen.</li>
+                    <li>Je kan delen met of zonder foto's.</li>
+                    <li>Gebruik de deelknop om te sturen via WhatsApp of een andere app.</li>
                 </ul>
             </div>
             <div class="bg-gray-800 p-4 rounded-xl border border-amber-500/30 space-y-3">
-                <h3 class="font-bold text-amber-300 text-sm">QR Import</h3>
+                <h3 class="font-bold text-amber-300 text-sm">🔳 QR import (samen tellen)</h3>
                 <ul class="list-disc list-inside text-gray-200 space-y-1">
-                    <li>Twee personen kunnen elk een deel van het traject tellen en achteraf de QR scannen om de aantallen samen te voegen.</li>
-                    <li>Alleen aantallen worden gedeeld; foto’s blijven lokaal.</li>
-                    <li>Kies “Bijtellen in” (dag of specifieke sessie) vóór het scannen.</li>
+                    <li>Tellen jullie met 2 personen? Dan kan je achteraf de aantallen samenvoegen met QR.</li>
+                    <li>Kies eerst waar je wil bijtellen: in de dag of in een sessie.</li>
+                    <li>Daarna scan je de QR-code van de andere teller.</li>
+                    <li>Alleen aantallen worden gedeeld. Foto's blijven op het toestel.</li>
                 </ul>
             </div>
             <div class="bg-gray-800 p-4 rounded-xl border border-red-500/30 space-y-3">
-                <h3 class="font-bold text-red-300 text-sm">Data & Offline</h3>
+                <h3 class="font-bold text-red-300 text-sm">💾 Data & offline</h3>
                 <ul class="list-disc list-inside text-gray-200 space-y-1">
-                    <li>Alles staat lokaal in de browser; PWA werkt offline na eerste gebruik.</li>
-                    <li>Instellingen → Databeheer: foto’s per dag of alles verwijderen.</li>
+                    <li>Je gegevens staan lokaal op je toestel (in de browser).</li>
+                    <li>Na de eerste keer werkt de app ook zonder internet.</li>
+                    <li>Via Instellingen kan je foto's van 1 dag of alles wissen.</li>
+                    <li>Let op: verwijderen kan niet ongedaan gemaakt worden.</li>
                 </ul>
+            </div>
+            <div class="bg-gray-800 p-4 rounded-xl border border-gray-600/40 space-y-2">
+                <h3 class="font-bold text-gray-200 text-sm">✅ Snelle start</h3>
+                <p class="text-gray-300 text-[12px]">1) Start sessie → 2) Tel dieren → 3) Voeg foto's toe → 4) Stop sessie → 5) Deel rapport.</p>
             </div>
             <p class="text-[11px] text-gray-500 text-center mt-2">App gemaakt door Jasper Cuvelier.</p>
         </section>
@@ -408,6 +424,47 @@
         document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
         document.getElementById('app-version-display').innerText = APP_VERSION;
         document.getElementById('pwa-status').onclick = () => alert('Groen bolletje = app volledig beschikbaar (ook offline). Rood = service worker fout, herlaad of check verbinding. Geel/grijs = bezig met laden of update.');
+        let deferredInstallPrompt = null;
+        const installBtns = Array.from(document.querySelectorAll('.install-app-btn'));
+        const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+        const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+
+        function setInstallButtonState(show) {
+            installBtns.forEach(btn => btn.classList.toggle('hidden', !show));
+        }
+
+        if(!isStandalone() && isIOS) {
+            setInstallButtonState(true);
+        }
+
+        window.addEventListener('beforeinstallprompt', ev => {
+            deferredInstallPrompt = ev;
+            if(!isStandalone()) setInstallButtonState(true);
+        });
+
+        window.addEventListener('appinstalled', () => {
+            deferredInstallPrompt = null;
+            setInstallButtonState(false);
+            showToast('App is geinstalleerd');
+        });
+
+        installBtns.forEach(installBtn => {
+            installBtn.onclick = async () => {
+                if(isStandalone()) return;
+                if(deferredInstallPrompt) {
+                    deferredInstallPrompt.prompt();
+                    try { await deferredInstallPrompt.userChoice; } catch(_) {}
+                    deferredInstallPrompt = null;
+                    setInstallButtonState(false);
+                    return;
+                }
+                if(isIOS) {
+                    alert('iPhone/iPad: open in Safari, tik op Deel en kies "Zet op beginscherm".');
+                } else {
+                    alert('Installeren is nog niet beschikbaar. Herlaad de pagina en wacht enkele seconden.');
+                }
+            };
+        });
 
         // --- SERVICE WORKER ---
         if ('serviceWorker' in navigator) {
@@ -635,6 +692,7 @@
         let storage = JSON.parse(localStorage.getItem(STORAGE_KEY));
         let activeDeterminationId = null;
         let activeDeterminationSessionId = null;
+        let detPhotoTargetId = null;
         let detCredits = null;
         // Migreer indien versie is opgehoogd zodat data behouden blijft
         if(!storage) {
@@ -1041,13 +1099,12 @@
                 det = sess.determinations.find(d => d.id === id);
             }
             if(!det) {
-                det = { id:`det_${Date.now()}`, answers: [], photos: [], node:'root', result:null, resultName:'', createdAt:Date.now(), updatedAt:Date.now() };
+                det = { id:`det_${Date.now()}`, answers: [], photos: [], node:'root', result:null, resultName:'', createdAt:Date.now(), updatedAt:Date.now(), pending:true };
                 sess.determinations.push(det);
                 detEditing = false;
             }
             activeDeterminationId = det.id;
             activeDeterminationSessionId = sess.id;
-            save();
             renderDeterminationUI();
             renderDeterminationList();
         }
@@ -1058,8 +1115,17 @@
             return sess.determinations.find(d => d.id === activeDeterminationId) || null;
         }
 
-        function triggerDetPhoto() {
-            const det = currentDetermination();
+        function triggerDetPhoto(detId = null) {
+            const day = ensureDay();
+            let det = null;
+            if(detId) {
+                const sessById = findSessionByDeterminationId(detId, day);
+                det = sessById?.determinations?.find(d => d.id === detId) || null;
+                detPhotoTargetId = det ? det.id : null;
+            } else {
+                det = currentDetermination();
+                detPhotoTargetId = det ? det.id : null;
+            }
             if(!det) { alert('Start eerst een determinatie.'); return; }
             if(det.photos.length >= 3) { alert('Max 3 foto’s.'); return; }
             const inp = document.getElementById('det-photo-input');
@@ -1069,8 +1135,13 @@
         function handleDetPhoto(ev) {
             const file = ev.target.files?.[0];
             if(!file) return;
-            const det = currentDetermination();
-            const sess = getDetSession();
+            const day = ensureDay();
+            const targetDetId = detPhotoTargetId || activeDeterminationId;
+            let sess = targetDetId ? findSessionByDeterminationId(targetDetId, day) : null;
+            if(!sess) sess = getDetSession();
+            let det = null;
+            if(targetDetId && sess) det = sess.determinations.find(d => d.id === targetDetId) || null;
+            if(!det) det = currentDetermination();
             
             if(!det || !sess) { alert('Geen actieve determinatie.'); return; }
             const reader = new FileReader();
@@ -1083,11 +1154,13 @@
                     c.getContext('2d').drawImage(img,0,0,c.width,c.height);
                     const data = c.toDataURL('image/jpeg', 0.7);
                     det.photos.push(data);
+                    det.updatedAt = Date.now();
                     // ook toevoegen aan sessie-foto's zodat delen werkt
                     sess.photos.push(data);
-                    save();
+                    if(!det.pending) save();
                     renderDeterminationUI();
                     renderDeterminationList();
+                    detPhotoTargetId = null;
                 };
                 img.src = r.target.result;
             };
@@ -1098,7 +1171,6 @@
             const det = currentDetermination();
             if(!det) return;
             det.photos.splice(idx,1);
-            save();
             renderDeterminationUI();
             renderDeterminationList();
         }
@@ -1135,6 +1207,7 @@ function answerDetermination(ans) {
             if(n && n.result) {
                 det.result = n.species;
                 det.resultName = n.name;
+                det.pending = false;
                 // sluit tijdelijke determinatie-sessie automatisch af na resultaat
                 const sess = getDetSession();
                 if(sess?.detTemp && !sess.end) {
@@ -1151,12 +1224,11 @@ function answerDetermination(ans) {
                     const name = cleanSpeciesName(det.resultName || det.result);
                     det.wikiThumb = null;
                     det.wikiLink = `https://nl.wikipedia.org/w/index.php?search=${encodeURIComponent(name)}`;
-                    save();
                     }
                     showDetModal(det);
                 }
+                save();
             }
-            save();
             renderDeterminationUI();
             renderDeterminationList();
         }
@@ -1179,10 +1251,10 @@ function answerDetermination(ans) {
             const applyBox = document.getElementById('det-apply');
             const warnBox = document.getElementById('det-warning');
             const progress = document.getElementById('det-progress');
+            const nextHint = document.getElementById('det-next-hint');
+            const answerButtons = document.getElementById('det-answer-buttons');
             const btnY = document.getElementById('det-btn-yes');
             const btnN = document.getElementById('det-btn-no');
-            const btnBack = document.getElementById('det-btn-back');
-            const btnReset = document.getElementById('det-btn-reset');
             const strip = document.getElementById('det-photo-strip');
             const qCard = document.getElementById('det-question-card');
             renderDetSessionOptions();
@@ -1200,8 +1272,10 @@ function answerDetermination(ans) {
                 if(progress) progress.innerText = '';
                 if(applyBox) applyBox.classList.add('hidden');
                 if(warnBox) warnBox.classList.add('hidden');
-                if(btnBack) btnBack.disabled = true;
-                if(btnReset) btnReset.classList.add('hidden');
+                if(answerButtons) answerButtons.classList.remove('hidden');
+                if(progress) progress.classList.remove('hidden');
+                if(resBox) resBox.classList.remove('hidden');
+                if(nextHint) nextHint.classList.add('hidden');
                 if(qCard) qCard.classList.add('hidden');
                 [btnY, btnN].forEach(b => b && (b.disabled = true));
                 return;
@@ -1210,12 +1284,8 @@ function answerDetermination(ans) {
             const nodeId = det.node || 'root';
             const node = nodeId === 'root' ? DET_TREE : DET_NODES[nodeId];
             const atResult = node && node.result;
-            if(qBox) qBox.innerText = atResult ? 'Determinatie afgerond' : (node?.question || 'Vraag onbekend');
-            if(resBox) {
-                resBox.innerHTML = det.resultName
-                    ? `<div class="det-result-banner">Determinatie: ${det.resultName}</div>`
-                    : '';
-            }
+            if(qBox) qBox.innerText = atResult ? (det.resultName || 'Onbekend') : (node?.question || 'Vraag onbekend');
+            if(resBox) resBox.innerHTML = '';
             const thumbBox = document.getElementById('det-thumb-box');
             const thumbImg = document.getElementById('det-thumb-img');
             const thumbCap = document.getElementById('det-thumb-cap');
@@ -1223,10 +1293,12 @@ function answerDetermination(ans) {
                 thumbBox.classList.add('hidden'); // geen afbeeldingen meer tonen
             }
             if(progress) progress.innerText = `Vragen beantwoord: ${det.answers.length}`;
-            if(btnBack) btnBack.disabled = det.answers.length === 0;
-            if(btnReset) btnReset.classList.toggle('hidden', det.answers.length === 0);
+            if(answerButtons) answerButtons.classList.toggle('hidden', !!det.result);
+            if(progress) progress.classList.toggle('hidden', !!det.result);
+            if(resBox) resBox.classList.toggle('hidden', !!det.result);
+            if(nextHint) nextHint.classList.toggle('hidden', !det.result);
             if(applyBox) applyBox.classList.toggle('hidden', !det.result);
-            if(warnBox) warnBox.classList.toggle('hidden', !(detEditing && det.result));
+            if(warnBox) warnBox.classList.add('hidden');
             [btnY, btnN].forEach(b => b && (b.disabled = !!det.result));
             // hintBox niet meer gebruikt; blijft verborgen
         }
@@ -1240,25 +1312,48 @@ function answerDetermination(ans) {
                 list.innerHTML = '<div class=\"text-gray-500\">Nog geen determinaties.</div>';
                 return;
             }
-            const sorted = sess.determinations.slice().sort((a,b)=>b.updatedAt - a.updatedAt);
-            const items = [];
-            sorted.forEach(d => {
+            const sorted = sess.determinations
+                .filter(d => !!d.result && !d.pending)
+                .slice()
+                .sort((a,b)=>b.updatedAt - a.updatedAt);
+            if(!sorted.length) {
+                list.innerHTML = '<div class=\"text-gray-500\">Nog geen afgewerkte determinaties.</div>';
+                return;
+            }
+            const cards = sorted.map(d => {
                 const photos = d.photos?.length || 0;
-                const res = d.resultName || 'Onbekend';
+                const label = d.resultName || 'Onbekend';
+                const answers = d.answers || [];
                 const ts = new Date(d.updatedAt).toLocaleString('nl-BE');
-                const openBtn = `<button class="bg-blue-700 text-white px-2 py-1 rounded text-[10px]" onclick="openDetermination('${d.id}')">Open</button>`;
-                const editBtn = `<button class="bg-gray-700 text-white px-2 py-1 rounded text-[10px]" onclick="beginDetermination('${d.id}')">Bewerk</button>`;
-                items.push(
-                    '<div class=\"bg-gray-900 border border-gray-700 rounded p-3 flex items-center justify-between gap-2\">' +
-                        '<div>' +
-                            `<div class=\"font-bold text-white\">${res}</div>` +
-                            `<div class=\"text-gray-400 text-[10px]\">${ts} · ${d.answers.length} vragen · ${photos} foto(s)</div>` +
+                const [rarityText, rarityCls] = rarityFor(d.result || '');
+                const ansBadges = answers.map((a,idx) =>
+                    `<span class="px-2 py-1 rounded-full text-[10px] font-bold ${a.answer==='yes' ? 'bg-emerald-900/60 text-emerald-200' : 'bg-red-900/60 text-red-200'}">${idx+1}. ${detAnswerLabel(a.answer)}</span>`
+                ).join(' ');
+                const ansList = answers.map((a,idx) =>
+                    `<div class="text-[11px] flex gap-2"><span class="text-gray-500">${idx+1}.</span><span class="flex-1 text-gray-200">${detQuestionText(a.node)}</span><span class="font-bold ${a.answer==='yes' ? 'text-emerald-400' : 'text-red-400'}">${detAnswerLabel(a.answer)}</span></div>`
+                ).join('');
+                const photoList = photos
+                    ? d.photos.map((p,i)=>`<div class="relative"><img src="${p}" class="h-16 w-16 object-cover rounded-lg border border-emerald-500/30 shadow" onclick="openDetPhoto('${d.id}', ${i})"><span class="absolute -top-1 -left-1 bg-black/70 text-[9px] px-1 rounded-full">${i+1}</span></div>`).join('')
+                    : '<div class="text-gray-500 text-[10px]">Geen foto\'s</div>';
+                return (
+                    '<div class="bg-gradient-to-br from-gray-900 via-gray-900 to-gray-800 border border-emerald-500/20 rounded-xl p-3 space-y-2 shadow-lg">' +
+                        '<div class="flex items-start justify-between gap-2">' +
+                            '<div>' +
+                                `<div class="font-bold text-white">${label}</div>` +
+                                `<div class="mt-1 inline-block px-2 py-1 rounded-full text-[10px] font-bold ${rarityCls}">${rarityText}</div>` +
+                            '</div>' +
+                            `<div class="text-[10px] text-gray-400">${ts}</div>` +
                         '</div>' +
-                        '<div class=\"flex gap-2\">' + openBtn + editBtn + '</div>' +
+                        (ansBadges ? `<div class="flex flex-wrap gap-1">${ansBadges}</div>` : '<div class="text-gray-500 text-[10px]">Geen antwoorden</div>') +
+                        (ansList ? `<div class="space-y-1 bg-black/20 border border-gray-800 rounded p-2">${ansList}</div>` : '') +
+                        `<div class="flex gap-2 flex-wrap">${photoList}</div>` +
+                        '<div class="flex gap-2 justify-end">' +
+                            `<button class="bg-emerald-700 text-white px-3 py-1 rounded text-[10px]" onclick="triggerDetPhoto('${d.id}')">Foto toevoegen</button>` +
+                        '</div>' +
                     '</div>'
                 );
             });
-            list.innerHTML = items.join('');
+            list.innerHTML = cards.join('');
         }
 
         
@@ -1471,12 +1566,14 @@ function openDetermination(id) {
             if(!box) return;
             const items = day.sessions.slice().sort((a,b)=>new Date(a.start)-new Date(b.start)).map(s => {
                 const total = sumCounts(s.counts);
+                const detCount = (s.determinations || []).filter(d => !!d.result && !d.pending).length;
+                const photoCount = (s.photos || []).length;
                 const weather = s.weather ? `<div class="text-[10px] text-sky-300">🌤️ ${s.weather.t}°C ${WMO[s.weather.c]||'OK'}</div>` : '';
                 return `<label class="bg-gray-900 p-3 rounded border border-gray-800 flex items-center gap-2 cursor-pointer">
                     <input type="checkbox" class="session-merge-checkbox accent-emerald-500" value="${s.id}">
                     <div class="flex-1">
                         <div class="font-bold text-gray-100">${fmtTime(s.start)} - ${s.end ? fmtTime(s.end) : 'lopend'}</div>
-                        <div class="text-gray-400 text-[10px]">${total} stuks</div>
+                        <div class="text-gray-400 text-[10px]">${total} stuks · ${detCount} determinaties · ${photoCount} foto's</div>
                         ${weather}
                     </div>
                     <button class="bg-red-700 px-2 py-1 rounded text-[12px]" onclick="deleteSession('${s.id}','${dayKey}')" title="Verwijder sessie">🗑️</button>
@@ -1544,6 +1641,9 @@ function openDetermination(id) {
             const masterId = ids[0];
             const master = day.sessions.find(s => s.id === masterId);
             const others = day.sessions.filter(s => ids.includes(s.id) && s.id !== masterId);
+            const removedDets = others.reduce((n,s)=>n + ((s.determinations || []).filter(d => !!d.result && !d.pending).length), 0);
+            const removedPhotos = others.reduce((n,s)=>n + ((s.photos || []).length), 0);
+            if(!confirm(`Opgelet: bij het samenvoegen worden ${others.length} sessies verwijderd. Ook ${removedDets} determinaties en ${removedPhotos} foto's uit die sessies gaan verloren.`)) return;
             others.forEach(s => {
                 for(const k in s.counts) master.counts[k] = (master.counts[k]||0) + s.counts[k];
                 if(s.photos && s.photos.length) {
@@ -1585,6 +1685,12 @@ function openDetermination(id) {
 
         function deleteSession(id, dayKey = picker.value) {
             const day = ensureDay(dayKey);
+            const target = day.sessions.find(s => s.id === id);
+            if(!target) return;
+            const detCount = (target.determinations || []).filter(d => !!d.result && !d.pending).length;
+            const photoCount = (target.photos || []).length;
+            const ok = confirm(`Sessie verwijderen? Opgelet: ook ${detCount} determinaties en ${photoCount} foto's in deze sessie gaan verloren.`);
+            if(!ok) return;
             day.sessions = day.sessions.filter(s => s.id !== id);
             recalcDayFromSessions(day);
             if(activeSessionId === id) activeSessionId = null;
@@ -1769,11 +1875,12 @@ function openDetermination(id) {
                 const dets = (reportMode === 'session' && session)
                     ? (session.determinations || [])
                     : (data.sessions || []).flatMap(s => s.determinations || []);
-                if(!dets.length) {
+                const completedDets = dets.filter(d => !!d.result && !d.pending);
+                if(!completedDets.length) {
                     detBox.innerHTML = '<div class=\"text-gray-500\">Geen determinaties in deze selectie.</div>';
                 } else {
                     const parts = [];
-                    dets.slice().sort((a,b)=>b.updatedAt-a.updatedAt).forEach(det => {
+                    completedDets.slice().sort((a,b)=>b.updatedAt-a.updatedAt).forEach(det => {
                         const photos = det.photos?.length || 0;
                         const label = det.resultName || 'Onbekend';
                         const answers = det.answers || [];
@@ -1860,16 +1967,20 @@ function openDetermination(id) {
             let dets = (reportMode === 'session' && session)
                 ? (session?.determinations || [])
                 : (day.sessions || []).flatMap(s => s.determinations || []);
+            dets = dets.filter(d => !!d.result && !d.pending);
             const selected = Array.from(document.querySelectorAll('#report-dets .share-det-checkbox:checked')).map(cb => cb.value);
             if(selected.length) dets = dets.filter(d => selected.includes(d.id));
             if(!dets.length) { alert('Geen determinaties in deze selectie.'); return; }
             const lines = dets.map(d => {
-                const ans = (d.answers||[]).map((a,idx)=>`${idx+1}. ${detQuestionText(a.node)} -> ${detAnswerLabel(a.answer)}`).join(' | ');
+                const ansLines = (d.answers || []).map((a,idx) =>
+                    `  ${idx+1}. ${detQuestionText(a.node)} -> ${detAnswerLabel(a.answer)}`
+                ).join('\n');
                 const ts = new Date(d.updatedAt).toLocaleString('nl-BE');
                 const fotos = (d.photos||[]).length;
                 return `🔎 ${d.resultName || 'Onbekend'}
 • Tijd: ${ts}
-• Antwoorden: ${ans || 'n.v.t.'}
+• Antwoorden:
+${ansLines || '  n.v.t.'}
 • Foto's: ${fotos}`;
             });
             const text = `🐸 Determinaties ${picker.value} (${reportMode==='session' && session ? 'sessie' : 'dag'})
@@ -1992,6 +2103,9 @@ ${lines.join('\n\n')}`;
             const t = document.getElementById('toast'); t.innerText = m; t.classList.remove('hidden');
             setTimeout(() => t.style.opacity = '1', 10);
             setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.classList.add('hidden'), 500); }, 2000);
+        }
+        if(window.__cdnFallbackUsed) {
+            console.warn('CDN fallback actief: plaats lokale libs in ./vendor voor vaste versies/offline.');
         }
 
         function showDetModal(det) {

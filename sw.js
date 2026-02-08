@@ -13,9 +13,9 @@ const URLS = [
   './icons/ui/male.png',
   './icons/ui/female.png',
   './icons/ui/unk.png',
-  'https://cdn.tailwindcss.com',
-  'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js',
-  'https://unpkg.com/html5-qrcode'
+  './vendor/tailwindcss.cdn.js',
+  './vendor/QRCode.js',
+  './vendor/html5-qrcode.js'
 ];
 
 self.addEventListener('install', e => {
