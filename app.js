@@ -1,7 +1,47 @@
-
-        document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
+document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
         document.getElementById('app-version-display').innerText = APP_VERSION;
         document.getElementById('pwa-status').onclick = () => alert('Groen bolletje = app volledig beschikbaar (ook offline). Rood = service worker fout, herlaad of check verbinding. Geel/grijs = bezig met laden of update.');
+        let deferredInstallPrompt = null;
+        const installBtns = Array.from(document.querySelectorAll('.install-app-btn'));
+        const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+        const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+
+        function setInstallButtonState(show) {
+            installBtns.forEach(btn => btn.classList.toggle('hidden', !show));
+        }
+
+        if(!isStandalone() && isIOS) {
+            setInstallButtonState(true);
+        }
+
+        window.addEventListener('beforeinstallprompt', ev => {
+            deferredInstallPrompt = ev;
+            if(!isStandalone()) setInstallButtonState(true);
+        });
+
+        window.addEventListener('appinstalled', () => {
+            deferredInstallPrompt = null;
+            setInstallButtonState(false);
+            showToast('App is geinstalleerd');
+        });
+
+        installBtns.forEach(installBtn => {
+            installBtn.onclick = async () => {
+                if(isStandalone()) return;
+                if(deferredInstallPrompt) {
+                    deferredInstallPrompt.prompt();
+                    try { await deferredInstallPrompt.userChoice; } catch(_) {}
+                    deferredInstallPrompt = null;
+                    setInstallButtonState(false);
+                    return;
+                }
+                if(isIOS) {
+                    alert('iPhone/iPad: open in Safari, tik op Deel en kies "Zet op beginscherm".');
+                } else {
+                    alert('Installeren is nog niet beschikbaar. Herlaad de pagina en wacht enkele seconden.');
+                }
+            };
+        });
 
         // --- SERVICE WORKER ---
         if ('serviceWorker' in navigator) {
@@ -160,6 +200,14 @@
         }
 
         function cleanSpeciesName(n) { return n ? n.split('(')[0].trim() : ''; }
+        function toSlug(n) {
+            return cleanSpeciesName(n || '')
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, '-')
+                .replace(/^-+|-+$/g, '');
+        }
 
                 // Beslisboom (geactualiseerd op basis van veldkaart)
 
@@ -187,20 +235,20 @@
             frog_hechtschijf: { id:'frog_hechtschijf', question:'Zijn er hechtschijfjes aan de tenen?', yes:'res_boomkikker', no:'res_groenekikker' },
 
             // Resultaten
-            res_vuurs: { result:true, species:'vuurs', name:'Vuursalamander (zeldzaam)' },
-            res_alpen: { result:true, species:'alpen', name:'Alpenwatersalamander (algemeen)' },
-            res_vin: { result:true, species:'vin', name:'Vinpootsalamander (algemeen)' },
-            res_kam: { result:true, species:'kam', name:'Kamsalamander (zeldzaam)' },
-            res_kleine: { result:true, species:'kleine', name:'Kleine watersalamander (algemeen)' },
+            res_vuurs: { result:true, species:'vuurs', name:'Vuursalamander' },
+            res_alpen: { result:true, species:'alpen', name:'Alpenwatersalamander' },
+            res_vin: { result:true, species:'vin', name:'Vinpootsalamander' },
+            res_kam: { result:true, species:'kam', name:'Kamsalamander' },
+            res_kleine: { result:true, species:'kleine', name:'Kleine watersalamander' },
 
-            res_vroed: { result:true, species:'vroed', name:'Vroedmeesterpad (zeer zeldzaam)' },
-            res_rugstreep: { result:true, species:'rugstreep', name:'Rugstreeppad (zeldzaam)' },
-            res_pad: { result:true, species:'pad', name:'Gewone pad (algemeen)' },
-            res_knoflook: { result:true, species:'knoflook', name:'Knoflookpad (zeer zeldzaam)' },
-            res_heikikker: { result:true, species:'heikikker', name:'Heikikker (zeldzaam)' },
-            res_bruine: { result:true, species:'br_kikker', name:'Bruine kikker (algemeen)' },
-            res_boomkikker: { result:true, species:'boomkikker', name:'Boomkikker (zeer zeldzaam)' },
-            res_groenekikker: { result:true, species:'groene', name:'Groene kikker (algemeen*)' }
+            res_vroed: { result:true, species:'vroed', name:'Vroedmeesterpad' },
+            res_rugstreep: { result:true, species:'rugstreep', name:'Rugstreeppad' },
+            res_pad: { result:true, species:'pad', name:'Gewone pad' },
+            res_knoflook: { result:true, species:'knoflook', name:'Knoflookpad' },
+            res_heikikker: { result:true, species:'heikikker', name:'Heikikker' },
+            res_bruine: { result:true, species:'br_kikker', name:'Bruine kikker' },
+            res_boomkikker: { result:true, species:'boomkikker', name:'Boomkikker' },
+            res_groenekikker: { result:true, species:'groene', name:'Groene kikker' }
         };
 
         // helpers voor determinatie-rapporten
@@ -213,27 +261,43 @@
 
         const WMO = { 0: "Helder", 1: "Licht bewolkt", 2:"Half bewolkt", 3: "Bewolkt", 61: "Regen", 80: "Buien" };
 
-        const STORAGE_KEY = `paddentrek_${APP_VERSION}`;
+        // Bewaar data onder vaste key; schrijf ook naar versie-key voor backward compat.
+        const STORAGE_KEY = 'paddentrek_data';
+        const STORAGE_KEY_VERSIONED = `paddentrek_${APP_VERSION}`;
         let reportMode = 'session'; // 'session' | 'day'
         let photoTargetSession = null;
         let viewedSessionId = '';
         let sessionScanner = null;
-        let storage = JSON.parse(localStorage.getItem(STORAGE_KEY));
+        let storage = JSON.parse(localStorage.getItem(STORAGE_KEY)) || JSON.parse(localStorage.getItem(STORAGE_KEY_VERSIONED));
         let activeDeterminationId = null;
+        let activeDeterminationSessionId = null;
+        let detPhotoTargetId = null;
         let detCredits = null;
         // Migreer indien versie is opgehoogd zodat data behouden blijft
         if(!storage) {
             const prevKey = Object.keys(localStorage)
-                .filter(k => k.startsWith('paddentrek_') && k !== STORAGE_KEY)
+                .filter(k => k.startsWith('paddentrek_'))
                 .sort()
                 .pop();
             storage = prevKey ? (JSON.parse(localStorage.getItem(prevKey)) || {}) : {};
             localStorage.setItem(STORAGE_KEY, JSON.stringify(storage));
+            localStorage.setItem(STORAGE_KEY_VERSIONED, JSON.stringify(storage));
+        } else {
+            // schrijf onder beide keys om oude builds niet te laten “wissen”
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(storage));
+            localStorage.setItem(STORAGE_KEY_VERSIONED, JSON.stringify(storage));
         }
+        migrateLegacyDays();
         let activeSessionId = null;
         // Schema v2: per day stores counts, custom, photos, notes, weather, sessions
         // session object: { id, start, end?, counts: {}, notes: '' }
         let lastAction = null;
+        let tellingTimer = null;
+        let tellingStartTs = null;
+        let inactivityPromptTimer = null;
+        let inactivityAutoTimer = null;
+        const INACTIVITY_MS = 60 * 60 * 1000; // 1 uur
+        const INACTIVITY_AUTO_MS = 10 * 60 * 1000; // 10 minuten extra
         const picker = document.getElementById('datePicker');
 
         // Gebruik lokale datum (niet UTC) zodat dag juist blijft rond middernacht en tijdzones
@@ -254,6 +318,39 @@
         }
 
         setDateInputsToToday();
+
+        function migrateLegacyDays() {
+            let changed = false;
+            for(const d in storage) {
+                const day = ensureDay(d);
+                const hasSessions = Array.isArray(day.sessions) && day.sessions.length > 0;
+                if(hasSessions) continue;
+                const counts = day.counts || {};
+                const hasCounts = Object.values(counts).some(v => (v||0) > 0);
+                const hasPhotos = (day.photos || []).length > 0;
+                if(!hasCounts && !hasPhotos) continue;
+                const startIso = new Date(`${d}T00:00:00`).toISOString();
+                const endIso = new Date(`${d}T23:59:00`).toISOString();
+                day.sessions = [{
+                    id: `import_${d}`,
+                    start: startIso,
+                    end: endIso,
+                    counts: { ...counts },
+                    notes: day.notes || '',
+                    weather: day.weather || null,
+                    photos: day.photos || [],
+                    routeName: day.routeName || '',
+                    determinations: [],
+                    detTemp: false
+                }];
+                changed = true;
+            }
+            if(changed) {
+                const str = JSON.stringify(storage);
+                localStorage.setItem(STORAGE_KEY, str);
+                localStorage.setItem(STORAGE_KEY_VERSIONED, str);
+            }
+        }
 
         // Zorgt dat een dag-object altijd alle sleutels heeft voordat we ermee werken
         function ensureDay(d = picker.value) {
@@ -308,7 +405,7 @@
             viewedSessionId = newSession.id;
             setDateInputsToToday();
             save();
-            showToast('Sessie gesplitst om middernacht');
+            showToast('Telling gesplitst om middernacht');
         }
 
         function migrateOldSchema() {
@@ -415,7 +512,7 @@
             const day = ensureDay(d);
             let active = getActiveSession(day);
             if(!active) {
-                startSession(true, false, d, false); // auto-start zonder redirect
+                startSession(true, false, d, false, false, false); // auto-start zonder redirect of modal
                 active = getActiveSession(day);
             }
             day.counts[key] = (day.counts[key] || 0) + val;
@@ -426,6 +523,7 @@
                 if(active.counts[key] < 0) active.counts[key] = 0;
             }
             save(); render();
+            recordUserAction();
             if(val > 0) {
                 vibe(22, true);
                 if(key.includes('_p_l')) celebrate(e, true);
@@ -434,7 +532,11 @@
             }
         }
 
-        function save() { localStorage.setItem(STORAGE_KEY, JSON.stringify(storage)); }
+        function save() {
+            const str = JSON.stringify(storage);
+            localStorage.setItem(STORAGE_KEY, str);
+            localStorage.setItem(STORAGE_KEY_VERSIONED, str);
+        }
 
         // --- DEV STORAGE INSPECTOR ---
         function formatBytes(b) {
@@ -517,11 +619,12 @@
                 const total = sumCounts(s.counts);
                 const weather = s.weather ? `${s.weather.t}°C • ${WMO[s.weather.c] || 'OK'}` : 'Onbekend';
                 const photos = s.photos || [];
+                const label = sessionDisplayLabel(s, day);
                 return `
                     <div class="bg-gray-800 p-4 rounded-xl border border-gray-700 space-y-3">
                         <div class="flex justify-between items-start gap-2">
                             <div>
-                                <div class="text-xs text-gray-400">${fmtTime(s.start)} - ${s.end ? fmtTime(s.end) : 'lopend'}</div>
+                                <div class="text-xs text-gray-400">${label}</div>
                                 <div class="text-lg font-bold text-white">${total} stuks</div>
                             </div>
                             <button class="bg-purple-700 px-2 py-1 rounded text-[10px]" onclick="triggerPhoto('${s.id}')">📸</button>
@@ -565,10 +668,18 @@
         // --- DETERMINATIE FLOW ---
         function getDetSession() {
             const day = ensureDay();
-            const select = document.getElementById('det-session-select');
-            const chosen = select ? select.value : '';
-            if(chosen) return day.sessions.find(s => s.id === chosen) || null;
-            return getActiveSession(day) || day.sessions[day.sessions.length-1] || null;
+            if(activeDeterminationSessionId) {
+                const sessByState = day.sessions.find(s => s.id === activeDeterminationSessionId);
+                if(sessByState) return sessByState;
+            }
+            if(activeDeterminationId) {
+                const sessByDet = findSessionByDeterminationId(activeDeterminationId, day);
+                if(sessByDet) {
+                    activeDeterminationSessionId = sessByDet.id;
+                    return sessByDet;
+                }
+            }
+            return getActiveSession(day) || getLatestSession(day) || null;
         }
 
         function renderDetSessionOptions() {
@@ -581,23 +692,36 @@
             if(!sel) return;
             const sessions = day.sessions.slice().sort((a,b)=>new Date(a.start)-new Date(b.start));
             sel.innerHTML = sessions.map(s => {
-                const l = `${fmtTime(s.start)} ${s.end ? '– '+fmtTime(s.end) : '(live)'}`;
+                const l = sessionDisplayLabel(s, day);
                 return `<option value="${s.id}">${l}</option>`;
             }).join('') || '<option value=\"\">Geen sessies</option>';
-            if(!sel.value && sessions.length) sel.value = sessions[sessions.length-1].id;
             const sess = getDetSession();
             if(sess && !sess.determinations) sess.determinations = [];
-            if(!sess) activeDeterminationId = null;
-            if(label) label.innerText = sess ? sel.selectedOptions[0].textContent : 'Geen sessie';
-            const hasActive = !!sessions.find(s => !s.end);
-            if(btnStart) btnStart.classList.toggle('hidden', hasActive);
+            if(!sess) {
+                activeDeterminationId = null;
+                activeDeterminationSessionId = null;
+            }
+            if(sess) sel.value = sess.id;
+            if(label) label.innerText = sess ? sessionDisplayLabel(sess, day) : 'Geen telling';
+            const hasActive = !!getActiveSession(day);
+            if(btnStart) btnStart.classList.add('hidden');
             if(btnLoose) btnLoose.classList.toggle('hidden', hasActive);
             if(btnNew) btnNew.classList.toggle('hidden', !hasActive);
         }
 
         function beginDetermination(id = null) {
             const day = ensureDay();
-            const sess = getDetSession();
+            let sess = null;
+            if(id) {
+                sess = findSessionByDeterminationId(id, day);
+            } else {
+                sess = getActiveSession(day);
+                if(!sess) {
+                    // Zonder actieve sessie: maak tijdelijke sessie voor losse determinatie.
+                    startSession(true, false, picker.value, false, true);
+                    sess = getActiveSession(ensureDay());
+                }
+            }
             if(!sess) { alert('Start eerst een sessie.'); return; }
             let det = null;
             detEditing = !!id;
@@ -605,12 +729,12 @@
                 det = sess.determinations.find(d => d.id === id);
             }
             if(!det) {
-                det = { id:`det_${Date.now()}`, answers: [], photos: [], node:'root', result:null, resultName:'', createdAt:Date.now(), updatedAt:Date.now() };
+                det = { id:`det_${Date.now()}`, answers: [], photos: [], node:'root', result:null, resultName:'', createdAt:Date.now(), updatedAt:Date.now(), pending:true };
                 sess.determinations.push(det);
                 detEditing = false;
             }
             activeDeterminationId = det.id;
-            save();
+            activeDeterminationSessionId = sess.id;
             renderDeterminationUI();
             renderDeterminationList();
         }
@@ -621,8 +745,17 @@
             return sess.determinations.find(d => d.id === activeDeterminationId) || null;
         }
 
-        function triggerDetPhoto() {
-            const det = currentDetermination();
+        function triggerDetPhoto(detId = null) {
+            const day = ensureDay();
+            let det = null;
+            if(detId) {
+                const sessById = findSessionByDeterminationId(detId, day);
+                det = sessById?.determinations?.find(d => d.id === detId) || null;
+                detPhotoTargetId = det ? det.id : null;
+            } else {
+                det = currentDetermination();
+                detPhotoTargetId = det ? det.id : null;
+            }
             if(!det) { alert('Start eerst een determinatie.'); return; }
             if(det.photos.length >= 3) { alert('Max 3 foto’s.'); return; }
             const inp = document.getElementById('det-photo-input');
@@ -632,7 +765,13 @@
         function handleDetPhoto(ev) {
             const file = ev.target.files?.[0];
             if(!file) return;
-            const det = currentDetermination();
+            const day = ensureDay();
+            const targetDetId = detPhotoTargetId || activeDeterminationId;
+            let sess = targetDetId ? findSessionByDeterminationId(targetDetId, day) : null;
+            if(!sess) sess = getDetSession();
+            let det = null;
+            if(targetDetId && sess) det = sess.determinations.find(d => d.id === targetDetId) || null;
+            if(!det) det = currentDetermination();
             
             if(!det || !sess) { alert('Geen actieve determinatie.'); return; }
             const reader = new FileReader();
@@ -645,11 +784,14 @@
                     c.getContext('2d').drawImage(img,0,0,c.width,c.height);
                     const data = c.toDataURL('image/jpeg', 0.7);
                     det.photos.push(data);
+                    det.updatedAt = Date.now();
                     // ook toevoegen aan sessie-foto's zodat delen werkt
                     sess.photos.push(data);
-                    save();
+                    if(!det.pending) save();
                     renderDeterminationUI();
                     renderDeterminationList();
+                    recordUserAction();
+                    detPhotoTargetId = null;
                 };
                 img.src = r.target.result;
             };
@@ -660,7 +802,6 @@
             const det = currentDetermination();
             if(!det) return;
             det.photos.splice(idx,1);
-            save();
             renderDeterminationUI();
             renderDeterminationList();
         }
@@ -697,6 +838,7 @@ function answerDetermination(ans) {
             if(n && n.result) {
                 det.result = n.species;
                 det.resultName = n.name;
+                det.pending = false;
                 // sluit tijdelijke determinatie-sessie automatisch af na resultaat
                 const sess = getDetSession();
                 if(sess?.detTemp && !sess.end) {
@@ -713,12 +855,11 @@ function answerDetermination(ans) {
                     const name = cleanSpeciesName(det.resultName || det.result);
                     det.wikiThumb = null;
                     det.wikiLink = `https://nl.wikipedia.org/w/index.php?search=${encodeURIComponent(name)}`;
-                    save();
                     }
                     showDetModal(det);
                 }
+                save();
             }
-            save();
             renderDeterminationUI();
             renderDeterminationList();
         }
@@ -741,10 +882,10 @@ function answerDetermination(ans) {
             const applyBox = document.getElementById('det-apply');
             const warnBox = document.getElementById('det-warning');
             const progress = document.getElementById('det-progress');
+            const nextHint = document.getElementById('det-next-hint');
+            const answerButtons = document.getElementById('det-answer-buttons');
             const btnY = document.getElementById('det-btn-yes');
             const btnN = document.getElementById('det-btn-no');
-            const btnBack = document.getElementById('det-btn-back');
-            const btnReset = document.getElementById('det-btn-reset');
             const strip = document.getElementById('det-photo-strip');
             const qCard = document.getElementById('det-question-card');
             renderDetSessionOptions();
@@ -762,8 +903,10 @@ function answerDetermination(ans) {
                 if(progress) progress.innerText = '';
                 if(applyBox) applyBox.classList.add('hidden');
                 if(warnBox) warnBox.classList.add('hidden');
-                if(btnBack) btnBack.disabled = true;
-                if(btnReset) btnReset.classList.add('hidden');
+                if(answerButtons) answerButtons.classList.remove('hidden');
+                if(progress) progress.classList.remove('hidden');
+                if(resBox) resBox.classList.remove('hidden');
+                if(nextHint) nextHint.classList.add('hidden');
                 if(qCard) qCard.classList.add('hidden');
                 [btnY, btnN].forEach(b => b && (b.disabled = true));
                 return;
@@ -772,12 +915,8 @@ function answerDetermination(ans) {
             const nodeId = det.node || 'root';
             const node = nodeId === 'root' ? DET_TREE : DET_NODES[nodeId];
             const atResult = node && node.result;
-            if(qBox) qBox.innerText = atResult ? 'Determinatie afgerond' : (node?.question || 'Vraag onbekend');
-            if(resBox) {
-                resBox.innerHTML = det.resultName
-                    ? `<div class="det-result-banner">Determinatie: ${det.resultName}</div>`
-                    : '';
-            }
+            if(qBox) qBox.innerText = atResult ? (det.resultName || 'Onbekend') : (node?.question || 'Vraag onbekend');
+            if(resBox) resBox.innerHTML = '';
             const thumbBox = document.getElementById('det-thumb-box');
             const thumbImg = document.getElementById('det-thumb-img');
             const thumbCap = document.getElementById('det-thumb-cap');
@@ -785,10 +924,12 @@ function answerDetermination(ans) {
                 thumbBox.classList.add('hidden'); // geen afbeeldingen meer tonen
             }
             if(progress) progress.innerText = `Vragen beantwoord: ${det.answers.length}`;
-            if(btnBack) btnBack.disabled = det.answers.length === 0;
-            if(btnReset) btnReset.classList.toggle('hidden', det.answers.length === 0);
+            if(answerButtons) answerButtons.classList.toggle('hidden', !!det.result);
+            if(progress) progress.classList.toggle('hidden', !!det.result);
+            if(resBox) resBox.classList.toggle('hidden', !!det.result);
+            if(nextHint) nextHint.classList.toggle('hidden', !det.result);
             if(applyBox) applyBox.classList.toggle('hidden', !det.result);
-            if(warnBox) warnBox.classList.toggle('hidden', !(detEditing && det.result));
+            if(warnBox) warnBox.classList.add('hidden');
             [btnY, btnN].forEach(b => b && (b.disabled = !!det.result));
             // hintBox niet meer gebruikt; blijft verborgen
         }
@@ -796,43 +937,69 @@ function answerDetermination(ans) {
         function renderDeterminationList() {
             const list = document.getElementById('det-list');
             if(!list) return;
+            const sess = getDetSession();
             
             if(!sess || !sess.determinations?.length) {
                 list.innerHTML = '<div class=\"text-gray-500\">Nog geen determinaties.</div>';
                 return;
             }
-            const sorted = sess.determinations.slice().sort((a,b)=>b.updatedAt - a.updatedAt);
-            const items = [];
-            sorted.forEach(d => {
+            const sorted = sess.determinations
+                .filter(d => !!d.result && !d.pending)
+                .slice()
+                .sort((a,b)=>b.updatedAt - a.updatedAt);
+            if(!sorted.length) {
+                list.innerHTML = '<div class=\"text-gray-500\">Nog geen afgewerkte determinaties.</div>';
+                return;
+            }
+            const cards = sorted.map(d => {
                 const photos = d.photos?.length || 0;
-                const res = d.resultName || 'Onbekend';
+                const label = d.resultName || 'Onbekend';
+                const answers = d.answers || [];
                 const ts = new Date(d.updatedAt).toLocaleString('nl-BE');
-                const openBtn = `<button class="bg-blue-700 text-white px-2 py-1 rounded text-[10px]" onclick="openDetermination('${d.id}')">Open</button>`;
-                const editBtn = `<button class="bg-gray-700 text-white px-2 py-1 rounded text-[10px]" onclick="beginDetermination('${d.id}')">Bewerk</button>`;
-                items.push(
-                    '<div class=\"bg-gray-900 border border-gray-700 rounded p-3 flex items-center justify-between gap-2\">' +
-                        '<div>' +
-                            `<div class=\"font-bold text-white\">${res}</div>` +
-                            `<div class=\"text-gray-400 text-[10px]\">${ts} · ${d.answers.length} vragen · ${photos} foto(s)</div>` +
+                const [rarityText, rarityCls] = rarityFor(d.result || '');
+                const ansBadges = answers.map((a,idx) =>
+                    `<span class="px-2 py-1 rounded-full text-[10px] font-bold ${a.answer==='yes' ? 'bg-emerald-900/60 text-emerald-200' : 'bg-red-900/60 text-red-200'}">${idx+1}. ${detAnswerLabel(a.answer)}</span>`
+                ).join(' ');
+                const ansList = answers.map((a,idx) =>
+                    `<div class="text-[11px] flex gap-2"><span class="text-gray-500">${idx+1}.</span><span class="flex-1 text-gray-200">${detQuestionText(a.node)}</span><span class="font-bold ${a.answer==='yes' ? 'text-emerald-400' : 'text-red-400'}">${detAnswerLabel(a.answer)}</span></div>`
+                ).join('');
+                const photoList = photos
+                    ? d.photos.map((p,i)=>`<div class="relative"><img src="${p}" class="h-16 w-16 object-cover rounded-lg border border-emerald-500/30 shadow" onclick="openDetPhoto('${d.id}', ${i})"><span class="absolute -top-1 -left-1 bg-black/70 text-[9px] px-1 rounded-full">${i+1}</span></div>`).join('')
+                    : '<div class="text-gray-500 text-[10px]">Geen foto\'s</div>';
+                return (
+                    '<div class="bg-gradient-to-br from-gray-900 via-gray-900 to-gray-800 border border-emerald-500/20 rounded-xl p-3 space-y-2 shadow-lg">' +
+                        '<div class="flex items-start justify-between gap-2">' +
+                            '<div>' +
+                                `<div class="font-bold text-white">${label}</div>` +
+                                `<div class="mt-1 inline-block px-2 py-1 rounded-full text-[10px] font-bold ${rarityCls}">${rarityText}</div>` +
+                            '</div>' +
+                            `<div class="text-[10px] text-gray-400">${ts}</div>` +
                         '</div>' +
-                        '<div class=\"flex gap-2\">' + openBtn + editBtn + '</div>' +
+                        (ansBadges ? `<div class="flex flex-wrap gap-1">${ansBadges}</div>` : '<div class="text-gray-500 text-[10px]">Geen antwoorden</div>') +
+                        (ansList ? `<div class="space-y-1 bg-black/20 border border-gray-800 rounded p-2">${ansList}</div>` : '') +
+                        `<div class="flex gap-2 flex-wrap">${photoList}</div>` +
+                        '<div class="flex gap-2 justify-end">' +
+                            `<button class="bg-emerald-700 text-white px-3 py-1 rounded text-[10px]" onclick="triggerDetPhoto('${d.id}')">Foto toevoegen</button>` +
+                        '</div>' +
                     '</div>'
                 );
             });
-            list.innerHTML = items.join('');
+            list.innerHTML = cards.join('');
         }
 
         
 
         function startLooseDetermination() {
             // start een tijdelijke sessie enkel voor determinatie
-            if(getDetSession()) { beginDetermination(); return; }
-            startSession(true, false, picker.value, false, true);
+            const day = ensureDay();
+            if(!getActiveSession(day)) startSession(true, false, picker.value, false, true);
             beginDetermination();
             renderDetSessionOptions();
         }
 function openDetermination(id) {
             activeDeterminationId = id;
+            const sess = findSessionByDeterminationId(id, ensureDay());
+            activeDeterminationSessionId = sess ? sess.id : null;
             detEditing = true;
             renderDeterminationUI();
             renderDeterminationList();
@@ -850,7 +1017,7 @@ function openDetermination(id) {
             if(!inc) return;
             day.counts[key] = (day.counts[key]||0) + 1;
             sess.counts[key] = (sess.counts[key]||0) + 1;
-            save(); render(); showToast('Determinatie toegevoegd aan teller');
+            save(); render(); recordUserAction(); showToast('Determinatie toegevoegd aan teller');
         }
 
         function ensureSpeciesExists(id, name, day) {
@@ -876,6 +1043,7 @@ function openDetermination(id) {
             if(recBtn) recBtn.classList.toggle('hidden', !active);
             buildViewedSessionOptions();
             buildRouteSuggestions();
+            syncTellingUI();
         }
 
         function buildViewedSessionOptions() {
@@ -884,7 +1052,7 @@ function openDetermination(id) {
             const day = ensureDay();
             const sessions = day.sessions.slice().sort((a,b)=>new Date(a.start)-new Date(b.start));
             const opts = sessions.map(s => {
-                const label = `${fmtTime(s.start)} ${s.end ? '– '+fmtTime(s.end) : '(live)'}`;
+                const label = sessionDisplayLabel(s, day);
                 return `<option value="${s.id}" ${s.id === (viewedSessionId || '') ? 'selected' : ''}>${label}</option>`;
             }).join('') || '<option value=\"\">Geen sessies</option>';
             sels.forEach(sel => {
@@ -1006,7 +1174,21 @@ function openDetermination(id) {
         }
 
         function getActiveSession(day) {
-            return day.sessions.find(s => s.id === activeSessionId && !s.end) || day.sessions.find(s => !s.end);
+            const running = (day.sessions || [])
+                .filter(s => !s.end)
+                .sort((a,b)=>new Date(b.start) - new Date(a.start));
+            return running[0] || null;
+        }
+
+        function getLatestSession(day) {
+            const sessions = (day.sessions || []).slice()
+                .sort((a,b)=>new Date(b.start) - new Date(a.start));
+            return sessions[0] || null;
+        }
+
+        function findSessionByDeterminationId(detId, day = ensureDay()) {
+            if(!detId) return null;
+            return (day.sessions || []).find(s => (s.determinations || []).some(d => d.id === detId)) || null;
         }
 
         function renderSessionAdmin() {
@@ -1016,12 +1198,14 @@ function openDetermination(id) {
             if(!box) return;
             const items = day.sessions.slice().sort((a,b)=>new Date(a.start)-new Date(b.start)).map(s => {
                 const total = sumCounts(s.counts);
+                const detCount = (s.determinations || []).filter(d => !!d.result && !d.pending).length;
+                const photoCount = (s.photos || []).length;
                 const weather = s.weather ? `<div class="text-[10px] text-sky-300">🌤️ ${s.weather.t}°C ${WMO[s.weather.c]||'OK'}</div>` : '';
                 return `<label class="bg-gray-900 p-3 rounded border border-gray-800 flex items-center gap-2 cursor-pointer">
                     <input type="checkbox" class="session-merge-checkbox accent-emerald-500" value="${s.id}">
                     <div class="flex-1">
                         <div class="font-bold text-gray-100">${fmtTime(s.start)} - ${s.end ? fmtTime(s.end) : 'lopend'}</div>
-                        <div class="text-gray-400 text-[10px]">${total} stuks</div>
+                        <div class="text-gray-400 text-[10px]">${total} stuks · ${detCount} determinaties · ${photoCount} foto's</div>
                         ${weather}
                     </div>
                     <button class="bg-red-700 px-2 py-1 rounded text-[12px]" onclick="deleteSession('${s.id}','${dayKey}')" title="Verwijder sessie">🗑️</button>
@@ -1036,7 +1220,7 @@ function openDetermination(id) {
             box.appendChild(mergeBtn);
         }
 
-        function startSession(force = false, fromSessionPage = false, dayKeyOverride = null, redirect = true, tempDet = false) {
+        function startSession(force = false, fromSessionPage = false, dayKeyOverride = null, redirect = true, tempDet = false, showInfo = true) {
             const dayKey = dayKeyOverride || (fromSessionPage ? (document.getElementById('sessionDate').value || picker.value) : picker.value);
             const day = ensureDay(dayKey);
             const existing = day.sessions.find(s => !s.end);
@@ -1046,17 +1230,123 @@ function openDetermination(id) {
             day.sessions.push(session);
             activeSessionId = session.id;
             viewedSessionId = session.id;
-            save(); render(); renderSessionAdmin(); renderDetSessionOptions(); renderDeterminationUI(); renderDeterminationList(); showToast('Sessie gestart');
+            save(); render(); renderSessionAdmin(); renderDetSessionOptions(); renderDeterminationUI(); renderDeterminationList(); showToast('Telling gestart');
+            if(!tempDet && showInfo) showSessionInfoModal();
             if(redirect) switchTab('sessions');
             fetchWeather(dayKey, session.id); // capture weather at start
         }
 
-        function endSession() {
+        function showSessionInfoModal() {
+            const modal = document.getElementById('session-info-modal');
+            if(!modal) return;
+            modal.classList.remove('hidden');
+        }
+
+        function closeSessionInfoModal() {
+            const modal = document.getElementById('session-info-modal');
+            if(!modal) return;
+            modal.classList.add('hidden');
+        }
+
+        function formatDuration(ms) {
+            const s = Math.max(0, Math.floor(ms / 1000));
+            const h = String(Math.floor(s / 3600)).padStart(2, '0');
+            const m = String(Math.floor((s % 3600) / 60)).padStart(2, '0');
+            const sec = String(s % 60).padStart(2, '0');
+            return `${h}:${m}:${sec}`;
+        }
+
+        function recordUserAction() {
+            lastAction = Date.now();
+            scheduleInactivityWatch();
+        }
+
+        function scheduleInactivityWatch() {
+            clearTimeout(inactivityPromptTimer);
+            clearTimeout(inactivityAutoTimer);
+            const day = ensureDay();
+            const active = getActiveSession(day);
+            if(!active) return;
+            inactivityPromptTimer = setTimeout(() => {
+                const ok = confirm('Mag deze telling afgesloten worden?');
+                if(ok) {
+                    stopTelling();
+                } else {
+                    inactivityAutoTimer = setTimeout(() => stopTelling(true), INACTIVITY_AUTO_MS);
+                }
+            }, INACTIVITY_MS);
+        }
+
+        function updateTellingTimer() {
+            const el = document.getElementById('session-timer');
+            if(!el) return;
+            if(!tellingStartTs) { el.innerText = '00:00:00'; return; }
+            el.innerText = formatDuration(Date.now() - tellingStartTs);
+        }
+
+        function syncTellingUI() {
+            const day = ensureDay();
+            const active = getActiveSession(day);
+            const hasActive = !!active;
+            const startBox = document.getElementById('start-telling-container');
+            const stopBox  = document.getElementById('stop-telling-container');
+            const counters = document.getElementById('counters-container');
+            if(startBox) startBox.classList.toggle('hidden', hasActive);
+            if(stopBox)  stopBox.classList.toggle('hidden', !hasActive);
+            if(counters) counters.classList.toggle('hidden', !hasActive);
+            if(hasActive) {
+                tellingStartTs = new Date(active.start).getTime();
+                updateTellingTimer();
+                clearInterval(tellingTimer);
+                tellingTimer = setInterval(updateTellingTimer, 1000);
+                recordUserAction();
+            } else {
+                clearInterval(tellingTimer);
+                tellingTimer = null;
+                tellingStartTs = null;
+                updateTellingTimer();
+            }
+        }
+
+        function startTelling() {
+            recordUserAction();
+            const day = ensureDay();
+            let active = getActiveSession(day);
+            if(!active) {
+                startSession(false, false, picker.value, false, false, false); // geen redirect, geen start-info
+                active = getActiveSession(day);
+            }
+            tellingStartTs = active ? new Date(active.start).getTime() : Date.now();
+            clearInterval(tellingTimer);
+            tellingTimer = setInterval(updateTellingTimer, 1000);
+            syncTellingUI();
+            showToast('Telling gestart');
+        }
+
+        function stopTelling(auto = false) {
+            const day = ensureDay();
+            const active = getActiveSession(day);
+            if(!active) return;
+            endSession(true);
+            clearInterval(tellingTimer);
+            tellingTimer = null;
+            tellingStartTs = null;
+            clearTimeout(inactivityPromptTimer);
+            clearTimeout(inactivityAutoTimer);
+            syncTellingUI();
+            updateReport();
+            if(!auto) showSessionInfoModal();
+            switchTab('report');
+            showToast(auto ? 'Telling automatisch gestopt' : 'Telling gestopt');
+        }
+
+        function endSession(silent = false) {
             const day = ensureDay();
             const active = day.sessions.find(s => !s.end);
             if(!active) return alert('Geen actieve sessie');
             active.end = new Date().toISOString();
-            save(); render(); renderSessionAdmin(); showToast('Sessie gestopt');
+            save(); render(); renderSessionAdmin();
+            if(!silent) showToast('Telling gestopt');
         }
 
         // legacy single merge fallback (unused in UI now but kept for safety)
@@ -1078,7 +1368,7 @@ function openDetermination(id) {
             });
             day.sessions = [master];
             recalcDayFromSessions(day);
-            save(); render(); renderSessionAdmin(); showToast('Sessies samengevoegd');
+            save(); render(); renderSessionAdmin(); showToast('Tellingen samengevoegd');
         }
 
         function mergeSelectedSessions(dayKey = picker.value) {
@@ -1089,6 +1379,9 @@ function openDetermination(id) {
             const masterId = ids[0];
             const master = day.sessions.find(s => s.id === masterId);
             const others = day.sessions.filter(s => ids.includes(s.id) && s.id !== masterId);
+            const removedDets = others.reduce((n,s)=>n + ((s.determinations || []).filter(d => !!d.result && !d.pending).length), 0);
+            const removedPhotos = others.reduce((n,s)=>n + ((s.photos || []).length), 0);
+            if(!confirm(`Opgelet: bij het samenvoegen worden ${others.length} sessies verwijderd. Ook ${removedDets} determinaties en ${removedPhotos} foto's uit die sessies gaan verloren.`)) return;
             others.forEach(s => {
                 for(const k in s.counts) master.counts[k] = (master.counts[k]||0) + s.counts[k];
                 if(s.photos && s.photos.length) {
@@ -1100,7 +1393,7 @@ function openDetermination(id) {
             });
             day.sessions = day.sessions.filter(s => !others.includes(s));
             recalcDayFromSessions(day);
-            save(); render(); renderSessionAdmin(); showToast('Sessies samengevoegd');
+            save(); render(); renderSessionAdmin(); showToast('Tellingen samengevoegd');
         }
 
         function recalcDayFromSessions(day) {
@@ -1130,19 +1423,38 @@ function openDetermination(id) {
 
         function deleteSession(id, dayKey = picker.value) {
             const day = ensureDay(dayKey);
+            const target = day.sessions.find(s => s.id === id);
+            if(!target) return;
+            const detCount = (target.determinations || []).filter(d => !!d.result && !d.pending).length;
+            const photoCount = (target.photos || []).length;
+            const ok = confirm(`Telling verwijderen? Opgelet: ook ${detCount} determinaties en ${photoCount} foto's in deze telling gaan verloren.`);
+            if(!ok) return;
             day.sessions = day.sessions.filter(s => s.id !== id);
             recalcDayFromSessions(day);
             if(activeSessionId === id) activeSessionId = null;
-            save(); render(); renderSessionAdmin(); showToast('Sessie verwijderd');
+            save(); render(); renderSessionAdmin(); showToast('Telling verwijderd');
         }
 
         function confirmMerge(id) {
-            return confirm(`Sessies samenvoegen met ${id}?`);
+            return confirm(`Tellingen samenvoegen met ${id}?`);
         }
 
         function fmtTime(iso) {
             const d = new Date(iso);
             return d.toLocaleTimeString('nl-BE', { hour: '2-digit', minute: '2-digit' });
+        }
+
+        function looseDeterminationLabel(sess, day = ensureDay()) {
+            const loose = (day.sessions || []).filter(s => s.detTemp).sort((a,b)=>new Date(a.start)-new Date(b.start));
+            const idx = loose.findIndex(s => s.id === sess.id);
+            const firstResult = (sess.determinations || []).find(d => d.resultName)?.resultName || null;
+            const base = firstResult ? `${firstResult} determinatie` : 'Losse determinatie';
+            return `${base}${idx >= 0 ? ' ' + (idx + 1) : ''}`;
+        }
+
+        function sessionDisplayLabel(sess, day = ensureDay()) {
+            if(sess?.detTemp) return looseDeterminationLabel(sess, day);
+            return `${fmtTime(sess.start)} ${sess.end ? '– '+fmtTime(sess.end) : '(live)'}`;
         }
 
         async function fetchWeather(dayOverride, sessionId) {
@@ -1224,6 +1536,7 @@ function openDetermination(id) {
                     // ook op dag-niveau voor aggregatie en legacy
                     day.photos.push(data);
                     save(); renderSessionLog();
+                    recordUserAction();
                 }; img.src = ev.target.result;
             }; r.readAsDataURL(f);
         }
@@ -1243,7 +1556,7 @@ function openDetermination(id) {
         async function shareSessionPhotos(sessionId) {
             const day = ensureDay();
             const session = day.sessions.find(s => s.id === sessionId);
-            if(!session) return alert('Sessies niet gevonden');
+            if(!session) return alert('Tellingen niet gevonden');
             const photos = session.photos || [];
             if(!photos.length) return alert('Geen foto\'s in deze sessie.');
             const files = photos.map((dataUrl, idx) => {
@@ -1251,7 +1564,7 @@ function openDetermination(id) {
                 return new File([res.blob], `paddentrek-${picker.value}-${sessionId}-${idx+1}.${res.ext}`, { type: res.blob.type });
             });
             const text = `Foto's ${picker.value} (${fmtTime(session.start)}): ${photos.length} stuks`;
-            const shareData = { title: 'Paddentrek', text, files };
+            const shareData = { title: 'Paddentrek Teller Pro', text, files };
             try {
                 if (navigator.share) {
                     await navigator.share(shareData);
@@ -1297,12 +1610,12 @@ function openDetermination(id) {
             if(reportMode === 'day' && data.notes) txt += `\n📝 *Nota:* ${data.notes}\n`;
             const sessionsToShow = reportMode === 'session' && session ? [session] : (data.sessions || []);
             if(sessionsToShow.length) {
-                txt += `\n⏱️ *Sessies:*\n`;
+                txt += `\n⏱️ *Tellingen:*\n`;
                 sessionsToShow.sort((a,b)=>new Date(a.start)-new Date(b.start)).forEach(s => {
                     const total = sumCounts(s.counts);
                     const wtxt = s.weather ? ` | 🌤️ ${s.weather.t}°C ${WMO[s.weather.c]||'OK'}` : '';
                     const route = s.routeName ? ` | 🚶‍♂️ ${s.routeName}` : '';
-                    txt += `  - ${fmtTime(s.start)} - ${s.end ? fmtTime(s.end) : 'lopend'}: ${total} stuks${route}${wtxt}\n`;
+                    txt += `  - ${sessionDisplayLabel(s, data)}: ${total} stuks${route}${wtxt}\n`;
                 });
             }
             txt += `\n#Paddentrek #Telling`;
@@ -1314,11 +1627,12 @@ function openDetermination(id) {
                 const dets = (reportMode === 'session' && session)
                     ? (session.determinations || [])
                     : (data.sessions || []).flatMap(s => s.determinations || []);
-                if(!dets.length) {
+                const completedDets = dets.filter(d => !!d.result && !d.pending);
+                if(!completedDets.length) {
                     detBox.innerHTML = '<div class=\"text-gray-500\">Geen determinaties in deze selectie.</div>';
                 } else {
                     const parts = [];
-                    dets.slice().sort((a,b)=>b.updatedAt-a.updatedAt).forEach(det => {
+                    completedDets.slice().sort((a,b)=>b.updatedAt-a.updatedAt).forEach(det => {
                         const photos = det.photos?.length || 0;
                         const label = det.resultName || 'Onbekend';
                         const answers = det.answers || [];
@@ -1373,7 +1687,7 @@ function openDetermination(id) {
                 });
             }
 
-            const shareData = includePhotos ? { title: 'Paddentrek', text, files } : { title: 'Paddentrek', text };
+            const shareData = includePhotos ? { title: 'Paddentrek Teller Pro', text, files } : { title: 'Paddentrek Teller Pro', text };
             try {
                 if(navigator.share) {
                     if(includePhotos) {
@@ -1405,16 +1719,20 @@ function openDetermination(id) {
             let dets = (reportMode === 'session' && session)
                 ? (session?.determinations || [])
                 : (day.sessions || []).flatMap(s => s.determinations || []);
+            dets = dets.filter(d => !!d.result && !d.pending);
             const selected = Array.from(document.querySelectorAll('#report-dets .share-det-checkbox:checked')).map(cb => cb.value);
             if(selected.length) dets = dets.filter(d => selected.includes(d.id));
             if(!dets.length) { alert('Geen determinaties in deze selectie.'); return; }
             const lines = dets.map(d => {
-                const ans = (d.answers||[]).map((a,idx)=>`${idx+1}. ${detQuestionText(a.node)} -> ${detAnswerLabel(a.answer)}`).join(' | ');
+                const ansLines = (d.answers || []).map((a,idx) =>
+                    `  ${idx+1}. ${detQuestionText(a.node)} -> ${detAnswerLabel(a.answer)}`
+                ).join('\n');
                 const ts = new Date(d.updatedAt).toLocaleString('nl-BE');
                 const fotos = (d.photos||[]).length;
                 return `🔎 ${d.resultName || 'Onbekend'}
 • Tijd: ${ts}
-• Antwoorden: ${ans || 'n.v.t.'}
+• Antwoorden:
+${ansLines || '  n.v.t.'}
 • Foto's: ${fotos}`;
             });
             const text = `🐸 Determinaties ${picker.value} (${reportMode==='session' && session ? 'sessie' : 'dag'})
@@ -1538,6 +1856,9 @@ ${lines.join('\n\n')}`;
             setTimeout(() => t.style.opacity = '1', 10);
             setTimeout(() => { t.style.opacity = '0'; setTimeout(() => t.classList.add('hidden'), 500); }, 2000);
         }
+        if(window.__cdnFallbackUsed) {
+            console.warn('CDN fallback actief: plaats lokale libs in ./vendor voor vaste versies/offline.');
+        }
 
         function showDetModal(det) {
             const modal = document.getElementById('det-modal');
@@ -1547,24 +1868,41 @@ ${lines.join('\n\n')}`;
             if(!modal || !det) return;
             modal.classList.remove('hidden');
             modal.style.display = 'flex';
-            title.innerText = det.resultName || 'Determinatie';
+            if(title) title.innerText = cleanSpeciesName(det.resultName || det.result || 'Determinatie');
             const [label, cls] = rarityFor(det.result || det.resultName || '');
-            rarity.className = `rarity-pill ${cls}`;
-            rarity.innerText = label;
-            document.getElementById('det-modal-img-wrap').classList.add('hidden');
-            const query = (det.resultName || det.result || '').trim();
+            if(rarity) {
+                rarity.className = `rarity-pill ${cls}`;
+                rarity.innerText = label;
+            }
+            const query = cleanSpeciesName(det.resultName || det.result || '').trim();
             const wikiBtn = document.getElementById('det-modal-link');
             const npBtn = document.getElementById('det-modal-link-np');
             currentDetLinks = { wiki: null, np: null };
             if(query) {
-                const npName = query.toLowerCase().replace(/[^a-z0-9]+/g,'-');
+                const npName = toSlug(query);
                 currentDetLinks.wiki = `https://nl.wikipedia.org/w/index.php?search=${encodeURIComponent(query)}`;
                 currentDetLinks.np = `https://www.natuurpunt.be/soorten/amfibieen-reptielen/${npName}`;
-                if(wikiBtn) { wikiBtn.classList.remove('hidden'); wikiBtn.disabled = false; }
-                if(npBtn) { npBtn.classList.remove('hidden'); npBtn.disabled = false; }
+                if(wikiBtn) {
+                    wikiBtn.dataset.url = currentDetLinks.wiki;
+                    wikiBtn.classList.remove('hidden');
+                    wikiBtn.disabled = false;
+                }
+                if(npBtn) {
+                    npBtn.dataset.url = currentDetLinks.np;
+                    npBtn.classList.remove('hidden');
+                    npBtn.disabled = false;
+                }
             } else {
-                if(wikiBtn) { wikiBtn.classList.add('hidden'); wikiBtn.disabled = true; }
-                if(npBtn) { npBtn.classList.add('hidden'); npBtn.disabled = true; }
+                if(wikiBtn) {
+                    wikiBtn.dataset.url = '';
+                    wikiBtn.classList.add('hidden');
+                    wikiBtn.disabled = true;
+                }
+                if(npBtn) {
+                    npBtn.dataset.url = '';
+                    npBtn.classList.add('hidden');
+                    npBtn.disabled = true;
+                }
             }
             const sess = getDetSession();
             if(addBtn) addBtn.classList.toggle('hidden', !!sess?.detTemp); // verbergen bij losse determinatie
@@ -1572,7 +1910,16 @@ ${lines.join('\n\n')}`;
 
         let currentDetLinks = { wiki:null, np:null };
         function openDetLink(type) {
-            const url = currentDetLinks?.[type];
+            const id = type === 'np' ? 'det-modal-link-np' : 'det-modal-link';
+            const btn = document.getElementById(id);
+            let url = btn?.dataset?.url || currentDetLinks?.[type] || '';
+            if(!url) {
+                const q = (document.getElementById('det-modal-title')?.innerText || '').trim();
+                if(q) {
+                    if(type === 'np') url = `https://www.natuurpunt.be/soorten/amfibieen-reptielen/${toSlug(q)}`;
+                    else url = `https://nl.wikipedia.org/w/index.php?search=${encodeURIComponent(q)}`;
+                }
+            }
             if(url) window.open(url, '_blank');
         }
 
@@ -1591,7 +1938,7 @@ ${lines.join('\n\n')}`;
             if(!sel) return;
             const day = ensureDay();
             sel.innerHTML = '<option value=\"\">Alle sessies (dagtotaal)</option>' + day.sessions.map(s => {
-                const label = `${fmtTime(s.start)} ${s.end ? '– '+fmtTime(s.end) : '(live)'}`;
+                const label = sessionDisplayLabel(s, day);
                 return `<option value="${s.id}">${label}</option>`;
             }).join('');
         }
@@ -1601,7 +1948,7 @@ ${lines.join('\n\n')}`;
             if(!sel) return;
             const day = ensureDay();
             sel.innerHTML = '<option value=\"\">Alle sessies</option>' + day.sessions.map(s => {
-                const label = `${fmtTime(s.start)} ${s.end ? '– '+fmtTime(s.end) : '(live)'}${s.routeName ? ' · '+s.routeName : ''}`;
+                const label = `${sessionDisplayLabel(s, day)}${s.routeName ? ' · '+s.routeName : ''}`;
                 return `<option value="${s.id}">${label}</option>`;
             }).join('');
             sel.value = '';
@@ -1641,7 +1988,7 @@ ${lines.join('\n\n')}`;
             const session = sessionId ? day.sessions.find(s => s.id === sessionId) : null;
             const counts = session ? session.counts || {} : day.counts || {};
             const total = sumCounts(counts);
-            let lines = [`Dag: ${d}`, `Bron: ${session ? `Sessie ${fmtTime(session.start)}${session.end ? ' – '+fmtTime(session.end) : ''}` : 'Volledige dag'}`, `Totaal dieren: ${total}`];
+            let lines = [`Dag: ${d}`, `Bron: ${session ? sessionDisplayLabel(session, data) : 'Volledige dag'}`, `Totaal dieren: ${total}`];
             const perSpecies = {};
             for(const k in counts) {
                 const [sid, suf] = k.split('_');
@@ -1915,7 +2262,7 @@ ${lines.join('\n\n')}`;
                         }
                     }
                     (i.s||[]).forEach(si => { if(!day.custom.some(c => c.name===si.name)) day.custom.push(si); });
-                    save(); buildUI(); render(); stopSessionScanner(); alert(summary); showToast("Sessies geïmporteerd"); switchTab('sessions');
+                    save(); buildUI(); render(); stopSessionScanner(); alert(summary); showToast("Tellingen geïmporteerd"); switchTab('sessions');
                 } catch(e) { alert("QR fout"); }
             }).catch(() => alert("Camera fout"));
         }
@@ -1942,7 +2289,7 @@ ${lines.join('\n\n')}`;
             const day = ensureDay();
             const sessions = day.sessions.slice().sort((a,b)=>new Date(a.start)-new Date(b.start));
             sel.innerHTML = `<option value=\"\">Dag ${picker.value} (dagtotaal)</option>` +
-                sessions.map(s => `<option value="${s.id}">${fmtTime(s.start)} ${s.end ? '– '+fmtTime(s.end) : '(live)'}</option>`).join('');
+                sessions.map(s => `<option value="${s.id}">${sessionDisplayLabel(s, day)}</option>`).join('');
             sel.value = '';
             updateImportTargetHint();
         }
@@ -1992,4 +2339,3 @@ ${lines.join('\n\n')}`;
         document.getElementById('sessionDate').onchange = () => renderSessionAdmin();
         splitSessionOverMidnightIfNeeded();
         buildUI(); render(); renderSessionAdmin(); buildQRSessionOptions(); buildReportSessionOptions(); renderDetSessionOptions(); renderDeterminationUI(); renderDeterminationList();
-    

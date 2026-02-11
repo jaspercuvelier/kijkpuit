@@ -4,6 +4,7 @@ const NAME = `paddentrek-${APP_VERSION}`;
 const URLS = [
   './',
   './index.html',
+  './app.js',
   './manifest.webmanifest',
   './version.js',
   './icons/icon-192.png',
