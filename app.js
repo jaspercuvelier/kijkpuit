@@ -264,22 +264,392 @@ document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
         // Bewaar data onder vaste key; schrijf ook naar versie-key voor backward compat.
         const STORAGE_KEY = 'paddentrek_data';
         const STORAGE_KEY_VERSIONED = `paddentrek_${APP_VERSION}`;
+        const STORAGE_MIGRATION_STATE_KEY = 'paddentrek_migration_legacy_to_data_v1';
+        const SYNC_QUERY_PARAM = 'sync';
+        const SYNC_PAYLOAD_VERSION = 1;
+        const SYNC_IMPORTED_IDS_KEY = 'paddentrek_sync_imported_ids_v1';
+        const SYNC_IMPORTED_REGISTRY_KEY = 'paddentrek_sync_imported_registry_v1';
+        const CONTRIBUTOR_PROFILE_KEY = 'paddentrek_contributor_profile_v1';
         let reportMode = 'session'; // 'session' | 'day'
         let photoTargetSession = null;
         let viewedSessionId = '';
         let sessionScanner = null;
-        let storage = JSON.parse(localStorage.getItem(STORAGE_KEY)) || JSON.parse(localStorage.getItem(STORAGE_KEY_VERSIONED));
+        let pendingQrImportPayload = null;
+        let pendingSyncLinkPayload = null;
+
+        function isPlainObject(v) {
+            return !!v && typeof v === 'object' && !Array.isArray(v);
+        }
+
+        function safeParseJSON(raw) {
+            if(!raw) return null;
+            try {
+                const parsed = JSON.parse(raw);
+                return isPlainObject(parsed) ? parsed : null;
+            } catch(_) {
+                return null;
+            }
+        }
+
+        function cloneJSON(v) {
+            return JSON.parse(JSON.stringify(v || {}));
+        }
+
+        function dayHasContent(day) {
+            if(!isPlainObject(day)) return false;
+            if(Object.values(day.counts || {}).some(v => (v || 0) > 0)) return true;
+            if(Array.isArray(day.photos) && day.photos.length > 0) return true;
+            if(Array.isArray(day.custom) && day.custom.length > 0) return true;
+            if(typeof day.notes === 'string' && day.notes.trim()) return true;
+            if(Array.isArray(day.sessions) && day.sessions.some(s => {
+                if(!isPlainObject(s)) return false;
+                if(Object.values(s.counts || {}).some(v => (v || 0) > 0)) return true;
+                if(Array.isArray(s.photos) && s.photos.length > 0) return true;
+                if(Array.isArray(s.determinations) && s.determinations.length > 0) return true;
+                if(typeof s.notes === 'string' && s.notes.trim()) return true;
+                return false;
+            })) return true;
+            return false;
+        }
+
+        function isVersionedStorageKey(key) {
+            if(!key || typeof key !== 'string') return false;
+            if(key === STORAGE_KEY) return false;
+            if(key === STORAGE_MIGRATION_STATE_KEY) return false;
+            if(!key.startsWith('paddentrek_')) return false;
+            const suffix = key.slice('paddentrek_'.length).toLowerCase();
+            // Ondersteunt oude varianten zoals v1 / v2.0 en nieuwe zoals 2.2.4
+            return /^v?\d/.test(suffix);
+        }
+
+        function listVersionedStorageKeys() {
+            return Object.keys(localStorage)
+                .filter(isVersionedStorageKey)
+                .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+        }
+
+        function listLegacyStorageSnapshots() {
+            return listVersionedStorageKeys()
+                .filter(k => k !== STORAGE_KEY_VERSIONED)
+                .map(key => {
+                    const raw = localStorage.getItem(key) || '';
+                    const data = safeParseJSON(raw);
+                    if(!data) return null;
+                    const dayKeys = Object.keys(data);
+                    const nonEmptyDayCount = dayKeys.filter(d => dayHasContent(data[d])).length;
+                    return { key, data, dayCount: dayKeys.length, nonEmptyDayCount, rawSize: raw.length };
+                })
+                .filter(Boolean)
+                .sort((a, b) =>
+                    (b.nonEmptyDayCount - a.nonEmptyDayCount) ||
+                    (b.dayCount - a.dayCount) ||
+                    (b.rawSize - a.rawSize) ||
+                    b.key.localeCompare(a.key, undefined, { numeric: true, sensitivity: 'base' })
+                );
+        }
+
+        function getLegacyMigrationState() {
+            return safeParseJSON(localStorage.getItem(STORAGE_MIGRATION_STATE_KEY));
+        }
+
+        function setLegacyMigrationState(payload) {
+            localStorage.setItem(STORAGE_MIGRATION_STATE_KEY, JSON.stringify(payload));
+        }
+
+        function encodeBase64Url(str) {
+            const b64 = btoa(unescape(encodeURIComponent(str)));
+            return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+        }
+
+        function decodeBase64Url(str) {
+            if(!str || typeof str !== 'string') return '';
+            const b64 = str.replace(/-/g, '+').replace(/_/g, '/');
+            const pad = b64.length % 4 ? '='.repeat(4 - (b64.length % 4)) : '';
+            return decodeURIComponent(escape(atob(b64 + pad)));
+        }
+
+        function randomHex(len = 8) {
+            const chars = 'abcdef0123456789';
+            let out = '';
+            for(let i = 0; i < len; i++) out += chars[Math.floor(Math.random() * chars.length)];
+            return out;
+        }
+
+        function generateUUID() {
+            if(typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+            return `id_${Date.now()}_${randomHex(16)}`;
+        }
+
+        function stableStringify(v) {
+            if(v === null || typeof v !== 'object') return JSON.stringify(v);
+            if(Array.isArray(v)) return `[${v.map(stableStringify).join(',')}]`;
+            const keys = Object.keys(v).sort();
+            return `{${keys.map(k => `${JSON.stringify(k)}:${stableStringify(v[k])}`).join(',')}}`;
+        }
+
+        function simpleHash(str) {
+            let h = 2166136261;
+            for(let i = 0; i < str.length; i++) {
+                h ^= str.charCodeAt(i);
+                h += (h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24);
+            }
+            return (h >>> 0).toString(16).padStart(8, '0');
+        }
+
+        function normalizeRouteName(name = '') {
+            return String(name || '').replace(/\s+/g, ' ').trim();
+        }
+
+        function normalizeRouteHistory(list = []) {
+            const seen = new Set();
+            const out = [];
+            (Array.isArray(list) ? list : []).forEach(item => {
+                const route = normalizeRouteName(item);
+                if(!route) return;
+                const key = route.toLowerCase();
+                if(seen.has(key)) return;
+                seen.add(key);
+                out.push(route);
+            });
+            return out.slice(0, 60);
+        }
+
+        function getContributorProfile() {
+            const parsed = safeParseJSON(localStorage.getItem(CONTRIBUTOR_PROFILE_KEY));
+            const profile = isPlainObject(parsed) ? parsed : {};
+            if(typeof profile.id !== 'string' || !profile.id.trim()) profile.id = generateUUID();
+            if(typeof profile.name !== 'string') profile.name = '';
+            if(typeof profile.lastTeamRunId !== 'string') profile.lastTeamRunId = '';
+            if(typeof profile.lastTeamLabel !== 'string' || !profile.lastTeamLabel.trim()) profile.lastTeamLabel = '🐸';
+            profile.lastRouteName = normalizeRouteName(profile.lastRouteName || '');
+            profile.routeHistory = normalizeRouteHistory(profile.routeHistory || []);
+            if(profile.lastRouteName) {
+                profile.routeHistory = normalizeRouteHistory([profile.lastRouteName, ...profile.routeHistory]);
+            }
+            return profile;
+        }
+
+        function saveContributorProfile(profile) {
+            const lastRouteName = normalizeRouteName(profile?.lastRouteName || '');
+            let routeHistory = normalizeRouteHistory(profile?.routeHistory || []);
+            if(lastRouteName) routeHistory = normalizeRouteHistory([lastRouteName, ...routeHistory]);
+            const payload = {
+                id: typeof profile?.id === 'string' ? profile.id : generateUUID(),
+                name: typeof profile?.name === 'string' ? profile.name.trim() : '',
+                lastTeamRunId: typeof profile?.lastTeamRunId === 'string' ? profile.lastTeamRunId.trim() : '',
+                lastTeamLabel: typeof profile?.lastTeamLabel === 'string' && profile.lastTeamLabel.trim() ? profile.lastTeamLabel.trim() : '🐸',
+                lastRouteName,
+                routeHistory
+            };
+            localStorage.setItem(CONTRIBUTOR_PROFILE_KEY, JSON.stringify(payload));
+            return payload;
+        }
+
+        function rememberRoutePreference(routeName = '') {
+            const route = normalizeRouteName(routeName);
+            if(!route) return false;
+            const profile = getContributorProfile();
+            const next = saveContributorProfile({
+                ...profile,
+                lastRouteName: route,
+                routeHistory: [route, ...(profile.routeHistory || [])]
+            });
+            return !!next.lastRouteName;
+        }
+
+        function currentDayIsoFallback() {
+            return new Date().toISOString().split('T')[0];
+        }
+
+        function ensureTeamRunId(seed = '') {
+            const cleaned = (seed || '').trim();
+            if(cleaned) return cleaned;
+            const day = (typeof picker !== 'undefined' && picker?.value) ? picker.value : currentDayIsoFallback();
+            return `team_${day}_${randomHex(6)}`;
+        }
+
+        function normalizeTeamLabel(label = '') {
+            const v = (label || '').trim();
+            return v || '🐸';
+        }
+
+        function teamLabelToKey(label = '🐸') {
+            const map = { '🐸': 'kikker', '🦎': 'salamander', '🐢': 'schildpad', '🦉': 'uil', '🦔': 'egel', '🐍': 'slang' };
+            if(map[label]) return map[label];
+            const slug = toSlug(label);
+            return slug || `team${simpleHash(label).slice(0, 6)}`;
+        }
+
+        function teamLabelFromRunId(runId = '') {
+            if(typeof runId !== 'string' || !runId) return '🐸';
+            if(runId.includes('_kikker')) return '🐸';
+            if(runId.includes('_salamander')) return '🦎';
+            if(runId.includes('_schildpad')) return '🐢';
+            if(runId.includes('_uil')) return '🦉';
+            if(runId.includes('_egel')) return '🦔';
+            if(runId.includes('_slang')) return '🐍';
+            return '🐸';
+        }
+
+        function deriveTeamRunId(daySeed = '', teamLabel = '🐸') {
+            const day = /^\d{4}-\d{2}-\d{2}$/.test(daySeed || '')
+                ? daySeed
+                : ((typeof picker !== 'undefined' && picker?.value) ? picker.value : currentDayIsoFallback());
+            const key = teamLabelToKey(normalizeTeamLabel(teamLabel));
+            return `team_${day}_${key}`;
+        }
+
+        function updateContributorInputsFromProfile() {
+            const profile = getContributorProfile();
+            const nameInput = document.getElementById('share-contributor-name');
+            const teamLabelInput = document.getElementById('share-team-label');
+            const routeInput = document.getElementById('share-route-name');
+            if(nameInput && !nameInput.value.trim() && profile.name) nameInput.value = profile.name;
+            if(teamLabelInput && !teamLabelInput.value.trim()) teamLabelInput.value = normalizeTeamLabel(profile.lastTeamLabel || '🐸');
+            if(routeInput && !routeInput.value.trim() && profile.lastRouteName) routeInput.value = profile.lastRouteName;
+        }
+
+        function handleShareRouteChange(commitHistory = false) {
+            const routeInput = document.getElementById('share-route-name');
+            if(!routeInput) return;
+            const raw = routeInput.value || '';
+            const route = normalizeRouteName(raw);
+            if(raw !== route) routeInput.value = route;
+            const profile = getContributorProfile();
+            const payload = {
+                ...profile,
+                lastRouteName: route
+            };
+            if(commitHistory && route) {
+                payload.routeHistory = [route, ...(profile.routeHistory || [])];
+            }
+            saveContributorProfile(payload);
+            if(commitHistory && route) buildRouteSuggestions();
+            const hint = document.getElementById('share-identity-hint');
+            if(hint) handleShareIdentityChange(false);
+        }
+
+        function handleShareIdentityChange(refreshQr = true) {
+            const profile = getContributorProfile();
+            const nameInput = document.getElementById('share-contributor-name');
+            const teamLabelInput = document.getElementById('share-team-label');
+            const routeInput = document.getElementById('share-route-name');
+            const hint = document.getElementById('share-identity-hint');
+            const name = (nameInput?.value || '').trim();
+            const teamLabel = normalizeTeamLabel(teamLabelInput?.value || profile.lastTeamLabel || '🐸');
+            const route = normalizeRouteName(routeInput?.value || profile.lastRouteName || '');
+            if(teamLabelInput && !teamLabelInput.value.trim()) teamLabelInput.value = teamLabel;
+            const daySeed = (typeof picker !== 'undefined' && picker?.value) ? picker.value : currentDayIsoFallback();
+            const teamRunId = deriveTeamRunId(daySeed, teamLabel);
+            saveContributorProfile({
+                ...profile,
+                name: name || profile.name || '',
+                lastTeamRunId: teamRunId,
+                lastTeamLabel: teamLabel,
+                lastRouteName: route
+            });
+            if(hint) {
+                hint.innerText = name
+                    ? `Je deelt als ${name} · Team ${teamLabel}${route ? ` · Traject ${route}` : ''}`
+                    : `Vul je naam in voor je deelt. Team ${teamLabel}${route ? ` · Traject ${route}` : ''}`;
+            }
+            if(refreshQr) generateQR(false);
+        }
+
+        function ensureContributorIdentity() {
+            const profile = getContributorProfile();
+            const nameInput = document.getElementById('share-contributor-name');
+            const teamLabelInput = document.getElementById('share-team-label');
+            const fromInput = (nameInput?.value || '').trim();
+            const contributorName = (fromInput || profile.name || '').trim();
+            if(nameInput && !fromInput) {
+                alert('Vul eerst je naam in bij "Jouw naam".');
+                nameInput.focus();
+                return null;
+            }
+            if(!contributorName || contributorName.toLowerCase() === 'onbekende teller') {
+                alert('Vul eerst je naam in bij "Jouw naam".');
+                if(nameInput) nameInput.focus();
+                return null;
+            }
+            const teamLabel = normalizeTeamLabel(teamLabelInput?.value || profile.lastTeamLabel || '🐸');
+            if(teamLabelInput && !teamLabelInput.value.trim()) teamLabelInput.value = teamLabel;
+            const daySeed = (typeof picker !== 'undefined' && picker?.value) ? picker.value : currentDayIsoFallback();
+            const teamRunId = deriveTeamRunId(daySeed, teamLabel);
+            const nextProfile = saveContributorProfile({
+                ...profile,
+                name: contributorName,
+                lastTeamRunId: teamRunId,
+                lastTeamLabel: teamLabel
+            });
+            if(nameInput) nameInput.value = nextProfile.name;
+            if(teamLabelInput) teamLabelInput.value = nextProfile.lastTeamLabel;
+            return { contributorId: nextProfile.id, contributorName: nextProfile.name, teamRunId, teamLabel: nextProfile.lastTeamLabel };
+        }
+
+        function getImportedSyncIds() {
+            const raw = localStorage.getItem(SYNC_IMPORTED_IDS_KEY);
+            if(!raw) return [];
+            try {
+                const parsed = JSON.parse(raw);
+                if(!Array.isArray(parsed)) return [];
+                return parsed.filter(v => typeof v === 'string');
+            } catch(_) {
+                return [];
+            }
+        }
+
+        function getSyncImportRegistry() {
+            const parsed = safeParseJSON(localStorage.getItem(SYNC_IMPORTED_REGISTRY_KEY));
+            const registry = isPlainObject(parsed) ? parsed : {};
+            // Backward compat: oude lijst van IDs migreren naar registry
+            getImportedSyncIds().forEach(id => {
+                if(typeof id !== 'string' || !id.trim()) return;
+                if(!registry[id]) registry[id] = { importedAt: Date.now(), hash: '', dayKey: '', sessionId: '' };
+            });
+            return registry;
+        }
+
+        function setSyncImportRegistry(registry) {
+            localStorage.setItem(SYNC_IMPORTED_REGISTRY_KEY, JSON.stringify(registry || {}));
+        }
+
+        function getSyncImportEntry(id) {
+            if(!id || typeof id !== 'string') return null;
+            return getSyncImportRegistry()[id] || null;
+        }
+
+        function markSyncImported(id, info = {}) {
+            if(!id || typeof id !== 'string') return;
+            const ids = getImportedSyncIds();
+            if(!ids.includes(id)) {
+                ids.push(id);
+                localStorage.setItem(SYNC_IMPORTED_IDS_KEY, JSON.stringify(ids.slice(-300)));
+            }
+            const registry = getSyncImportRegistry();
+            registry[id] = {
+                hash: typeof info.hash === 'string' ? info.hash : (registry[id]?.hash || ''),
+                dayKey: typeof info.dayKey === 'string' ? info.dayKey : (registry[id]?.dayKey || ''),
+                sessionId: typeof info.sessionId === 'string' ? info.sessionId : (registry[id]?.sessionId || ''),
+                importedAt: Date.now()
+            };
+            setSyncImportRegistry(registry);
+        }
+
+        function isSyncAlreadyImported(id) {
+            if(!id || typeof id !== 'string') return false;
+            return !!getSyncImportEntry(id);
+        }
+
+        let storage = safeParseJSON(localStorage.getItem(STORAGE_KEY)) || safeParseJSON(localStorage.getItem(STORAGE_KEY_VERSIONED));
         let activeDeterminationId = null;
         let activeDeterminationSessionId = null;
         let detPhotoTargetId = null;
         let detCredits = null;
         // Migreer indien versie is opgehoogd zodat data behouden blijft
         if(!storage) {
-            const prevKey = Object.keys(localStorage)
-                .filter(k => k.startsWith('paddentrek_'))
-                .sort()
-                .pop();
-            storage = prevKey ? (JSON.parse(localStorage.getItem(prevKey)) || {}) : {};
+            const fallback = listLegacyStorageSnapshots()[0];
+            storage = fallback ? cloneJSON(fallback.data) : {};
             localStorage.setItem(STORAGE_KEY, JSON.stringify(storage));
             localStorage.setItem(STORAGE_KEY_VERSIONED, JSON.stringify(storage));
         } else {
@@ -288,6 +658,8 @@ document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
             localStorage.setItem(STORAGE_KEY_VERSIONED, JSON.stringify(storage));
         }
         migrateLegacyDays();
+        migrateOldSchema();
+        migrateLegacyContributions();
         let activeSessionId = null;
         // Schema v2: per day stores counts, custom, photos, notes, weather, sessions
         // session object: { id, start, end?, counts: {}, notes: '' }
@@ -341,7 +713,12 @@ document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
                     photos: day.photos || [],
                     routeName: day.routeName || '',
                     determinations: [],
-                    detTemp: false
+                    detTemp: false,
+                    includeInReports: true,
+                    contributions: [],
+                    contributorRoster: [],
+                    autoContributorNote: '',
+                    teamRunId: day.teamRunId || ''
                 }];
                 changed = true;
             }
@@ -352,9 +729,158 @@ document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
             }
         }
 
+        function mergeLegacyIntoStorage(sourceData, targetData) {
+            const merged = cloneJSON(targetData || {});
+            let addedDays = 0;
+            let replacedEmptyDays = 0;
+            for(const dayKey in sourceData || {}) {
+                const sourceDay = sourceData[dayKey];
+                if(!isPlainObject(sourceDay)) continue;
+                if(!Object.prototype.hasOwnProperty.call(merged, dayKey)) {
+                    merged[dayKey] = cloneJSON(sourceDay);
+                    addedDays++;
+                    continue;
+                }
+                if(!dayHasContent(merged[dayKey]) && dayHasContent(sourceDay)) {
+                    merged[dayKey] = cloneJSON(sourceDay);
+                    replacedEmptyDays++;
+                }
+            }
+            return { merged, addedDays, replacedEmptyDays };
+        }
+
+        function updateLegacyMigrationUI() {
+            const card = document.getElementById('legacy-migrate-card');
+            const btn = document.getElementById('legacy-migrate-btn');
+            const cleanupBtn = document.getElementById('legacy-cleanup-btn');
+            const cleanupHint = document.getElementById('legacy-cleanup-hint');
+            const status = document.getElementById('legacy-migrate-status');
+            if(!card || !btn || !status || !cleanupBtn || !cleanupHint) return;
+
+            const versionedKeys = listVersionedStorageKeys();
+            const hasMultipleVersioned = versionedKeys.length > 1;
+            if(!hasMultipleVersioned) {
+                card.classList.add('hidden');
+                return;
+            }
+            card.classList.remove('hidden');
+
+            const legacyKeys = versionedKeys.filter(k => k !== STORAGE_KEY_VERSIONED);
+            cleanupBtn.classList.add('hidden');
+            cleanupHint.classList.add('hidden');
+            cleanupHint.innerText = '';
+
+            const state = getLegacyMigrationState();
+            btn.classList.remove('opacity-60', 'cursor-not-allowed');
+            if(state?.doneAt) {
+                btn.disabled = true;
+                btn.classList.add('opacity-60', 'cursor-not-allowed');
+                const when = new Date(state.doneAt).toLocaleString('nl-BE');
+                const added = Number(state.addedDays || 0);
+                const replaced = Number(state.replacedEmptyDays || 0);
+                status.innerText = `Migratie uitgevoerd op ${when}. Bron: ${state.sourceKey || 'onbekend'} (${added} toegevoegd, ${replaced} aangevuld).`;
+                if(legacyKeys.length > 0) {
+                    cleanupBtn.disabled = false;
+                    cleanupBtn.classList.remove('hidden');
+                    cleanupHint.innerText = `Er staan nog ${legacyKeys.length} oude versie-key(s). Verwijder ze pas nadat je gecontroleerd hebt dat alles correct staat.`;
+                    cleanupHint.classList.remove('hidden');
+                }
+                return;
+            }
+
+            const source = listLegacyStorageSnapshots()[0];
+            if(!source) {
+                btn.disabled = true;
+                btn.classList.add('opacity-60', 'cursor-not-allowed');
+                status.innerText = 'Meerdere versie-keys gevonden, maar geen leesbare oude data om te migreren.';
+                return;
+            }
+
+            btn.disabled = false;
+            status.innerText = `Klaar om te migreren vanuit ${source.key} (${source.nonEmptyDayCount || source.dayCount} dag(en) met data).`;
+        }
+
+        function migrateLegacyStorageManually() {
+            const state = getLegacyMigrationState();
+            if(state?.doneAt) {
+                showToast('Migratie is al uitgevoerd');
+                updateLegacyMigrationUI();
+                return;
+            }
+
+            const source = listLegacyStorageSnapshots()[0];
+            if(!source) {
+                alert('Geen oude data gevonden onder paddentrek_*.');
+                updateLegacyMigrationUI();
+                return;
+            }
+
+            const ok = confirm(
+                `Oude data overzetten van ${source.key} naar ${STORAGE_KEY}?\n\n` +
+                'Dit kan maar 1 keer via deze knop.'
+            );
+            if(!ok) return;
+
+            const result = mergeLegacyIntoStorage(source.data, storage);
+            storage = result.merged;
+            migrateLegacyDays();
+            save();
+            setLegacyMigrationState({
+                doneAt: new Date().toISOString(),
+                sourceKey: source.key,
+                addedDays: result.addedDays,
+                replacedEmptyDays: result.replacedEmptyDays
+            });
+
+            buildUI();
+            render();
+            renderSessionAdmin();
+            buildQRSessionOptions();
+            buildReportSessionOptions();
+            buildImportTargetOptions();
+            renderStorageInspector(true);
+            updateLegacyMigrationUI();
+
+            if((result.addedDays + result.replacedEmptyDays) === 0) {
+                showToast('Migratie uitgevoerd (geen nieuwe dagen)');
+                alert(`Migratie uitgevoerd, maar er was geen ontbrekende data om toe te voegen.\nBron: ${source.key}`);
+                return;
+            }
+            showToast('Oude data overgezet');
+            alert(
+                `Migratie klaar.\nBron: ${source.key}\n` +
+                `Toegevoegd: ${result.addedDays} dag(en)\n` +
+                `Aangevuld: ${result.replacedEmptyDays} lege dag(en).`
+            );
+        }
+
+        function cleanupLegacyStorageKeys() {
+            const state = getLegacyMigrationState();
+            if(!state?.doneAt) {
+                alert('Voer eerst de migratie uit.');
+                return;
+            }
+            const legacyKeys = listVersionedStorageKeys().filter(k => k !== STORAGE_KEY_VERSIONED);
+            if(!legacyKeys.length) {
+                showToast('Geen oude data om te verwijderen');
+                updateLegacyMigrationUI();
+                return;
+            }
+            const ok = confirm(
+                `Verwijder ${legacyKeys.length} oude storage key(s)?\n\n` +
+                `${legacyKeys.join('\n')}\n\n` +
+                'Dit verwijdert alleen oude kopieën. paddentrek_data blijft behouden.'
+            );
+            if(!ok) return;
+            legacyKeys.forEach(k => localStorage.removeItem(k));
+            renderStorageInspector(true);
+            updateLegacyMigrationUI();
+            showToast('Oude data verwijderd');
+        }
+
         // Zorgt dat een dag-object altijd alle sleutels heeft voordat we ermee werken
         function ensureDay(d = picker.value) {
-            if(!storage[d]) storage[d] = { counts: {}, custom: [], photos: [], notes: "", sessions: [], weather: null };
+            if(!storage[d]) storage[d] = { counts: {}, custom: [], photos: [], notes: "", sessions: [], weather: null, teamRunId: '' };
             const day = storage[d];
             if(!day.counts) day.counts = {};
             if(!day.custom) day.custom = [];
@@ -362,6 +888,7 @@ document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
             if(typeof day.notes !== 'string') day.notes = "";
             if(!day.sessions) day.sessions = [];
             if(!day.weather) day.weather = null;
+            if(typeof day.teamRunId !== 'string') day.teamRunId = '';
             day.sessions.forEach(s => {
                 if(!s.counts) s.counts = {};
                 if(!s.photos) s.photos = [];
@@ -369,6 +896,11 @@ document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
                 if(!s.routeName) s.routeName = "";
                 if(typeof s.notes !== 'string') s.notes = "";
                 if(!s.weather) s.weather = null;
+                if(typeof s.includeInReports !== 'boolean') s.includeInReports = true;
+                if(!Array.isArray(s.contributions)) s.contributions = [];
+                if(!Array.isArray(s.contributorRoster)) s.contributorRoster = [];
+                if(typeof s.autoContributorNote !== 'string') s.autoContributorNote = '';
+                if(typeof s.teamRunId !== 'string') s.teamRunId = day.teamRunId || '';
             });
             return day;
         }
@@ -399,7 +931,21 @@ document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
 
             // start nieuwe sessie op nieuwe dag, leeg zodat nieuwe tellingen correct landen
             const newDay = ensureDay(today);
-            const newSession = { id: 'sess_'+Date.now(), start: new Date(`${today}T00:00:00`).toISOString(), counts: {}, notes: '', weather: null, photos: [], routeName: sess.routeName || '' };
+            const newSession = {
+                id: 'sess_'+Date.now(),
+                start: new Date(`${today}T00:00:00`).toISOString(),
+                counts: {},
+                notes: '',
+                weather: null,
+                photos: [],
+                routeName: sess.routeName || '',
+                determinations: [],
+                includeInReports: true,
+                contributions: [],
+                contributorRoster: [],
+                autoContributorNote: '',
+                teamRunId: sess.teamRunId || ''
+            };
             newDay.sessions.push(newSession);
             activeSessionId = newSession.id;
             viewedSessionId = newSession.id;
@@ -416,6 +962,7 @@ document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
                 if(!day.photos) day.photos = [];
                 if(typeof day.notes !== 'string') day.notes = "";
                 if(!day.weather) day.weather = null;
+                if(typeof day.teamRunId !== 'string') day.teamRunId = '';
                 day.sessions.forEach(s => {
                     if(!s.counts) s.counts = {};
                     if(!s.photos) s.photos = [];
@@ -423,9 +970,49 @@ document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
                     if(!s.routeName) s.routeName = "";
                     if(typeof s.notes !== 'string') s.notes = "";
                     if(!s.weather) s.weather = null;
+                    if(typeof s.includeInReports !== 'boolean') s.includeInReports = true;
+                    if(!Array.isArray(s.contributions)) s.contributions = [];
+                    if(!Array.isArray(s.contributorRoster)) s.contributorRoster = [];
+                    if(typeof s.autoContributorNote !== 'string') s.autoContributorNote = '';
+                    if(typeof s.teamRunId !== 'string') s.teamRunId = day.teamRunId || '';
                 });
             }
             save();
+        }
+
+        function migrateLegacyContributions() {
+            let changed = false;
+            for(const d in storage) {
+                const day = ensureDay(d);
+                const legacyTeam = day.teamRunId || `legacy_${d}`;
+                if(!day.teamRunId) day.teamRunId = legacyTeam;
+                (day.sessions || []).forEach(s => {
+                    if(!Array.isArray(s.contributions)) s.contributions = [];
+                    if(typeof s.teamRunId !== 'string' || !s.teamRunId) s.teamRunId = legacyTeam;
+                    if(typeof s.includeInReports !== 'boolean') s.includeInReports = true;
+                    if(!sumCounts(s.counts || {})) return;
+                    if(!s.contributions.length) {
+                        const contributionId = `legacy_contrib_${simpleHash(`${d}|${s.id}`)}`;
+                        const hash = simpleHash(stableStringify(s.counts || {}));
+                        s.contributions.push({
+                            contributionId,
+                            hash,
+                            counts: cloneJSON(s.counts || {}),
+                            createdAt: s.start ? new Date(s.start).getTime() : Date.now(),
+                            sourceDate: d,
+                            sourceLabel: s.id || 'legacy',
+                            contributorId: `legacy_user_${simpleHash(`${d}|${s.id}|local`)}`,
+                            contributorName: 'Legacy telling',
+                            teamRunId: s.teamRunId,
+                            teamLabel: teamLabelFromRunId(s.teamRunId),
+                            importedAt: Date.now()
+                        });
+                        changed = true;
+                    }
+                    rebuildSessionContributorRoster(s);
+                });
+            }
+            if(changed) save();
         }
 
         function buildUI() {
@@ -620,18 +1207,24 @@ document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
                 const weather = s.weather ? `${s.weather.t}°C • ${WMO[s.weather.c] || 'OK'}` : 'Onbekend';
                 const photos = s.photos || [];
                 const label = sessionDisplayLabel(s, day);
+                const autoNote = (s.autoContributorNote || '').trim();
                 return `
                     <div class="bg-gray-800 p-4 rounded-xl border border-gray-700 space-y-3">
                         <div class="flex justify-between items-start gap-2">
                             <div>
                                 <div class="text-xs text-gray-400">${label}</div>
                                 <div class="text-lg font-bold text-white">${total} stuks</div>
+                                ${autoNote ? `<div class="text-[10px] text-cyan-200 mt-1">🔗 ${autoNote}</div>` : ''}
                             </div>
                             <button class="bg-purple-700 px-2 py-1 rounded text-[10px]" onclick="triggerPhoto('${s.id}')">📸</button>
                         </div>
+                            <label class="flex items-center gap-2 text-[11px] text-gray-300 bg-gray-900/60 border border-gray-700 rounded px-2 py-2">
+                                <input type="checkbox" class="accent-emerald-500" ${s.includeInReports !== false ? 'checked' : ''} onchange="toggleSessionInclude('${s.id}','${picker.value}', this.checked)">
+                                Meetellen in rapport en trendgrafiek
+                            </label>
                             <div class="space-y-2 text-left">
                                 <label class="text-[10px] uppercase text-gray-400 font-bold">Traject</label>
-                                <input value="${s.routeName || ''}" oninput="updateRoute('${s.id}', this.value)" class="w-full bg-gray-700 rounded px-2 py-2 text-sm text-white border border-gray-600" placeholder="Sint-Amandsstraat, Pittem" list="route-suggestions">
+                                <input value="${s.routeName || ''}" oninput="updateRoute('${s.id}', this.value)" onchange="commitRoutePreference('${s.id}', this.value)" class="w-full bg-gray-700 rounded px-2 py-2 text-sm text-white border border-gray-600" placeholder="Sint-Amandsstraat, Pittem" list="route-suggestions">
                             <div class="flex items-center justify-between">
                                 <div>
                                     <div class="text-[10px] uppercase text-gray-400 font-bold">Weer</div>
@@ -640,7 +1233,7 @@ document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
                                 <button class="bg-yellow-600 text-white px-3 py-1 rounded text-[10px]" onclick="fetchWeather(picker.value, '${s.id}')">GPS Update</button>
                             </div>
                             <label class="text-[10px] uppercase text-gray-400 font-bold">Notities</label>
-                            <textarea oninput="updateSessionNotes('${s.id}', this.value)" class="w-full bg-gray-700 border-none rounded p-3 text-sm h-20 text-white focus:ring-1 focus:ring-blue-500">${s.notes || ''}</textarea>
+                            <textarea oninput="updateSessionNotes('${s.id}', this.value)" class="w-full bg-gray-700 border-none rounded p-3 text-sm h-20 text-white focus:ring-1 focus:ring-blue-500" placeholder="${autoNote ? 'Persoonlijke notities (onder teamdata)' : 'Notities'}">${s.notes || ''}</textarea>
                         </div>
                         <div class="space-y-2">
                             <div class="flex items-center justify-between text-[10px] text-gray-400">
@@ -1047,25 +1640,78 @@ function openDetermination(id) {
         }
 
         function buildViewedSessionOptions() {
-            const sels = ['session-view-select','session-log-select'].map(id => document.getElementById(id)).filter(Boolean);
-            if(!sels.length) return;
+            const sels = ['session-view-select','session-log-select','global-session-select'].map(id => document.getElementById(id)).filter(Boolean);
+            const quickRow = document.getElementById('quick-session-row');
+            const quickMeta = document.getElementById('quick-session-meta');
+            const reportSel = document.getElementById('report-session-select');
             const day = ensureDay();
+            const activeSession = getActiveSession(day);
             const sessions = day.sessions.slice().sort((a,b)=>new Date(a.start)-new Date(b.start));
+            if(!sessions.length) {
+                viewedSessionId = '';
+                const emptyOpt = '<option value="">Geen sessies</option>';
+                sels.forEach(sel => {
+                    sel.innerHTML = emptyOpt;
+                    sel.value = '';
+                    sel.disabled = true;
+                });
+                if(quickRow) quickRow.classList.add('hidden');
+                if(quickMeta) quickMeta.innerText = '';
+                if(reportSel) reportSel.value = '';
+                return;
+            }
+
+            const hasCurrent = sessions.some(s => s.id === viewedSessionId);
+            if(!hasCurrent) viewedSessionId = sessions[sessions.length-1].id;
             const opts = sessions.map(s => {
                 const label = sessionDisplayLabel(s, day);
-                return `<option value="${s.id}" ${s.id === (viewedSessionId || '') ? 'selected' : ''}>${label}</option>`;
-            }).join('') || '<option value=\"\">Geen sessies</option>';
+                const routeTag = s.routeName ? ` · ${s.routeName}` : '';
+                return `<option value="${s.id}" ${s.id === (viewedSessionId || '') ? 'selected' : ''}>${label}${routeTag}</option>`;
+            }).join('');
             sels.forEach(sel => {
                 sel.innerHTML = opts;
-                if(!viewedSessionId && sessions.length) viewedSessionId = sessions[sessions.length-1].id;
-                if(sel && viewedSessionId) sel.value = viewedSessionId;
+                sel.disabled = false;
+                if(viewedSessionId) sel.value = viewedSessionId;
             });
+            if(quickRow) quickRow.classList.toggle('hidden', !!activeSession);
+            const current = sessions.find(s => s.id === viewedSessionId);
+            if(quickMeta) {
+                if(!current) quickMeta.innerText = '';
+                else {
+                    const total = sumCounts(current.counts || {});
+                    const route = (current.routeName || '').trim();
+                    quickMeta.innerText = route ? `${total} dieren · ${route}` : `${total} dieren`;
+                }
+            }
+            if(reportSel && viewedSessionId && Array.from(reportSel.options).some(o => o.value === viewedSessionId)) {
+                reportSel.value = viewedSessionId;
+            }
         }
 
         function setViewedSession(id) {
-            viewedSessionId = id || '';
+            const day = ensureDay();
+            const sessions = day.sessions.slice().sort((a,b)=>new Date(a.start)-new Date(b.start));
+            if(!sessions.length) {
+                viewedSessionId = '';
+                buildViewedSessionOptions();
+                updateReport();
+                return;
+            }
+            const exists = sessions.some(s => s.id === id);
+            viewedSessionId = exists ? id : sessions[sessions.length-1].id;
+            buildViewedSessionOptions();
             renderSessionLog();
             updateReport();
+        }
+
+        function selectReportSession(id) {
+            if(!id) {
+                reportMode = 'day';
+                updateReport();
+                return;
+            }
+            reportMode = 'session';
+            setViewedSession(id);
         }
 
 
@@ -1077,13 +1723,28 @@ function openDetermination(id) {
             save();
         }
 
+        function toggleSessionInclude(id, dayKey = picker.value, include = true) {
+            const day = ensureDay(dayKey);
+            const s = day.sessions.find(x => x.id === id);
+            if(!s) return;
+            s.includeInReports = !!include;
+            save();
+            render();
+            renderSessionAdmin();
+            showToast(s.includeInReports ? 'Sessie telt mee in rapport' : 'Sessie telt niet mee in rapport');
+        }
+
         function updateRoute(id, val) {
             const day = ensureDay();
             const s = day.sessions.find(x => x.id === id);
             if(!s) return;
             s.routeName = val;
             save();
-            buildRouteSuggestions();
+        }
+
+        function commitRoutePreference(id, val) {
+            updateRoute(id, val);
+            if(rememberRoutePreference(val)) buildRouteSuggestions();
         }
 
         function removeSessionPhoto(id, idx) {
@@ -1173,6 +1834,52 @@ function openDetermination(id) {
             return total;
         }
 
+        function addCounts(target = {}, counts = {}) {
+            for(const k in counts) {
+                const n = Number(counts[k] || 0);
+                if(!isFinite(n) || n === 0) continue;
+                target[k] = (target[k] || 0) + n;
+            }
+            return target;
+        }
+
+        function subtractCounts(target = {}, counts = {}) {
+            for(const k in counts) {
+                const n = Number(counts[k] || 0);
+                if(!isFinite(n) || n === 0) continue;
+                target[k] = (target[k] || 0) - n;
+                if(target[k] < 0) target[k] = 0;
+            }
+            return target;
+        }
+
+        function sessionIncludedInReports(session) {
+            return session?.includeInReports !== false;
+        }
+
+        function getReportEligibleSessions(day) {
+            const sessions = Array.isArray(day?.sessions) ? day.sessions : [];
+            if(!sessions.length) return [];
+            return sessions.filter(sessionIncludedInReports);
+        }
+
+        function getReportCountsForDay(day) {
+            const allSessions = Array.isArray(day?.sessions) ? day.sessions : [];
+            if(!allSessions.length) return day?.counts || {};
+            const sessions = getReportEligibleSessions(day);
+            if(!sessions.length) return {};
+            const merged = {};
+            sessions.forEach(s => addCounts(merged, s.counts || {}));
+            return merged;
+        }
+
+        function formatSessionNote(s) {
+            const auto = (s?.autoContributorNote || '').trim();
+            const notes = (s?.notes || '').trim();
+            if(auto && notes) return `${auto}. ${notes}`;
+            return auto || notes;
+        }
+
         function getActiveSession(day) {
             const running = (day.sessions || [])
                 .filter(s => !s.end)
@@ -1201,15 +1908,21 @@ function openDetermination(id) {
                 const detCount = (s.determinations || []).filter(d => !!d.result && !d.pending).length;
                 const photoCount = (s.photos || []).length;
                 const weather = s.weather ? `<div class="text-[10px] text-sky-300">🌤️ ${s.weather.t}°C ${WMO[s.weather.c]||'OK'}</div>` : '';
-                return `<label class="bg-gray-900 p-3 rounded border border-gray-800 flex items-center gap-2 cursor-pointer">
+                const autoNote = (s.autoContributorNote || '').trim();
+                return `<div class="bg-gray-900 p-3 rounded border border-gray-800 flex items-center gap-2">
                     <input type="checkbox" class="session-merge-checkbox accent-emerald-500" value="${s.id}">
                     <div class="flex-1">
                         <div class="font-bold text-gray-100">${fmtTime(s.start)} - ${s.end ? fmtTime(s.end) : 'lopend'}</div>
                         <div class="text-gray-400 text-[10px]">${total} stuks · ${detCount} determinaties · ${photoCount} foto's</div>
+                        ${autoNote ? `<div class="text-cyan-200 text-[10px]">${autoNote}</div>` : ''}
+                        <label class="inline-flex items-center gap-1 text-[10px] mt-1 text-gray-300">
+                            <input type="checkbox" class="accent-emerald-500" ${s.includeInReports !== false ? 'checked' : ''} onchange="event.stopPropagation(); toggleSessionInclude('${s.id}','${dayKey}', this.checked)">
+                            Meetellen in rapport
+                        </label>
                         ${weather}
                     </div>
                     <button class="bg-red-700 px-2 py-1 rounded text-[12px]" onclick="deleteSession('${s.id}','${dayKey}')" title="Verwijder sessie">🗑️</button>
-                </label>`;
+                </div>`;
             }).join('') || '<div class="text-gray-500">Geen sessies voor deze dag.</div>';
             box.innerHTML = items;
             // merge action button
@@ -1226,7 +1939,23 @@ function openDetermination(id) {
             const existing = day.sessions.find(s => !s.end);
             if(existing && !force) { alert('Er draait al een sessie. Stop eerst.'); return; }
             const now = new Date();
-            const session = { id: 'sess_'+now.getTime(), start: now.toISOString(), counts: {}, notes: tempDet ? 'Losse determinatie' : '', weather: null, photos: [], routeName: '', determinations: [], detTemp: tempDet };
+            const defaultRoute = tempDet ? '' : normalizeRouteName(getContributorProfile().lastRouteName || '');
+            const session = {
+                id: 'sess_'+now.getTime(),
+                start: now.toISOString(),
+                counts: {},
+                notes: tempDet ? 'Losse determinatie' : '',
+                weather: null,
+                photos: [],
+                routeName: defaultRoute,
+                determinations: [],
+                detTemp: tempDet,
+                includeInReports: true,
+                contributions: [],
+                contributorRoster: [],
+                autoContributorNote: '',
+                teamRunId: day.teamRunId || ''
+            };
             day.sessions.push(session);
             activeSessionId = session.id;
             viewedSessionId = session.id;
@@ -1587,12 +2316,207 @@ function openDetermination(id) {
             return { blob: new Blob([arr], { type: mime }), ext };
         }
 
+        function dayTotalForTrend(day) {
+            if(!day || typeof day !== 'object') return 0;
+            const hasSessions = Array.isArray(day.sessions) && day.sessions.length > 0;
+            const reportCounts = getReportCountsForDay(day);
+            const reportTotal = sumCounts(reportCounts || {});
+            if(hasSessions) return reportTotal;
+            if(reportTotal > 0) return reportTotal;
+            return sumCounts(day.counts || {});
+        }
+
+        function trendDateLabel(dateIso) {
+            const d = new Date(`${dateIso}T00:00:00`);
+            if(isNaN(d.getTime())) return dateIso;
+            return d.toLocaleDateString('nl-BE', { day: '2-digit', month: '2-digit' });
+        }
+
+        function bindReportTrendInteractions() {
+            const chart = document.getElementById('report-trend-chart');
+            const svg = chart?.querySelector('svg');
+            if(!svg) return;
+
+            const tooltip = svg.querySelector('#trend-point-tooltip');
+            const tooltipBg = svg.querySelector('#trend-point-tooltip-bg');
+            const tooltipText = svg.querySelector('#trend-point-tooltip-text');
+            const pointNodes = Array.from(svg.querySelectorAll('[data-trend-point="1"]'));
+            if(!tooltip || !tooltipBg || !tooltipText || !pointNodes.length) return;
+
+            const vb = svg.viewBox?.baseVal;
+            const vbW = vb?.width || 520;
+            let pinnedPoint = null;
+
+            const drawTooltip = pointEl => {
+                if(!pointEl) return;
+                const x = Number(pointEl.getAttribute('data-x') || 0);
+                const y = Number(pointEl.getAttribute('data-y') || 0);
+                const label = pointEl.getAttribute('data-label') || '';
+                const total = Number(pointEl.getAttribute('data-total') || 0);
+                const txt = `${label}: ${total} dieren`;
+                const boxH = 22;
+                const boxW = Math.max(102, Math.round(txt.length * 6.3) + 14);
+                const left = Math.min(vbW - boxW - 4, Math.max(4, x - (boxW / 2)));
+                const top = Math.max(4, y - boxH - 12);
+                tooltipBg.setAttribute('x', String(left));
+                tooltipBg.setAttribute('y', String(top));
+                tooltipBg.setAttribute('width', String(boxW));
+                tooltipBg.setAttribute('height', String(boxH));
+                tooltipText.setAttribute('x', String(left + (boxW / 2)));
+                tooltipText.setAttribute('y', String(top + 14));
+                tooltipText.textContent = txt;
+                tooltip.setAttribute('visibility', 'visible');
+            };
+
+            const hideTooltip = () => {
+                if(pinnedPoint) return;
+                tooltip.setAttribute('visibility', 'hidden');
+            };
+
+            pointNodes.forEach(point => {
+                point.style.cursor = 'pointer';
+                point.addEventListener('mouseenter', () => drawTooltip(point));
+                point.addEventListener('mouseleave', hideTooltip);
+                point.addEventListener('focus', () => drawTooltip(point));
+                point.addEventListener('blur', hideTooltip);
+                point.addEventListener('click', ev => {
+                    ev.stopPropagation();
+                    if(pinnedPoint === point) {
+                        pinnedPoint = null;
+                        tooltip.setAttribute('visibility', 'hidden');
+                        return;
+                    }
+                    pinnedPoint = point;
+                    drawTooltip(point);
+                });
+                point.addEventListener('touchstart', () => {
+                    pinnedPoint = point;
+                    drawTooltip(point);
+                }, { passive: true });
+            });
+
+            svg.addEventListener('click', ev => {
+                if(ev.target?.closest?.('[data-trend-point="1"]')) return;
+                pinnedPoint = null;
+                tooltip.setAttribute('visibility', 'hidden');
+            });
+        }
+
+        function renderReportTrend() {
+            const card = document.getElementById('report-trend-card');
+            const meta = document.getElementById('report-trend-meta');
+            const chart = document.getElementById('report-trend-chart');
+            const peaks = document.getElementById('report-trend-peaks');
+            if(!card || !meta || !chart || !peaks) return;
+
+            const points = Object.keys(storage || {})
+                .filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d))
+                .sort()
+                .map(d => ({ date: d, total: dayTotalForTrend(storage[d]) }))
+                .filter(p => p.total > 0);
+
+            if(!points.length) {
+                card.classList.add('hidden');
+                return;
+            }
+            card.classList.remove('hidden');
+
+            const top = points.reduce((best, p) => p.total > best.total ? p : best, points[0]);
+            const totalSum = points.reduce((n, p) => n + p.total, 0);
+            const avg = Math.round(totalSum / points.length);
+            meta.innerHTML = `Topdag: <strong>${trendDateLabel(top.date)}</strong> met <strong>${top.total}</strong> dieren · Gemiddeld <strong>${avg}</strong> per teldag`;
+
+            const sortedTop = points.slice().sort((a,b)=>b.total-a.total).slice(0,3);
+            peaks.innerHTML = sortedTop.map((p, i) => `
+                <span class="px-2 py-1 rounded-full border ${i===0 ? 'bg-emerald-500/20 border-emerald-300/40 text-emerald-100' : 'bg-gray-800/70 border-gray-600 text-gray-200'}">
+                    ${i===0 ? '🏆' : i===1 ? '🥈' : '🥉'} ${trendDateLabel(p.date)} · ${p.total}
+                </span>
+            `).join('');
+
+            const maxValue = Math.max(...points.map(p => p.total), 1);
+            const viewportWidth = Math.max(
+                280,
+                Math.floor((chart.parentElement?.clientWidth || chart.clientWidth || window.innerWidth || 360) - 8)
+            );
+            const width = Math.max(viewportWidth, (points.length - 1) * 56 + 96);
+            const height = 220;
+            const pad = { l: 44, r: 18, t: 18, b: 42 };
+            const innerW = width - pad.l - pad.r;
+            const innerH = height - pad.t - pad.b;
+            const xOf = i => points.length === 1 ? (pad.l + innerW / 2) : (pad.l + (i / (points.length - 1)) * innerW);
+            const yOf = v => pad.t + innerH - (v / maxValue) * innerH;
+            const yTicks = 4;
+            const labelStep = points.length > 12 ? Math.ceil(points.length / 8) : 1;
+
+            const linePath = points.map((p, i) => `${i ? 'L' : 'M'} ${xOf(i).toFixed(2)} ${yOf(p.total).toFixed(2)}`).join(' ');
+            const areaPath = `${linePath} L ${xOf(points.length-1).toFixed(2)} ${(pad.t + innerH).toFixed(2)} L ${xOf(0).toFixed(2)} ${(pad.t + innerH).toFixed(2)} Z`;
+
+            const grid = Array.from({ length: yTicks + 1 }).map((_, i) => {
+                const ratio = i / yTicks;
+                const y = (pad.t + innerH - ratio * innerH).toFixed(2);
+                const val = Math.round(maxValue * ratio);
+                return `
+                    <line x1="${pad.l}" y1="${y}" x2="${width-pad.r}" y2="${y}" stroke="rgba(148,163,184,0.22)" stroke-width="1" />
+                    <text x="${pad.l-6}" y="${Number(y)+4}" text-anchor="end" fill="#94a3b8" font-size="10">${val}</text>
+                `;
+            }).join('');
+
+            const dots = points.map((p, i) => {
+                const x = xOf(i);
+                const y = yOf(p.total);
+                const isTop = p.date === top.date && p.total === top.total;
+                const isSelectedDay = p.date === picker.value;
+                const label = trendDateLabel(p.date);
+                return `
+                    <g data-trend-point="1" data-date="${p.date}" data-label="${label}" data-total="${p.total}" data-x="${x.toFixed(2)}" data-y="${y.toFixed(2)}" tabindex="0" role="button" aria-label="${label}: ${p.total} dieren">
+                        <title>${label}: ${p.total} dieren</title>
+                        <circle cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r="12" fill="transparent" />
+                        <circle cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r="${isTop ? 6 : 4}" fill="${isTop ? '#facc15' : '#34d399'}" stroke="#06281f" stroke-width="${isTop ? 2 : 1.5}" />
+                        ${isSelectedDay ? `<circle cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r="9" fill="none" stroke="#22d3ee" stroke-width="1.5" stroke-dasharray="2 2" />` : ''}
+                        ${isTop ? `<text x="${x.toFixed(2)}" y="${(y-10).toFixed(2)}" text-anchor="middle" fill="#fde68a" font-size="12">🐸</text>` : ''}
+                    </g>
+                `;
+            }).join('');
+
+            const labels = points.map((p, i) => {
+                if(i % labelStep !== 0 && i !== points.length - 1) return '';
+                const x = xOf(i);
+                return `<text x="${x.toFixed(2)}" y="${height-12}" text-anchor="middle" fill="#cbd5e1" font-size="10">${trendDateLabel(p.date)}</text>`;
+            }).join('');
+
+            chart.innerHTML = `
+                <svg viewBox="0 0 ${width} ${height}" style="width:${width}px; height:${height}px; max-width:none; display:block;" role="img" aria-label="Teldagen trendgrafiek">
+                    <defs>
+                        <linearGradient id="trendFill" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stop-color="rgba(52,211,153,0.45)" />
+                            <stop offset="100%" stop-color="rgba(6,95,70,0.05)" />
+                        </linearGradient>
+                    </defs>
+                    <rect x="0" y="0" width="${width}" height="${height}" fill="rgba(2,6,23,0.45)" rx="10" />
+                    ${grid}
+                    <path d="${areaPath}" fill="url(#trendFill)" />
+                    <path d="${linePath}" fill="none" stroke="#10b981" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" />
+                    ${dots}
+                    <g id="trend-point-tooltip" visibility="hidden" pointer-events="none">
+                        <rect id="trend-point-tooltip-bg" x="0" y="0" width="120" height="22" rx="7" fill="rgba(2,6,23,0.9)" stroke="rgba(16,185,129,0.6)" stroke-width="1" />
+                        <text id="trend-point-tooltip-text" x="60" y="14" text-anchor="middle" fill="#d1fae5" font-size="10" font-weight="700"></text>
+                    </g>
+                    ${labels}
+                    <text x="${width-8}" y="${height-4}" text-anchor="end" fill="#64748b" font-size="9">dagen</text>
+                    <text x="8" y="12" fill="#64748b" font-size="9">dieren</text>
+                </svg>
+            `;
+            bindReportTrendInteractions();
+        }
+
         function updateReport() {
             const d = picker.value; const data = ensureDay(d);
             const sel = document.getElementById('report-session-select');
-            const sessionId = sel ? sel.value : '';
+            const sessionId = sel ? (sel.value || (reportMode === 'session' ? viewedSessionId : '')) : (reportMode === 'session' ? viewedSessionId : '');
             const session = sessionId ? (data.sessions || []).find(s => s.id === sessionId) : null;
-            const targetCounts = reportMode === 'session' && session ? session.counts : data.counts;
+            const reportSessions = getReportEligibleSessions(data);
+            const excludedSessions = (data.sessions || []).filter(s => !sessionIncludedInReports(s));
+            const targetCounts = reportMode === 'session' && session ? (session.counts || {}) : getReportCountsForDay(data);
             let txt = `🐸 *OVERZET-UPDATE - ${d}*\n\n`;
             const w = (reportMode === 'session' ? session?.weather : data.weather) || session?.weather;
             if(w) txt += `🌤️ *Weer:* ${w.t}°C, ${WMO[w.c] || "OK"}\n\n`;
@@ -1606,9 +2530,13 @@ function openDetermination(id) {
                 }
             });
             txt += `\nℹ️ Koppels (❤️/☠️) worden niet dubbel geteld bij de losse man/vrouw-aantallen.\n`;
-            if(reportMode === 'session' && session?.notes) txt += `\n📝 *Nota:* ${session.notes}\n`;
+            if(reportMode === 'session' && session) {
+                const note = formatSessionNote(session);
+                if(note) txt += `\n📝 *Nota:* ${note}\n`;
+                if(session.includeInReports === false) txt += `\n⚠️ Deze sessie staat op "niet meetellen in rapport".\n`;
+            }
             if(reportMode === 'day' && data.notes) txt += `\n📝 *Nota:* ${data.notes}\n`;
-            const sessionsToShow = reportMode === 'session' && session ? [session] : (data.sessions || []);
+            const sessionsToShow = reportMode === 'session' && session ? [session] : reportSessions;
             if(sessionsToShow.length) {
                 txt += `\n⏱️ *Tellingen:*\n`;
                 sessionsToShow.sort((a,b)=>new Date(a.start)-new Date(b.start)).forEach(s => {
@@ -1617,16 +2545,20 @@ function openDetermination(id) {
                     const route = s.routeName ? ` | 🚶‍♂️ ${s.routeName}` : '';
                     txt += `  - ${sessionDisplayLabel(s, data)}: ${total} stuks${route}${wtxt}\n`;
                 });
+                if(reportMode === 'day' && excludedSessions.length) {
+                    txt += `\n⚠️ ${excludedSessions.length} sessie(s) tellen niet mee in dit rapport.\n`;
+                }
             }
             txt += `\n#Paddentrek #Telling`;
             document.getElementById('report-text').innerText = h || data.notes ? txt : "Nog geen data ingevoerd.";
+            renderReportTrend();
 
             // determinaties blok
             const detBox = document.getElementById('report-dets');
             if(detBox) {
                 const dets = (reportMode === 'session' && session)
                     ? (session.determinations || [])
-                    : (data.sessions || []).flatMap(s => s.determinations || []);
+                    : reportSessions.flatMap(s => s.determinations || []);
                 const completedDets = dets.filter(d => !!d.result && !d.pending);
                 if(!completedDets.length) {
                     detBox.innerHTML = '<div class=\"text-gray-500\">Geen determinaties in deze selectie.</div>';
@@ -1668,6 +2600,14 @@ function openDetermination(id) {
 
         function setReportMode(m) {
             reportMode = m;
+            if(m === 'session') {
+                const day = ensureDay();
+                if(!viewedSessionId && day.sessions.length) viewedSessionId = day.sessions[day.sessions.length-1].id;
+                const sel = document.getElementById('report-session-select');
+                if(sel && viewedSessionId && Array.from(sel.options).some(o => o.value === viewedSessionId)) {
+                    sel.value = viewedSessionId;
+                }
+            }
             updateReport();
         }
 
@@ -1679,7 +2619,9 @@ function openDetermination(id) {
             const text = document.getElementById('report-text').innerText || 'Geen data';
             let files = [];
             if(includePhotos) {
-                const photos = reportMode === 'session' && session ? (session.photos||[]) : (day.photos||[]);
+                const photos = reportMode === 'session' && session
+                    ? (session.photos || [])
+                    : getReportEligibleSessions(day).flatMap(s => s.photos || []);
                 if(!photos.length) { alert('Geen foto’s beschikbaar voor deze selectie.'); return; }
                 files = photos.map((dataUrl, idx) => {
                     const res = dataURLToBlob(dataUrl);
@@ -1768,9 +2710,9 @@ ${lines.join('\n\n')}`;
             const sel = document.getElementById('report-session-select');
             const sessionId = sel ? sel.value : '';
             const session = (!forceDay && sessionId) ? day.sessions.find(s => s.id === sessionId) : null;
-            const counts = reportMode === 'session' && session ? session.counts || {} : day.counts || {};
+            const counts = reportMode === 'session' && session ? session.counts || {} : getReportCountsForDay(day);
             const meta = reportMode === 'session' && session
-                ? { route: session.routeName || '', notes: session.notes || '', weather: session.weather }
+                ? { route: session.routeName || '', notes: formatSessionNote(session), weather: session.weather }
                 : { route: '', notes: day.notes || '', weather: day.weather };
             const rows = [];
             rows.push(['Datum','Scope','Route','Notities','Weer temp','Weer code','Soort','Koppels levend','Koppels dood','M levend','V levend','Onb levend','M dood','V dood','Onb dood','Totaal']);
@@ -1826,7 +2768,7 @@ ${lines.join('\n\n')}`;
                 day.sessions.forEach(s => {
                     const wt = s.weather?.t ?? day.weather?.t ?? '';
                     const wc = s.weather?.c ?? day.weather?.c ?? '';
-                    addRows('Sessie', s.counts||{}, s.routeName||'', s.notes||'', wt, wc, s.start||'', s.end||'', s.id||'');
+                    addRows('Sessie', s.counts||{}, s.routeName||'', formatSessionNote(s), wt, wc, s.start||'', s.end||'', s.id||'');
                 });
             }
             downloadCSV(rows, `paddentrek-${d}-sessies.csv`);
@@ -1947,48 +2889,162 @@ ${lines.join('\n\n')}`;
             const sel = document.getElementById('report-session-select');
             if(!sel) return;
             const day = ensureDay();
-            sel.innerHTML = '<option value=\"\">Alle sessies</option>' + day.sessions.map(s => {
-                const label = `${sessionDisplayLabel(s, day)}${s.routeName ? ' · '+s.routeName : ''}`;
+            const preferred = viewedSessionId && day.sessions.some(s => s.id === viewedSessionId)
+                ? viewedSessionId
+                : sel.value;
+            sel.innerHTML = '<option value=\"\">Alle sessies die meetellen</option>' + day.sessions.map(s => {
+                const includeTag = s.includeInReports === false ? ' · (niet meetellen)' : '';
+                const label = `${sessionDisplayLabel(s, day)}${s.routeName ? ' · '+s.routeName : ''}${includeTag}`;
                 return `<option value="${s.id}">${label}</option>`;
             }).join('');
-            sel.value = '';
+            sel.value = day.sessions.some(s => s.id === preferred) ? preferred : '';
         }
 
         function buildRouteSuggestions() {
             const dl = document.getElementById('route-suggestions');
             if(!dl) return;
-            const names = new Set();
-            for(const d in storage) {
-                const day = ensureDay(d);
-                (day.sessions || []).forEach(s => { if(s.routeName) names.add(s.routeName); });
-            }
-            dl.innerHTML = Array.from(names).slice(0,50).map(n => `<option value="${n}"></option>`).join('');
+            const seen = new Set();
+            const names = [];
+            const addName = value => {
+                const route = normalizeRouteName(value);
+                if(!route) return;
+                const key = route.toLowerCase();
+                if(seen.has(key)) return;
+                seen.add(key);
+                names.push(route);
+            };
+
+            const profile = getContributorProfile();
+            normalizeRouteHistory(profile.routeHistory || []).forEach(addName);
+            if(profile.lastRouteName) addName(profile.lastRouteName);
+
+            Object.keys(storage || {}).sort().reverse().forEach(dayKey => {
+                const day = storage[dayKey];
+                const sessions = Array.isArray(day?.sessions) ? day.sessions.slice() : [];
+                sessions
+                    .sort((a, b) => new Date(b.start || 0) - new Date(a.start || 0))
+                    .forEach(s => addName(s?.routeName || ''));
+            });
+
+            dl.innerHTML = names.slice(0, 60).map(n => `<option value="${n}"></option>`).join('');
         }
 
-        function generateQR() {
+        function normalizeCustomSpeciesList(list) {
+            return (Array.isArray(list) ? list : [])
+                .filter(s => s && typeof s === 'object' && typeof s.name === 'string')
+                .map(s => ({
+                    id: typeof s.id === 'string' && s.id.trim() ? s.id : `c_${toSlug(s.name) || simpleHash(s.name)}`,
+                    name: s.name.trim(),
+                    color: s.color || 'gray',
+                    hasAmplexus: !!s.hasAmplexus
+                }))
+                .filter(s => !!s.name);
+        }
+
+        function buildPayloadHash(payload) {
+            const basis = {
+                c: payload?.c || {},
+                s: normalizeCustomSpeciesList(payload?.s || []).map(s => ({ id: s.id, name: s.name })),
+                sourceDate: payload?.sourceDate || payload?.d || '',
+                sourceLabel: payload?.sourceLabel || '',
+                contributorId: payload?.contributorId || '',
+                teamRunId: payload?.teamRunId || '',
+                teamLabel: payload?.teamLabel || ''
+            };
+            return simpleHash(stableStringify(basis));
+        }
+
+        function buildContributionId(teamRunId, contributorId, sourceDate, sessionId = '') {
+            const seed = `${teamRunId || ''}|${contributorId || ''}|${sourceDate || ''}|${sessionId || 'day'}`;
+            return `contrib_${simpleHash(seed)}`;
+        }
+
+        function ensureShareIdentity(requireInput = false) {
+            if(requireInput) return ensureContributorIdentity();
+            const profile = getContributorProfile();
+            const nameInput = document.getElementById('share-contributor-name');
+            const teamLabelInput = document.getElementById('share-team-label');
+            const rawName = nameInput ? (nameInput.value || '').trim() : (profile.name || '').trim();
+            const contributorName = rawName || 'Onbekende teller';
+            const teamLabel = normalizeTeamLabel(teamLabelInput?.value || profile.lastTeamLabel || '🐸');
+            if(teamLabelInput && !teamLabelInput.value.trim()) teamLabelInput.value = teamLabel;
+            const daySeed = (typeof picker !== 'undefined' && picker?.value) ? picker.value : currentDayIsoFallback();
+            const teamRunId = deriveTeamRunId(daySeed, teamLabel);
+            const nextProfile = saveContributorProfile({
+                ...profile,
+                name: contributorName === 'Onbekende teller' ? (profile.name || '') : contributorName,
+                lastTeamRunId: teamRunId,
+                lastTeamLabel: teamLabel
+            });
+            if(nameInput && !nameInput.value.trim()) nameInput.value = nextProfile.name;
+            if(teamLabelInput && !teamLabelInput.value.trim()) teamLabelInput.value = nextProfile.lastTeamLabel;
+            return { contributorId: nextProfile.id, contributorName, teamRunId, teamLabel: nextProfile.lastTeamLabel };
+        }
+
+        function buildSyncPayloadFromSelection(requireIdentity = false) {
             const d = picker.value;
-            const container = document.getElementById("qrcode-area"); if(container) container.innerHTML = "";
+            const day = ensureDay(d);
             const sel = document.getElementById('qr-session-select');
             const sessionId = sel ? sel.value : '';
-            const day = ensureDay(d);
             const session = sessionId ? day.sessions.find(s => s.id === sessionId) : null;
-            const counts = session ? session.counts || {} : day.counts || {};
-            const payload = { d, c: counts, s: day.custom || [], sess: sessionId || null };
-            new QRCode(container, { text: JSON.stringify(payload), width: 160, height: 160, correctLevel: QRCode.CorrectLevel.L });
-            updateQrSummary();
+            const counts = cloneJSON(session ? (session.counts || {}) : (day.counts || {}));
+            const custom = normalizeCustomSpeciesList(cloneJSON(day.custom || []));
+            const sourceLabel = session ? sessionDisplayLabel(session, day) : 'Volledige dag';
+            const identity = ensureShareIdentity(requireIdentity);
+            if(!identity) return null;
+
+            const teamRunId = identity.teamRunId || day.teamRunId || deriveTeamRunId(d, identity.teamLabel || '🐸');
+            if(!day.teamRunId && teamRunId) day.teamRunId = teamRunId;
+            if(session && !session.teamRunId && teamRunId) session.teamRunId = teamRunId;
+            const contributionId = buildContributionId(teamRunId, identity.contributorId, d, sessionId || '');
+            const payload = {
+                v: SYNC_PAYLOAD_VERSION,
+                id: contributionId,
+                contributionId,
+                createdAt: Date.now(),
+                sourceDate: d,
+                sourceLabel,
+                sess: sessionId || null,
+                c: counts,
+                s: custom,
+                contributorName: identity.contributorName || 'Onbekende teller',
+                contributorId: identity.contributorId || `legacy_${simpleHash(identity.contributorName || 'unknown')}`,
+                teamRunId,
+                teamLabel: normalizeTeamLabel(identity.teamLabel || '🐸')
+            };
+            payload.h = buildPayloadHash(payload);
+            return payload;
         }
 
-        function updateQrSummary() {
+        function generateQR(requireIdentity = false) {
+            const container = document.getElementById("qrcode-area");
+            if(container) container.innerHTML = "";
+            const payload = buildSyncPayloadFromSelection(requireIdentity);
+            if(!payload || !container) return;
+            new QRCode(container, { text: JSON.stringify(payload), width: 160, height: 160, correctLevel: QRCode.CorrectLevel.L });
+            updateQrSummary(payload);
+            save();
+        }
+
+        function updateQrSummary(payloadOverride = null) {
             const d = picker.value;
             const sel = document.getElementById('qr-session-select');
             const box = document.getElementById('qr-summary-box');
             if(!sel || !box) return;
-            const sessionId = sel.value;
+            const payload = payloadOverride || buildSyncPayloadFromSelection(false);
+            if(!payload) return;
+            const sessionId = payload.sess || '';
             const day = ensureDay(d);
             const session = sessionId ? day.sessions.find(s => s.id === sessionId) : null;
-            const counts = session ? session.counts || {} : day.counts || {};
+            const counts = payload.c || {};
             const total = sumCounts(counts);
-            let lines = [`Dag: ${d}`, `Bron: ${session ? sessionDisplayLabel(session, data) : 'Volledige dag'}`, `Totaal dieren: ${total}`];
+            let lines = [
+                `Dag: ${payload.sourceDate || d}`,
+                `Bron: ${payload.sourceLabel || (session ? sessionDisplayLabel(session, day) : 'Volledige dag')}`,
+                `Teller: ${payload.contributorName || 'Onbekende teller'}`,
+                `Team: ${payload.teamLabel || '🐸'}`,
+                `Totaal dieren: ${total}`
+            ];
             const perSpecies = {};
             for(const k in counts) {
                 const [sid, suf] = k.split('_');
@@ -1996,10 +3052,450 @@ ${lines.join('\n\n')}`;
                 perSpecies[sid] += counts[k] * (suf.includes('p_') ? 2 : 1);
             }
             Object.entries(perSpecies).sort((a,b)=>b[1]-a[1]).slice(0,4).forEach(([sid, val]) => {
-                const name = (SPECIES.find(s=>s.id===sid) || (day.custom||[]).find(c=>c.id===sid) || {name:sid}).name;
+                const name = (SPECIES.find(s=>s.id===sid) || (payload.s||[]).find(c=>c.id===sid) || {name:sid}).name;
                 lines.push(`${name}: ${val}`);
             });
-            box.innerText = `Wie deze QR scant, telt dit bij zichzelf op:\n\n${lines.join('\n')}`;
+            box.innerText = `Wie deze QR scant, krijgt eerst een wizard en kan veilig samenvoegen:\n\n${lines.join('\n')}`;
+        }
+
+        function summarizeIncomingCounts(incoming) {
+            const label = {
+                p_l: '❤️ koppels', p_d: '☠️ koppels', m_l: 'm levend', v_l: 'v levend', o_l: 'o levend',
+                m_d: 'm dood',   v_d: 'v dood',   o_d: 'o dood'
+            };
+            const nameFor = id => {
+                const base = SPECIES.find(s => s.id === id);
+                if(base) return base.name;
+                const inc = (incoming.s || []).find(s => s.id === id);
+                return inc ? inc.name : id;
+            };
+            const perSpecies = {};
+            for(const k in incoming.c || {}) {
+                const [sid, suf] = k.split('_');
+                if(!perSpecies[sid]) perSpecies[sid] = [];
+                perSpecies[sid].push(`${incoming.c[k]} × ${label[suf] || suf}`);
+            }
+            const lines = Object.entries(perSpecies).map(([sid, items]) => `- ${nameFor(sid)}: ${items.join(', ')}`);
+            return lines.length ? lines.join('\n') : 'Geen teldata ontvangen.';
+        }
+
+        function sanitizeIncomingSyncPayload(payload) {
+            if(!payload || typeof payload !== 'object') return null;
+            const rawCounts = payload.c && typeof payload.c === 'object' ? payload.c : {};
+            const counts = {};
+            for(const k in rawCounts) {
+                const n = Number(rawCounts[k]);
+                if(!isFinite(n) || n === 0) continue;
+                counts[k] = n;
+            }
+            const custom = normalizeCustomSpeciesList(payload.s || []);
+            const sourceDate = typeof payload.sourceDate === 'string' ? payload.sourceDate : (typeof payload.d === 'string' ? payload.d : '');
+            const sourceLabel = typeof payload.sourceLabel === 'string' ? payload.sourceLabel : '';
+            const createdAt = Number(payload.createdAt) || Date.now();
+            const incomingId = typeof payload.contributionId === 'string' ? payload.contributionId : (typeof payload.id === 'string' ? payload.id : '');
+            const fallbackId = `legacy_${simpleHash(`${sourceDate}|${sourceLabel}|${stableStringify(counts)}`)}`;
+            const contributionId = incomingId || fallbackId;
+            const contributorName = typeof payload.contributorName === 'string' && payload.contributorName.trim()
+                ? payload.contributorName.trim()
+                : 'Onbekende teller';
+            const contributorId = typeof payload.contributorId === 'string' && payload.contributorId.trim()
+                ? payload.contributorId.trim()
+                : `legacy_${simpleHash(`${contributorName}|${contributionId}`)}`;
+            const teamLabel = normalizeTeamLabel(
+                typeof payload.teamLabel === 'string' && payload.teamLabel.trim()
+                    ? payload.teamLabel.trim()
+                    : teamLabelFromRunId(typeof payload.teamRunId === 'string' ? payload.teamRunId : '')
+            );
+            const teamRunSeed = typeof payload.teamRunId === 'string' && payload.teamRunId.trim()
+                ? payload.teamRunId.trim()
+                : deriveTeamRunId(sourceDate || currentDayIsoFallback(), teamLabel);
+            const teamRunId = ensureTeamRunId(teamRunSeed);
+            const normalized = {
+                v: Number(payload.v) || 1,
+                id: contributionId,
+                contributionId,
+                createdAt,
+                sourceDate,
+                sourceLabel,
+                sess: payload.sess || null,
+                c: counts,
+                s: custom,
+                contributorName,
+                contributorId,
+                teamRunId,
+                teamLabel
+            };
+            normalized.h = typeof payload.h === 'string' ? payload.h : buildPayloadHash(normalized);
+            return normalized;
+        }
+
+        function clearSyncQueryFromUrl() {
+            const url = new URL(window.location.href);
+            if(!url.searchParams.has(SYNC_QUERY_PARAM)) return;
+            url.searchParams.delete(SYNC_QUERY_PARAM);
+            const q = url.searchParams.toString();
+            history.replaceState({}, '', `${url.pathname}${q ? `?${q}` : ''}${url.hash}`);
+        }
+
+        function renderIncomingSyncCard() {
+            const card = document.getElementById('sync-incoming-card');
+            const meta = document.getElementById('sync-incoming-meta');
+            const summary = document.getElementById('sync-incoming-summary');
+            if(!card || !meta || !summary) return;
+            if(!pendingSyncLinkPayload) {
+                card.classList.add('hidden');
+                return;
+            }
+            card.classList.remove('hidden');
+            const p = pendingSyncLinkPayload;
+            const total = sumCounts(p.c || {});
+            const created = p.createdAt ? new Date(p.createdAt).toLocaleString('nl-BE') : 'onbekend';
+            const srcDate = p.sourceDate || 'onbekend';
+            const srcLabel = p.sourceLabel ? ` (${p.sourceLabel})` : '';
+            const already = isSyncAlreadyImported(p.id);
+            meta.innerText =
+                `Bron: ${srcDate}${srcLabel} · ${created}\n` +
+                `Teller: ${p.contributorName || 'Onbekende teller'} · Team ${p.teamLabel || '🐸'}\n` +
+                `${total} dieren.${already ? ' Deze bijdrage is al bekend en wordt niet dubbel geteld.' : ''}\n` +
+                `De wizard opent normaal automatisch. Deze kaart is een fallback als je later alsnog wil toevoegen.`;
+            summary.innerText = summarizeIncomingCounts(p);
+        }
+
+        function buildSyncWizardTargetOptions() {
+            const dateInput = document.getElementById('sync-wizard-date');
+            const sel = document.getElementById('sync-wizard-target-select');
+            const hint = document.getElementById('sync-wizard-hint');
+            if(!dateInput || !sel || !hint) return;
+            const dayKey = dateInput.value || picker.value || todayISO();
+            const day = storage[dayKey] || { sessions: [] };
+            const sessions = (day.sessions || []).slice().sort((a,b)=>new Date(a.start)-new Date(b.start));
+            sel.innerHTML = `<option value="">Nieuwe teamsessie op ${dayKey}</option>` +
+                sessions.map(s => `<option value="${s.id}">${sessionDisplayLabel(s, day)}</option>`).join('');
+            sel.value = '';
+            updateSyncWizardHint();
+        }
+
+        function updateSyncWizardHint() {
+            const dateInput = document.getElementById('sync-wizard-date');
+            const sel = document.getElementById('sync-wizard-target-select');
+            const hint = document.getElementById('sync-wizard-hint');
+            if(!dateInput || !sel || !hint) return;
+            const dayKey = dateInput.value || picker.value || todayISO();
+            const val = sel.value;
+            if(!val) {
+                hint.innerText = `Stap 3: de ontvangen telling komt in een nieuwe teamsessie op ${dayKey}.`;
+            } else {
+                hint.innerText = `Stap 3: de ontvangen telling wordt bijgeteld in sessie ${sel.selectedOptions[0]?.textContent || val}.`;
+            }
+        }
+
+        function openSyncWizard() {
+            const modal = document.getElementById('sync-wizard-modal');
+            const meta = document.getElementById('sync-wizard-meta');
+            const summary = document.getElementById('sync-wizard-summary');
+            const dateInput = document.getElementById('sync-wizard-date');
+            if(!modal || !meta || !summary || !dateInput || !pendingSyncLinkPayload) return;
+            const p = pendingSyncLinkPayload;
+            const total = sumCounts(p.c || {});
+            const created = p.createdAt ? new Date(p.createdAt).toLocaleString('nl-BE') : 'onbekend';
+            const srcDate = p.sourceDate || 'onbekend';
+            const srcLabel = p.sourceLabel ? ` (${p.sourceLabel})` : '';
+            const already = isSyncAlreadyImported(p.id);
+            meta.innerText =
+                `Stap 1: controleer de bron.\n` +
+                `• ${srcDate}${srcLabel}\n` +
+                `• Teller: ${p.contributorName || 'Onbekende teller'}\n` +
+                `• Team: ${p.teamLabel || '🐸'}\n` +
+                `• ${created}\n` +
+                `• ${total} dieren\n` +
+                `${already ? '• Deze bijdrage is al bekend en wordt overgeslagen.' : ''}`;
+            summary.innerText = `Stap 2: inhoud van de link\n\n${summarizeIncomingCounts(p)}`;
+            dateInput.value = picker.value || todayISO();
+            buildSyncWizardTargetOptions();
+            modal.classList.remove('hidden');
+        }
+
+        function closeSyncWizard(ev = null) {
+            const modal = document.getElementById('sync-wizard-modal');
+            if(!modal) return;
+            if(ev && ev.target && ev.target.id !== 'sync-wizard-modal' && !ev.target.closest('[data-sync-close="1"]')) return;
+            modal.classList.add('hidden');
+        }
+
+        function mergeIncomingCustomSpecies(day, payload) {
+            normalizeCustomSpeciesList(payload?.s || []).forEach(si => {
+                if(!day.custom.some(c => c.name === si.name || c.id === si.id)) day.custom.push(cloneJSON(si));
+            });
+        }
+
+        function ensureImportTargetSession(dayKey, targetSessionId = '', payload = null) {
+            const day = ensureDay(dayKey);
+            const existing = targetSessionId ? day.sessions.find(s => s.id === targetSessionId) : null;
+            if(existing) return existing;
+            const now = new Date();
+            const session = {
+                id: `syncsess_${now.getTime()}_${randomHex(4)}`,
+                start: now.toISOString(),
+                end: now.toISOString(),
+                counts: {},
+                notes: '',
+                weather: null,
+                photos: [],
+                routeName: '',
+                determinations: [],
+                detTemp: false,
+                includeInReports: true,
+                contributions: [],
+                contributorRoster: [],
+                autoContributorNote: '',
+                teamRunId: payload?.teamRunId || day.teamRunId || ''
+            };
+            day.sessions.push(session);
+            return session;
+        }
+
+        function rebuildSessionContributorRoster(session) {
+            if(!session) return;
+            const map = new Map();
+            (session.contributions || []).forEach(c => {
+                const id = c?.contributorId || '';
+                const name = (c?.contributorName || 'Onbekende teller').trim() || 'Onbekende teller';
+                const key = id || `name_${name.toLowerCase()}`;
+                if(!map.has(key)) map.set(key, { id: id || `legacy_${simpleHash(name)}`, name });
+            });
+            session.contributorRoster = Array.from(map.values());
+            const names = session.contributorRoster.map(r => r.name).filter(Boolean);
+            session.autoContributorNote = names.length ? `Data van ${names.join(', ')}` : '';
+        }
+
+        function removeImportedContribution(dayKey, sessionId, contributionId) {
+            if(!dayKey || !sessionId || !contributionId) return false;
+            if(!storage[dayKey]) return false;
+            const day = ensureDay(dayKey);
+            const session = (day.sessions || []).find(s => s.id === sessionId);
+            if(!session || !Array.isArray(session.contributions)) return false;
+            const idx = session.contributions.findIndex(c => c.contributionId === contributionId);
+            if(idx < 0) return false;
+            const rec = session.contributions[idx];
+            subtractCounts(session.counts, rec.counts || {});
+            session.contributions.splice(idx, 1);
+            rebuildSessionContributorRoster(session);
+            recalcDayFromSessions(day);
+            return true;
+        }
+
+        function maybeOfferReportInclusionFix(dayKey, keepSessionId) {
+            const day = ensureDay(dayKey);
+            const keep = day.sessions.find(s => s.id === keepSessionId);
+            if(!keep) return false;
+            const includable = day.sessions.filter(s => sumCounts(s.counts || {}) > 0 && s.includeInReports !== false);
+            const others = includable.filter(s => s.id !== keepSessionId);
+            if(!others.length) return false;
+            const ok = confirm(
+                `Mogelijke dubbeltelling in rapport.\n\n` +
+                `Wil je ${others.length} andere sessie(s) op "niet meetellen" zetten?\n` +
+                `De teamsessie blijft meetellen.`
+            );
+            if(!ok) return false;
+            others.forEach(s => s.includeInReports = false);
+            keep.includeInReports = true;
+            showToast('Ruwe sessies op niet-meetellen gezet');
+            return true;
+        }
+
+        function importContributionPayload(payloadInput, dayKey, targetSessionId = '') {
+            const payload = sanitizeIncomingSyncPayload(payloadInput);
+            if(!payload || !Object.keys(payload.c || {}).length) {
+                return { ok: false, status: 'invalid', summary: 'Geen teldata ontvangen.' };
+            }
+            const hash = payload.h || buildPayloadHash(payload);
+            const existing = getSyncImportEntry(payload.id);
+            if(existing && !existing.hash) {
+                return {
+                    ok: true,
+                    status: 'already',
+                    summary: `Bijdrage van ${payload.contributorName || 'Onbekende teller'} was al bekend en is overgeslagen.`,
+                    payload
+                };
+            }
+            if(existing && existing.hash && existing.hash === hash) {
+                return {
+                    ok: true,
+                    status: 'already',
+                    summary: `Bijdrage van ${payload.contributorName || 'Onbekende teller'} was al bekend en is overgeslagen.`,
+                    payload
+                };
+            }
+
+            if(existing && existing.hash && existing.hash !== hash) {
+                removeImportedContribution(existing.dayKey, existing.sessionId, payload.id);
+            }
+
+            const day = ensureDay(dayKey);
+            if(payload.teamRunId && !day.teamRunId) day.teamRunId = payload.teamRunId;
+            mergeIncomingCustomSpecies(day, payload);
+
+            const targetSession = ensureImportTargetSession(dayKey, targetSessionId, payload);
+            addCounts(targetSession.counts, payload.c || {});
+            if(payload.teamRunId && !targetSession.teamRunId) targetSession.teamRunId = payload.teamRunId;
+            targetSession.includeInReports = true;
+            if(!Array.isArray(targetSession.contributions)) targetSession.contributions = [];
+            const rec = {
+                contributionId: payload.id,
+                hash,
+                counts: cloneJSON(payload.c || {}),
+                createdAt: payload.createdAt || Date.now(),
+                sourceDate: payload.sourceDate || '',
+                sourceLabel: payload.sourceLabel || '',
+                contributorId: payload.contributorId || '',
+                contributorName: payload.contributorName || 'Onbekende teller',
+                teamRunId: payload.teamRunId || '',
+                teamLabel: payload.teamLabel || '🐸',
+                importedAt: Date.now()
+            };
+            const existingIdx = targetSession.contributions.findIndex(c => c.contributionId === payload.id);
+            if(existingIdx >= 0) targetSession.contributions.splice(existingIdx, 1);
+            targetSession.contributions.push(rec);
+            rebuildSessionContributorRoster(targetSession);
+            recalcDayFromSessions(day);
+
+            markSyncImported(payload.id, { hash, dayKey, sessionId: targetSession.id });
+            const status = existing ? 'updated' : 'new';
+            const summary = describeSync({ ...payload, d: payload.sourceDate || dayKey }, dayKey);
+            return { ok: true, status, summary, payload, targetSession };
+        }
+
+        function applyPendingSyncToTarget(dayKey, targetSessionId = '') {
+            const p = pendingSyncLinkPayload;
+            if(!p) return null;
+            const result = importContributionPayload(p, dayKey, targetSessionId);
+            if(!result?.ok) return result;
+            pendingSyncLinkPayload = null;
+            save();
+            buildUI();
+            render();
+            renderSessionAdmin();
+            buildQRSessionOptions();
+            buildReportSessionOptions();
+            buildImportTargetOptions();
+            buildRouteSuggestions();
+            renderIncomingSyncCard();
+            if(result.targetSession && (result.status === 'new' || result.status === 'updated')) {
+                if(maybeOfferReportInclusionFix(dayKey, result.targetSession.id)) {
+                    save();
+                    render();
+                    renderSessionAdmin();
+                }
+            }
+            return result;
+        }
+
+        function generateSyncLink() {
+            const payload = buildSyncPayloadFromSelection(true);
+            if(!payload) return;
+            const total = sumCounts(payload.c || {});
+            if(total <= 0) { alert('Geen aantallen om te delen in deze selectie.'); return; }
+            const encoded = encodeBase64Url(JSON.stringify(payload));
+            const link = `${window.location.origin}${window.location.pathname}?${SYNC_QUERY_PARAM}=${encoded}`;
+            const box = document.getElementById('sync-link-box');
+            const out = document.getElementById('sync-link-output');
+            if(box) box.classList.remove('hidden');
+            if(out) out.value = link;
+            if(link.length > 3500) showToast('Let op: erg lange deel-link');
+            else showToast('Deel-link klaar');
+        }
+
+        function copySyncLink() {
+            const out = document.getElementById('sync-link-output');
+            const link = out?.value?.trim();
+            if(!link) { alert('Maak eerst een deel-link.'); return; }
+            if(navigator.clipboard?.writeText) {
+                navigator.clipboard.writeText(link).then(() => showToast('Link gekopieerd')).catch(() => {
+                    out.select();
+                    document.execCommand('copy');
+                    showToast('Link gekopieerd');
+                });
+                return;
+            }
+            out.select();
+            document.execCommand('copy');
+            showToast('Link gekopieerd');
+        }
+
+        async function shareSyncLink() {
+            const out = document.getElementById('sync-link-output');
+            const link = out?.value?.trim();
+            if(!link) { alert('Maak eerst een deel-link.'); return; }
+            try {
+                if(navigator.share) {
+                    await navigator.share({ title: 'Paddentrek deel-link', text: 'Open deze link en synchroniseer deze bijdrage in je app.', url: link });
+                    return;
+                }
+            } catch(err) {
+                if(err?.name === 'AbortError') return;
+            }
+            copySyncLink();
+        }
+
+        function importPendingSyncLink() {
+            const p = pendingSyncLinkPayload;
+            if(!p) { alert('Geen ontvangen deel-link.'); return; }
+            const dayKey = picker.value;
+            const targetSessionId = document.getElementById('import-target-select')?.value || '';
+            const result = applyPendingSyncToTarget(dayKey, targetSessionId);
+            if(!result?.ok) return;
+            closeSyncWizard();
+            if(result.status === 'already') {
+                showToast('Bijdrage al bekend (overgeslagen)');
+                alert(result.summary);
+                return;
+            }
+            showToast(result.status === 'updated' ? 'Bijdrage bijgewerkt' : 'Deel-link toegevoegd');
+            alert(result.summary);
+            switchTab('sessions');
+        }
+
+        function importPendingSyncLinkWizard() {
+            const p = pendingSyncLinkPayload;
+            if(!p) { alert('Geen ontvangen deel-link.'); return; }
+            const dayKey = document.getElementById('sync-wizard-date')?.value || picker.value || todayISO();
+            const targetSessionId = document.getElementById('sync-wizard-target-select')?.value || '';
+            const result = applyPendingSyncToTarget(dayKey, targetSessionId);
+            if(!result?.ok) return;
+            closeSyncWizard();
+            if(result.status === 'already') {
+                showToast('Bijdrage al bekend (overgeslagen)');
+                alert(result.summary);
+                return;
+            }
+            showToast(result.status === 'updated' ? 'Bijdrage bijgewerkt' : 'Deel-link toegevoegd');
+            alert(result.summary);
+            switchTab('sessions');
+        }
+
+        function dismissPendingSyncLink() {
+            pendingSyncLinkPayload = null;
+            closeSyncWizard();
+            renderIncomingSyncCard();
+            showToast('Deel-link genegeerd');
+        }
+
+        function handleIncomingSyncFromUrl() {
+            const raw = new URL(window.location.href).searchParams.get(SYNC_QUERY_PARAM);
+            if(!raw) return;
+            clearSyncQueryFromUrl();
+            try {
+                const json = decodeBase64Url(raw);
+                const parsed = sanitizeIncomingSyncPayload(JSON.parse(json));
+                if(!parsed || !Object.keys(parsed.c || {}).length) throw new Error('EMPTY');
+                pendingSyncLinkPayload = parsed;
+                renderIncomingSyncCard();
+                openSyncWizard();
+                showToast('Deel-link ontvangen');
+            } catch(e) {
+                console.log(e);
+                alert('Kon de deel-link niet lezen.');
+            }
         }
 
         function exportRangeCSV(forceSettings = false) {
@@ -2023,11 +3519,11 @@ ${lines.join('\n\n')}`;
                     day.sessions.forEach(s => {
                         const wt = s.weather?.t ?? day.weather?.t ?? '';
                         const wc = s.weather?.c ?? day.weather?.c ?? '';
-                        addRows('Sessie', s.counts||{}, s.routeName||'', s.notes||'', wt, wc, s.start||'', s.end||'', s.id || '');
+                        addRows('Sessie', s.counts||{}, s.routeName||'', formatSessionNote(s), wt, wc, s.start||'', s.end||'', s.id || '');
                     });
                 }
                 // ook dagtotaal opnemen
-                addRows('Dag', day.counts||{}, '', day.notes||'', day.weather?.t ?? '', day.weather?.c ?? '', '', '', 'day-'+d);
+                addRows('Dag', getReportCountsForDay(day), '', day.notes||'', day.weather?.t ?? '', day.weather?.c ?? '', '', '', 'day-'+d);
             });
             if(rows.length===1) rows.push(['Geen data',0,0,0,0,0,0,0,0,0,0]);
             const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(';')).join('\n');
@@ -2109,7 +3605,22 @@ ${lines.join('\n\n')}`;
                         const startIso = startRaw ? new Date(startRaw).toISOString() : new Date(`${date}T00:00:00`).toISOString();
                         const endIso = endRaw ? new Date(endRaw).toISOString() : null;
                         const existing = day.sessions.find(s => s.id === sessIdCsv);
-                        sess = existing || { id: sessIdCsv || `import_${key}_${i}`, start: startIso, end: endIso, counts: {}, notes: cols[idx.notes] || 'CSV import', photos: [], routeName: cols[idx.route] || 'CSV import', weather: null, determinations: [] };
+                        sess = existing || {
+                            id: sessIdCsv || `import_${key}_${i}`,
+                            start: startIso,
+                            end: endIso,
+                            counts: {},
+                            notes: cols[idx.notes] || 'CSV import',
+                            photos: [],
+                            routeName: cols[idx.route] || 'CSV import',
+                            weather: null,
+                            determinations: [],
+                            includeInReports: true,
+                            contributions: [],
+                            contributorRoster: [],
+                            autoContributorNote: '',
+                            teamRunId: day.teamRunId || ''
+                        };
                         if(!existing) day.sessions.push(sess);
                         importSessions[key] = sess;
                     } else {
@@ -2193,14 +3704,33 @@ ${lines.join('\n\n')}`;
                     // maak een dag-importsessie zodat log iets toont
                     const startIso = new Date(`${d}T00:00:00`).toISOString();
                     const endIso = new Date(`${d}T23:59:00`).toISOString();
-                    day.sessions.push({ id:`import_${d}_day`, start:startIso, end:endIso, counts:{...fallbackCounts[d]}, notes: meta.notes||'', photos: [], routeName: meta.route||'', weather: (meta.wt||meta.wc) ? {t:meta.wt||0, c:meta.wc||0, ts:Date.now()} : null, determinations: [] });
+                    day.sessions.push({
+                        id:`import_${d}_day`,
+                        start:startIso,
+                        end:endIso,
+                        counts:{...fallbackCounts[d]},
+                        notes: meta.notes||'',
+                        photos: [],
+                        routeName: meta.route||'',
+                        weather: (meta.wt||meta.wc) ? {t:meta.wt||0, c:meta.wc||0, ts:Date.now()} : null,
+                        determinations: [],
+                        includeInReports: true,
+                        contributions: [],
+                        contributorRoster: [],
+                        autoContributorNote: '',
+                        teamRunId: day.teamRunId || ''
+                    });
                 }
             });
             purgeEmptyCustomSpecies();
             return { added, days };
         }
 
-        function describeSync(incoming) {
+        function describeSync(incoming, targetDay = null) {
+            const sourceDay = incoming?.sourceDate || incoming?.d || picker.value;
+            const dayKey = targetDay || sourceDay;
+            const who = incoming?.contributorName || 'Onbekende teller';
+            const team = incoming?.teamLabel || '🐸';
             const label = {
                 p_l: '❤️ koppels', p_d: '☠️ koppels', m_l: 'm levend', v_l: 'v levend', o_l: 'o levend',
                 m_d: 'm dood',   v_d: 'v dood',   o_d: 'o dood'
@@ -2221,11 +3751,13 @@ ${lines.join('\n\n')}`;
 
             const lines = Object.entries(perSpecies).map(([sid, items]) => `- ${nameFor(sid)}: ${items.join(', ')}`);
 
-            const existingCustom = (storage[incoming.d]?.custom) || [];
+            const existingCustom = (storage[dayKey]?.custom) || [];
             const newCustom = (incoming.s || []).filter(s => !existingCustom.some(c => c.name === s.name));
             if(newCustom.length) lines.push(`+ Nieuwe soorten: ${newCustom.map(s => s.name).join(', ')}`);
 
-            return lines.length ? `Toegevoegd op ${incoming.d}:\n${lines.join('\n')}` : 'Geen teldata ontvangen.';
+            if(!lines.length) return 'Geen teldata ontvangen.';
+            const sourceTxt = sourceDay !== dayKey ? ` (bron ${sourceDay})` : '';
+            return `Toegevoegd op ${dayKey}${sourceTxt}.\nTeller: ${who}\nTeam: ${team}\n\n${lines.join('\n')}`;
         }
 
         function startScanner() {
@@ -2233,38 +3765,158 @@ ${lines.join('\n\n')}`;
             sc.start({ facingMode: "environment" }, { fps: 10, qrbox: 200 }, t => {
                 try {
                     const i = JSON.parse(t);
-                    const summary = describeSync(i);
-                    const day = ensureDay(i.d);
-                    for(let k in i.c) day.counts[k] = (day.counts[k] || 0) + i.c[k];
-                    (i.s||[]).forEach(si => { if(!day.custom.some(c => c.name===si.name)) day.custom.push(si); });
-                    save(); buildUI(); render(); sc.stop(); alert(summary); showToast("Partner gesynct!"); switchTab('count');
+                    const payload = sanitizeQrImportPayload(i);
+                    if(!payload) throw new Error('INVALID');
+                    const result = importContributionPayload(payload, picker.value, '');
+                    if(!result?.ok) throw new Error('IMPORT');
+                    save();
+                    buildUI();
+                    render();
+                    sc.stop();
+                    if(result.status === 'already') {
+                        alert(result.summary);
+                        showToast("Bijdrage al bekend");
+                    } else {
+                        alert(result.summary);
+                        showToast(result.status === 'updated' ? "Bijdrage bijgewerkt" : "Partner gesynct!");
+                    }
+                    switchTab('count');
                 } catch(e) { alert("QR fout"); }
             }).catch(() => alert("Camera fout"));
         }
 
-        function startSessionScanner() {
-            const modal = document.getElementById('qr-modal');
-            modal.classList.remove('hidden');
+        function sanitizeQrImportPayload(payload) {
+            const parsed = sanitizeIncomingSyncPayload(payload);
+            if(!parsed || !Object.keys(parsed.c || {}).length) return null;
+            return parsed;
+        }
+
+        function buildQrWizardTargetOptions() {
+            const dateInput = document.getElementById('qr-wizard-date');
+            const sel = document.getElementById('qr-wizard-target-select');
+            const hint = document.getElementById('qr-wizard-hint');
+            if(!dateInput || !sel || !hint) return;
+            const dayKey = dateInput.value || picker.value || todayISO();
+            const day = storage[dayKey] || { sessions: [] };
+            const sessions = (day.sessions || []).slice().sort((a,b)=>new Date(a.start)-new Date(b.start));
+            sel.innerHTML = `<option value="">Nieuwe teamsessie op ${dayKey}</option>` +
+                sessions.map(s => `<option value="${s.id}">${sessionDisplayLabel(s, day)}</option>`).join('');
+            sel.value = '';
+            updateQrWizardHint();
+        }
+
+        function updateQrWizardHint() {
+            const dateInput = document.getElementById('qr-wizard-date');
+            const sel = document.getElementById('qr-wizard-target-select');
+            const hint = document.getElementById('qr-wizard-hint');
+            if(!dateInput || !sel || !hint) return;
+            const dayKey = dateInput.value || picker.value || todayISO();
+            const val = sel.value;
+            if(!val) {
+                hint.innerText = `Stap 3: de gescande telling komt in een nieuwe teamsessie op ${dayKey}.`;
+            } else {
+                hint.innerText = `Stap 3: de gescande telling wordt bijgeteld in sessie ${sel.selectedOptions[0]?.textContent || val}.`;
+            }
+        }
+
+        function setQrWizardIdleState() {
+            const meta = document.getElementById('qr-wizard-meta');
+            const summary = document.getElementById('qr-wizard-summary');
+            const btnImport = document.getElementById('qr-wizard-import-btn');
+            if(meta) meta.innerText = 'Stap 1: scan de QR-code van je partner.';
+            if(summary) summary.innerText = 'Nog geen QR gelezen.';
+            if(btnImport) {
+                btnImport.disabled = true;
+                btnImport.classList.add('opacity-60');
+            }
+        }
+
+        function renderQrWizardPreview(payload) {
+            const meta = document.getElementById('qr-wizard-meta');
+            const summary = document.getElementById('qr-wizard-summary');
+            const btnImport = document.getElementById('qr-wizard-import-btn');
+            if(!meta || !summary || !btnImport) return;
+            const total = sumCounts(payload.c || {});
+            const already = isSyncAlreadyImported(payload.id);
+            meta.innerText =
+                `Stap 1 klaar: QR gelezen.\n` +
+                `Bron-datum: ${payload.sourceDate || payload.d || 'onbekend'}\n` +
+                `Teller: ${payload.contributorName || 'Onbekende teller'}\n` +
+                `Team: ${payload.teamLabel || '🐸'}\n` +
+                `Totaal in QR: ${total} dieren\n` +
+                `${already ? 'Status: al bekend (wordt overgeslagen)\n' : ''}` +
+                `Stap 2: controleer hieronder de inhoud.`;
+            summary.innerText = `Stap 2: inhoud van de QR\n\n${summarizeIncomingCounts(payload)}`;
+            btnImport.disabled = false;
+            btnImport.classList.remove('opacity-60');
+        }
+
+        function startQrCameraScan() {
             const targetId = 'session-reader-modal';
+            const host = document.getElementById(targetId);
+            if(host) host.innerHTML = '';
             if(sessionScanner) { sessionScanner.stop().catch(()=>{}); sessionScanner = null; }
             sessionScanner = new Html5Qrcode(targetId);
             sessionScanner.start({ facingMode: "environment" }, { fps: 10, qrbox: 220 }, t => {
-                try {
-                    const i = JSON.parse(t);
-                    const summary = describeSync(i);
-                    const day = ensureDay(i.d);
-                    const targetSessionId = document.getElementById('import-target-select')?.value || '';
-                    for(let k in i.c) day.counts[k] = (day.counts[k] || 0) + i.c[k];
-                    if(targetSessionId) {
-                        const ts = day.sessions.find(s => s.id === targetSessionId);
-                        if(ts) {
-                            for(let k in i.c) ts.counts[k] = (ts.counts[k] || 0) + i.c[k];
-                        }
-                    }
-                    (i.s||[]).forEach(si => { if(!day.custom.some(c => c.name===si.name)) day.custom.push(si); });
-                    save(); buildUI(); render(); stopSessionScanner(); alert(summary); showToast("Tellingen geïmporteerd"); switchTab('sessions');
-                } catch(e) { alert("QR fout"); }
+                let parsed = null;
+                try { parsed = JSON.parse(t); } catch(_) { return; }
+                const payload = sanitizeQrImportPayload(parsed);
+                if(!payload) return;
+                pendingQrImportPayload = payload;
+                stopSessionScanner();
+                renderQrWizardPreview(payload);
+                showToast('QR gelezen');
             }).catch(() => alert("Camera fout"));
+        }
+
+        function restartQrWizardScan() {
+            pendingQrImportPayload = null;
+            setQrWizardIdleState();
+            startQrCameraScan();
+        }
+
+        function importQrWizardPayload() {
+            const payload = pendingQrImportPayload;
+            if(!payload) { alert('Scan eerst een QR-code.'); return; }
+            const dayKey = document.getElementById('qr-wizard-date')?.value || picker.value || todayISO();
+            const targetSessionId = document.getElementById('qr-wizard-target-select')?.value || '';
+            const result = importContributionPayload(payload, dayKey, targetSessionId);
+            if(!result?.ok) return;
+            pendingQrImportPayload = null;
+            save();
+            buildUI();
+            render();
+            renderSessionAdmin();
+            buildQRSessionOptions();
+            buildReportSessionOptions();
+            buildImportTargetOptions();
+            buildRouteSuggestions();
+            if(result.targetSession && (result.status === 'new' || result.status === 'updated')) {
+                if(maybeOfferReportInclusionFix(dayKey, result.targetSession.id)) {
+                    save();
+                    render();
+                    renderSessionAdmin();
+                }
+            }
+            closeQrModal();
+            if(result.status === 'already') {
+                showToast('Bijdrage al bekend (overgeslagen)');
+                alert(result.summary);
+                return;
+            }
+            showToast(result.status === 'updated' ? 'Bijdrage bijgewerkt' : 'Tellingen geïmporteerd');
+            alert(result.summary);
+            switchTab('sessions');
+        }
+
+        function startSessionScanner() {
+            const modal = document.getElementById('qr-modal');
+            const dateInput = document.getElementById('qr-wizard-date');
+            if(!modal) return;
+            modal.classList.remove('hidden');
+            if(dateInput) dateInput.value = picker.value || todayISO();
+            buildQrWizardTargetOptions();
+            restartQrWizardScan();
         }
 
         function stopSessionScanner() {
@@ -2273,13 +3925,16 @@ ${lines.join('\n\n')}`;
             }
         }
 
-        function closeQrModal(ev) {
+        function closeQrModal(ev = null) {
             const modal = document.getElementById('qr-modal');
-            if(ev.target.id === 'qr-modal' || ev.target.tagName === 'BUTTON') {
-                stopSessionScanner();
-                modal.classList.add('hidden');
-                document.getElementById('session-reader-modal').innerHTML = '';
-            }
+            if(!modal) return;
+            if(ev && ev.target && ev.target.id !== 'qr-modal' && !ev.target.closest('[data-qr-close=\"1\"]')) return;
+            stopSessionScanner();
+            pendingQrImportPayload = null;
+            setQrWizardIdleState();
+            modal.classList.add('hidden');
+            const host = document.getElementById('session-reader-modal');
+            if(host) host.innerHTML = '';
         }
 
         function buildImportTargetOptions() {
@@ -2288,7 +3943,7 @@ ${lines.join('\n\n')}`;
             if(!sel || !hint) return;
             const day = ensureDay();
             const sessions = day.sessions.slice().sort((a,b)=>new Date(a.start)-new Date(b.start));
-            sel.innerHTML = `<option value=\"\">Dag ${picker.value} (dagtotaal)</option>` +
+            sel.innerHTML = `<option value=\"\">Nieuwe teamsessie op ${picker.value}</option>` +
                 sessions.map(s => `<option value="${s.id}">${sessionDisplayLabel(s, day)}</option>`).join('');
             sel.value = '';
             updateImportTargetHint();
@@ -2300,9 +3955,9 @@ ${lines.join('\n\n')}`;
             if(!sel || !hint) return;
             const val = sel.value;
             if(!val) {
-                hint.innerText = `Tellen uit de QR worden bij het dagtotaal van ${picker.value} opgeteld.`;
+                hint.innerText = `Tellen uit QR of deel-link komen in een nieuwe teamsessie op ${picker.value}.`;
             } else {
-                hint.innerText = `Tellen uit de QR worden bijgeteld in sessie ${sel.selectedOptions[0].textContent}.`;
+                hint.innerText = `Tellen uit QR of deel-link worden bijgeteld in sessie ${sel.selectedOptions[0].textContent}.`;
             }
         }
 
@@ -2323,7 +3978,11 @@ ${lines.join('\n\n')}`;
                 renderSessionAdmin();
                 buildQRSessionOptions();
                 buildImportTargetOptions();
+                updateContributorInputsFromProfile();
+                handleShareIdentityChange(false);
                 generateQR();
+                renderIncomingSyncCard();
+                updateLegacyMigrationUI();
                 renderStorageInspector(true);
             }
             if(t==='help') {
@@ -2335,7 +3994,22 @@ ${lines.join('\n\n')}`;
 
         function resetCurrentDate() { if(confirm("Alles wissen voor vandaag?")) { delete storage[picker.value]; save(); buildUI(); render(); } }
 
-        picker.onchange = () => { buildUI(); render(); buildQRSessionOptions(); buildReportSessionOptions(); renderSessionAdmin(); };
+        picker.onchange = () => {
+            buildUI();
+            render();
+            buildQRSessionOptions();
+            buildReportSessionOptions();
+            renderSessionAdmin();
+            buildImportTargetOptions();
+            renderIncomingSyncCard();
+        };
         document.getElementById('sessionDate').onchange = () => renderSessionAdmin();
+        window.addEventListener('resize', () => {
+            const reportView = document.getElementById('view-report');
+            if(reportView && !reportView.classList.contains('hidden')) renderReportTrend();
+        });
         splitSessionOverMidnightIfNeeded();
         buildUI(); render(); renderSessionAdmin(); buildQRSessionOptions(); buildReportSessionOptions(); renderDetSessionOptions(); renderDeterminationUI(); renderDeterminationList();
+        updateContributorInputsFromProfile();
+        handleShareIdentityChange(false);
+        handleIncomingSyncFromUrl();
