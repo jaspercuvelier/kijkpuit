@@ -3183,9 +3183,13 @@ ${lines.join('\n\n')}`;
             const dayKey = dateInput.value || picker.value || todayISO();
             const val = sel.value;
             if(!val) {
-                hint.innerText = `Stap 3: de ontvangen telling komt in een nieuwe teamsessie op ${dayKey}.`;
+                hint.innerText =
+                    `Stap 3: de ontvangen telling komt in een nieuwe teamsessie op ${dayKey}.\n` +
+                    `Na toevoegen zet de app automatisch andere ruwe sessies op "niet meetellen".`;
             } else {
-                hint.innerText = `Stap 3: de ontvangen telling wordt bijgeteld in sessie ${sel.selectedOptions[0]?.textContent || val}.`;
+                hint.innerText =
+                    `Stap 3: de ontvangen telling wordt bijgeteld in sessie ${sel.selectedOptions[0]?.textContent || val}.\n` +
+                    `Na toevoegen zet de app automatisch andere ruwe sessies op "niet meetellen".`;
             }
         }
 
@@ -3208,7 +3212,8 @@ ${lines.join('\n\n')}`;
                 `• Team: ${p.teamLabel || '🐸'}\n` +
                 `• ${created}\n` +
                 `• ${total} dieren\n` +
-                `${already ? '• Deze bijdrage is al bekend en wordt overgeslagen.' : ''}`;
+                `${already ? '• Deze bijdrage is al bekend en wordt overgeslagen.\n' : ''}` +
+                `• Na toevoegen zet de app automatisch ruwe sessies op niet-meetellen.`;
             summary.innerText = `Stap 2: inhoud van de link\n\n${summarizeIncomingCounts(p)}`;
             dateInput.value = picker.value || todayISO();
             buildSyncWizardTargetOptions();
@@ -3284,22 +3289,28 @@ ${lines.join('\n\n')}`;
             return true;
         }
 
-        function maybeOfferReportInclusionFix(dayKey, keepSessionId) {
+        function maybeOfferReportInclusionFix(dayKey, keepSessionId, options = {}) {
+            const auto = !!options.auto;
             const day = ensureDay(dayKey);
             const keep = day.sessions.find(s => s.id === keepSessionId);
             if(!keep) return false;
             const includable = day.sessions.filter(s => sumCounts(s.counts || {}) > 0 && s.includeInReports !== false);
             const others = includable.filter(s => s.id !== keepSessionId);
             if(!others.length) return false;
-            const ok = confirm(
-                `Mogelijke dubbeltelling in rapport.\n\n` +
-                `Wil je ${others.length} andere sessie(s) op "niet meetellen" zetten?\n` +
-                `De teamsessie blijft meetellen.`
-            );
-            if(!ok) return false;
+            if(!auto) {
+                const ok = confirm(
+                    `Mogelijke dubbeltelling in rapport.\n\n` +
+                    `Wil je ${others.length} andere sessie(s) op "niet meetellen" zetten?\n` +
+                    `De teamsessie blijft meetellen.`
+                );
+                if(!ok) return false;
+            }
             others.forEach(s => s.includeInReports = false);
             keep.includeInReports = true;
-            showToast('Ruwe sessies op niet-meetellen gezet');
+            showToast(auto
+                ? `Rapport opgeschoond: ${others.length} ruwe sessie(s) tellen niet mee`
+                : 'Ruwe sessies op niet-meetellen gezet'
+            );
             return true;
         }
 
@@ -3380,8 +3391,8 @@ ${lines.join('\n\n')}`;
             buildImportTargetOptions();
             buildRouteSuggestions();
             renderIncomingSyncCard();
-            if(result.targetSession && (result.status === 'new' || result.status === 'updated')) {
-                if(maybeOfferReportInclusionFix(dayKey, result.targetSession.id)) {
+            if(result.targetSession && result.payload?.teamRunId && (result.status === 'new' || result.status === 'updated')) {
+                if(maybeOfferReportInclusionFix(dayKey, result.targetSession.id, { auto: true })) {
                     save();
                     render();
                     renderSessionAdmin();
@@ -3813,9 +3824,13 @@ ${lines.join('\n\n')}`;
             const dayKey = dateInput.value || picker.value || todayISO();
             const val = sel.value;
             if(!val) {
-                hint.innerText = `Stap 3: de gescande telling komt in een nieuwe teamsessie op ${dayKey}.`;
+                hint.innerText =
+                    `Stap 3: de gescande telling komt in een nieuwe teamsessie op ${dayKey}.\n` +
+                    `Na toevoegen zet de app automatisch andere ruwe sessies op "niet meetellen".`;
             } else {
-                hint.innerText = `Stap 3: de gescande telling wordt bijgeteld in sessie ${sel.selectedOptions[0]?.textContent || val}.`;
+                hint.innerText =
+                    `Stap 3: de gescande telling wordt bijgeteld in sessie ${sel.selectedOptions[0]?.textContent || val}.\n` +
+                    `Na toevoegen zet de app automatisch andere ruwe sessies op "niet meetellen".`;
             }
         }
 
@@ -3845,7 +3860,8 @@ ${lines.join('\n\n')}`;
                 `Team: ${payload.teamLabel || '🐸'}\n` +
                 `Totaal in QR: ${total} dieren\n` +
                 `${already ? 'Status: al bekend (wordt overgeslagen)\n' : ''}` +
-                `Stap 2: controleer hieronder de inhoud.`;
+                `Stap 2: controleer hieronder de inhoud.\n` +
+                `Na toevoegen zet de app automatisch ruwe sessies op niet-meetellen.`;
             summary.innerText = `Stap 2: inhoud van de QR\n\n${summarizeIncomingCounts(payload)}`;
             btnImport.disabled = false;
             btnImport.classList.remove('opacity-60');
@@ -3891,8 +3907,8 @@ ${lines.join('\n\n')}`;
             buildReportSessionOptions();
             buildImportTargetOptions();
             buildRouteSuggestions();
-            if(result.targetSession && (result.status === 'new' || result.status === 'updated')) {
-                if(maybeOfferReportInclusionFix(dayKey, result.targetSession.id)) {
+            if(result.targetSession && result.payload?.teamRunId && (result.status === 'new' || result.status === 'updated')) {
+                if(maybeOfferReportInclusionFix(dayKey, result.targetSession.id, { auto: true })) {
                     save();
                     render();
                     renderSessionAdmin();
