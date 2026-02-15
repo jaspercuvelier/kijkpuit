@@ -120,6 +120,9 @@
             font-size: 12px;
             font-weight: 700;
         }
+        .header-selectors-hidden {
+            display: none !important;
+        }
         @media (max-width: 900px) {
             body { padding-bottom: calc(88px + env(safe-area-inset-bottom)) !important; }
             #main-nav {
@@ -195,7 +198,7 @@
         </div>
         <div class="mt-2 flex flex-col gap-2">
             <div class="flex gap-2 items-center">
-                <div class="flex items-center gap-1.5 w-full">
+                <div id="header-date-controls" class="flex items-center gap-1.5 w-full">
                     <button onclick="changePickerDay(-1)" class="bg-gray-700 hover:bg-gray-600 text-white px-3 py-1.5 rounded text-sm font-bold border border-gray-600" title="Vorige dag" aria-label="Vorige dag">
                         ◀
                     </button>
@@ -356,7 +359,10 @@
                 <div class="settings-accordion-body space-y-3 text-left bg-gradient-to-br from-emerald-900/30 via-cyan-900/20 to-blue-900/20">
                     <div class="flex items-center justify-between gap-2">
                         <h3 class="font-bold text-emerald-100 text-sm">Trek-trend (per dag)</h3>
-                        <span class="text-[10px] text-emerald-200 bg-emerald-500/20 border border-emerald-300/30 px-2 py-1 rounded-full">Topdagen zichtbaar</span>
+                        <label class="inline-flex items-center gap-2 text-[10px] text-emerald-100 bg-emerald-500/20 border border-emerald-300/30 px-2 py-1 rounded-full cursor-pointer select-none">
+                            <input id="report-trend-toggle-empty" type="checkbox" class="accent-emerald-400" checked onchange="toggleReportTrendZeroDays(this.checked)">
+                            <span>Toon lege teldagen (0)</span>
+                        </label>
                     </div>
                     <div id="report-trend-meta" class="text-[11px] text-emerald-100"></div>
                     <div class="overflow-x-auto no-scrollbar rounded-lg border border-emerald-500/20 bg-gray-900/40 p-2">

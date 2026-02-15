@@ -364,18 +364,28 @@ document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
         const STORAGE_KEY = 'paddentrek_data';
         const STORAGE_KEY_VERSIONED = `paddentrek_${APP_VERSION}`;
         const STORAGE_MIGRATION_STATE_KEY = 'paddentrek_migration_legacy_to_data_v1';
+        const AUTO_V3_MIGRATION_STATE_KEY = 'paddentrek_auto_migration_v3_v1';
+        const REPORT_TREND_SHOW_EMPTY_KEY = 'paddentrek_report_trend_show_empty_v1';
         const SYNC_QUERY_PARAM = 'sync';
         const SYNC_PAYLOAD_VERSION = 1;
         const SYNC_IMPORTED_IDS_KEY = 'paddentrek_sync_imported_ids_v1';
         const SYNC_IMPORTED_REGISTRY_KEY = 'paddentrek_sync_imported_registry_v1';
         const CONTRIBUTOR_PROFILE_KEY = 'paddentrek_contributor_profile_v1';
         let reportMode = 'day'; // 'session' | 'day'
+        let currentTab = 'count';
         let photoTargetSession = null;
         let viewedSessionId = '';
         let sessionScanner = null;
         let pendingQrImportPayload = null;
         let pendingSyncLinkPayload = null;
         let shareSelectionStateByDay = {};
+        let reportTrendShowEmptyDays = true;
+        const PHOTO_DB_NAME = 'paddentrek_media_v1';
+        const PHOTO_DB_VERSION = 1;
+        const PHOTO_DB_STORE = 'photos';
+        const PHOTO_REF_PREFIX = 'idb_photo:';
+        let photoDbPromise = null;
+        const photoDataUrlCache = new Map();
 
         function isPlainObject(v) {
             return !!v && typeof v === 'object' && !Array.isArray(v);
@@ -393,6 +403,184 @@ document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
 
         function cloneJSON(v) {
             return JSON.parse(JSON.stringify(v || {}));
+        }
+
+        function isDataImageUrl(v) {
+            return typeof v === 'string' && v.startsWith('data:image');
+        }
+
+        function isIdbPhotoRef(v) {
+            return typeof v === 'string' && v.startsWith(PHOTO_REF_PREFIX);
+        }
+
+        function makeIdbPhotoRef(id) {
+            return `${PHOTO_REF_PREFIX}${id}`;
+        }
+
+        function photoIdFromRef(ref) {
+            return isIdbPhotoRef(ref) ? ref.slice(PHOTO_REF_PREFIX.length) : '';
+        }
+
+        function openPhotoDb() {
+            if(photoDbPromise) return photoDbPromise;
+            photoDbPromise = new Promise((resolve, reject) => {
+                if(typeof indexedDB === 'undefined') {
+                    reject(new Error('INDEXEDDB_UNAVAILABLE'));
+                    return;
+                }
+                const req = indexedDB.open(PHOTO_DB_NAME, PHOTO_DB_VERSION);
+                req.onupgradeneeded = () => {
+                    const db = req.result;
+                    if(!db.objectStoreNames.contains(PHOTO_DB_STORE)) {
+                        db.createObjectStore(PHOTO_DB_STORE, { keyPath: 'id' });
+                    }
+                };
+                req.onsuccess = () => resolve(req.result);
+                req.onerror = () => reject(req.error || new Error('PHOTO_DB_OPEN_FAILED'));
+            });
+            return photoDbPromise;
+        }
+
+        function runPhotoStore(mode, work) {
+            return openPhotoDb().then(db => new Promise((resolve, reject) => {
+                const tx = db.transaction(PHOTO_DB_STORE, mode);
+                const store = tx.objectStore(PHOTO_DB_STORE);
+                const out = work(store);
+                tx.oncomplete = () => resolve(out);
+                tx.onerror = () => reject(tx.error || new Error('PHOTO_DB_TX_FAILED'));
+                tx.onabort = () => reject(tx.error || new Error('PHOTO_DB_TX_ABORTED'));
+            }));
+        }
+
+        function putPhotoRecord(dataUrl, meta = {}) {
+            const id = `ph_${Date.now()}_${randomHex(8)}`;
+            const ref = makeIdbPhotoRef(id);
+            const record = {
+                id,
+                dataUrl,
+                mime: 'image/jpeg',
+                createdAt: Date.now(),
+                dayKey: meta.dayKey || '',
+                sessionId: meta.sessionId || '',
+                source: meta.source || 'session'
+            };
+            return runPhotoStore('readwrite', store => store.put(record))
+                .then(() => {
+                    photoDataUrlCache.set(ref, Promise.resolve(dataUrl));
+                    return ref;
+                });
+        }
+
+        function readPhotoRecordByRef(ref) {
+            const id = photoIdFromRef(ref);
+            if(!id) return Promise.resolve(null);
+            return openPhotoDb().then(db => new Promise((resolve, reject) => {
+                const tx = db.transaction(PHOTO_DB_STORE, 'readonly');
+                const req = tx.objectStore(PHOTO_DB_STORE).get(id);
+                req.onsuccess = () => resolve(req.result || null);
+                req.onerror = () => reject(req.error || new Error('PHOTO_DB_GET_FAILED'));
+            }));
+        }
+
+        function deletePhotoRecordByRef(ref) {
+            const id = photoIdFromRef(ref);
+            if(!id) return Promise.resolve();
+            return runPhotoStore('readwrite', store => store.delete(id))
+                .finally(() => {
+                    photoDataUrlCache.delete(ref);
+                });
+        }
+
+        function resolvePhotoDataUrl(refOrDataUrl) {
+            if(!refOrDataUrl || typeof refOrDataUrl !== 'string') return Promise.resolve('');
+            if(isDataImageUrl(refOrDataUrl)) return Promise.resolve(refOrDataUrl);
+            if(!isIdbPhotoRef(refOrDataUrl)) return Promise.resolve('');
+            if(!photoDataUrlCache.has(refOrDataUrl)) {
+                const p = readPhotoRecordByRef(refOrDataUrl)
+                    .then(record => (record && typeof record.dataUrl === 'string') ? record.dataUrl : '')
+                    .catch(() => '');
+                photoDataUrlCache.set(refOrDataUrl, p);
+            }
+            return photoDataUrlCache.get(refOrDataUrl);
+        }
+
+        function collectAllPhotoRefsFromStorage() {
+            const refs = new Set();
+            Object.keys(storage || {}).forEach(dayKey => {
+                const day = storage[dayKey];
+                if(!day || typeof day !== 'object') return;
+                (Array.isArray(day.photos) ? day.photos : []).forEach(ref => { if(isIdbPhotoRef(ref)) refs.add(ref); });
+                (Array.isArray(day.sessions) ? day.sessions : []).forEach(session => {
+                    (Array.isArray(session?.photos) ? session.photos : []).forEach(ref => { if(isIdbPhotoRef(ref)) refs.add(ref); });
+                    (Array.isArray(session?.determinations) ? session.determinations : []).forEach(det => {
+                        (Array.isArray(det?.photos) ? det.photos : []).forEach(ref => { if(isIdbPhotoRef(ref)) refs.add(ref); });
+                    });
+                });
+            });
+            return refs;
+        }
+
+        function cleanupPhotoRefsIfUnused(refs = []) {
+            const candidates = Array.from(new Set((Array.isArray(refs) ? refs : []).filter(isIdbPhotoRef)));
+            if(!candidates.length) return Promise.resolve();
+            const used = collectAllPhotoRefsFromStorage();
+            const orphaned = candidates.filter(ref => !used.has(ref));
+            if(!orphaned.length) return Promise.resolve();
+            return Promise.all(orphaned.map(ref => deletePhotoRecordByRef(ref))).then(() => undefined);
+        }
+
+        function collectSessionPhotoRefs(session = null) {
+            const refs = [];
+            if(!session || typeof session !== 'object') return refs;
+            (Array.isArray(session.photos) ? session.photos : []).forEach(ref => {
+                if(isIdbPhotoRef(ref)) refs.push(ref);
+            });
+            (Array.isArray(session.determinations) ? session.determinations : []).forEach(det => {
+                (Array.isArray(det?.photos) ? det.photos : []).forEach(ref => {
+                    if(isIdbPhotoRef(ref)) refs.push(ref);
+                });
+            });
+            return refs;
+        }
+
+        function collectDayPhotoRefs(day = null) {
+            const refs = [];
+            if(!day || typeof day !== 'object') return refs;
+            (Array.isArray(day.photos) ? day.photos : []).forEach(ref => {
+                if(isIdbPhotoRef(ref)) refs.push(ref);
+            });
+            (Array.isArray(day.sessions) ? day.sessions : []).forEach(session => {
+                refs.push(...collectSessionPhotoRefs(session));
+            });
+            return refs;
+        }
+
+        function encodePhotoRef(ref) {
+            return encodeURIComponent(String(ref || ''));
+        }
+
+        function decodePhotoRef(refEncoded = '') {
+            try { return decodeURIComponent(refEncoded); } catch(_) { return String(refEncoded || ''); }
+        }
+
+        function photoPreviewSrc(ref) {
+            return isDataImageUrl(ref) ? ref : 'data:image/gif;base64,R0lGODlhAQABAAAAACw=';
+        }
+
+        function hydratePhotoElements(root = document) {
+            const nodes = Array.from((root || document).querySelectorAll('img[data-photo-ref]'));
+            nodes.forEach(node => {
+                const encoded = node.getAttribute('data-photo-ref') || '';
+                const ref = decodePhotoRef(encoded);
+                if(!ref) return;
+                if(isDataImageUrl(ref)) {
+                    if(!node.getAttribute('src')) node.setAttribute('src', ref);
+                    return;
+                }
+                resolvePhotoDataUrl(ref).then(src => {
+                    if(src) node.setAttribute('src', src);
+                });
+            });
         }
 
         function dayHasContent(day) {
@@ -456,6 +644,39 @@ document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
             localStorage.setItem(STORAGE_MIGRATION_STATE_KEY, JSON.stringify(payload));
         }
 
+        function getAppMajorVersion() {
+            const major = parseInt(String(APP_VERSION || '').split('.')[0], 10);
+            return Number.isFinite(major) ? major : 0;
+        }
+
+        function getAutoV3MigrationState() {
+            const parsed = safeParseJSON(localStorage.getItem(AUTO_V3_MIGRATION_STATE_KEY));
+            return isPlainObject(parsed) ? parsed : null;
+        }
+
+        function setAutoV3MigrationState(payload) {
+            localStorage.setItem(AUTO_V3_MIGRATION_STATE_KEY, JSON.stringify(payload || {}));
+        }
+
+        function shouldRunAutoV3Migration() {
+            if(getAppMajorVersion() < 3) return false;
+            const state = getAutoV3MigrationState();
+            return !state?.doneAt;
+        }
+
+        function getReportTrendShowEmptySetting() {
+            const raw = localStorage.getItem(REPORT_TREND_SHOW_EMPTY_KEY);
+            if(raw === null) return true;
+            if(raw === '1' || raw === 'true') return true;
+            if(raw === '0' || raw === 'false') return false;
+            return true;
+        }
+
+        function setReportTrendShowEmptySetting(enabled) {
+            reportTrendShowEmptyDays = !!enabled;
+            localStorage.setItem(REPORT_TREND_SHOW_EMPTY_KEY, reportTrendShowEmptyDays ? '1' : '0');
+        }
+
         function encodeBase64Url(str) {
             const b64 = btoa(unescape(encodeURIComponent(str)));
             return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
@@ -514,13 +735,34 @@ document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
             return out.slice(0, 60);
         }
 
+        function stripLegacyTeamFields(obj) {
+            if(!isPlainObject(obj)) return false;
+            let changed = false;
+            if(Object.prototype.hasOwnProperty.call(obj, 'teamRunId')) {
+                delete obj.teamRunId;
+                changed = true;
+            }
+            if(Object.prototype.hasOwnProperty.call(obj, 'teamLabel')) {
+                delete obj.teamLabel;
+                changed = true;
+            }
+            if(Object.prototype.hasOwnProperty.call(obj, 'lastTeamRunId')) {
+                delete obj.lastTeamRunId;
+                changed = true;
+            }
+            if(Object.prototype.hasOwnProperty.call(obj, 'lastTeamLabel')) {
+                delete obj.lastTeamLabel;
+                changed = true;
+            }
+            return changed;
+        }
+
         function getContributorProfile() {
             const parsed = safeParseJSON(localStorage.getItem(CONTRIBUTOR_PROFILE_KEY));
             const profile = isPlainObject(parsed) ? parsed : {};
             if(typeof profile.id !== 'string' || !profile.id.trim()) profile.id = generateUUID();
             if(typeof profile.name !== 'string') profile.name = '';
-            if(typeof profile.lastTeamRunId !== 'string') profile.lastTeamRunId = '';
-            if(typeof profile.lastTeamLabel !== 'string' || !profile.lastTeamLabel.trim()) profile.lastTeamLabel = '🐸';
+            stripLegacyTeamFields(profile);
             profile.lastRouteName = normalizeRouteName(profile.lastRouteName || '');
             profile.routeHistory = normalizeRouteHistory(profile.routeHistory || []);
             if(profile.lastRouteName) {
@@ -536,8 +778,6 @@ document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
             const payload = {
                 id: typeof profile?.id === 'string' ? profile.id : generateUUID(),
                 name: typeof profile?.name === 'string' ? profile.name.trim() : '',
-                lastTeamRunId: typeof profile?.lastTeamRunId === 'string' ? profile.lastTeamRunId.trim() : '',
-                lastTeamLabel: typeof profile?.lastTeamLabel === 'string' && profile.lastTeamLabel.trim() ? profile.lastTeamLabel.trim() : '🐸',
                 lastRouteName,
                 routeHistory
             };
@@ -557,46 +797,37 @@ document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
             return !!next.lastRouteName;
         }
 
+        function localContributorRosterEntry(routeName = '') {
+            const profile = getContributorProfile();
+            const contributorId = profile?.id ? `local_user_${profile.id}` : `local_user_${simpleHash('local')}`;
+            return {
+                id: contributorId,
+                name: 'mezelf',
+                route: normalizeRouteName(routeName || '')
+            };
+        }
+
+        function ensureLocalSessionContributorDefaults(session) {
+            if(!session || session.detTemp) return false;
+            if(Array.isArray(session.contributions) && session.contributions.length > 0) return false;
+            let changed = false;
+            if(!Array.isArray(session.contributorRoster)) {
+                session.contributorRoster = [];
+                changed = true;
+            }
+            if(!session.contributorRoster.length) {
+                session.contributorRoster = [localContributorRosterEntry(session.routeName || '')];
+                changed = true;
+            }
+            if(typeof session.autoContributorNote !== 'string' || !session.autoContributorNote.trim()) {
+                session.autoContributorNote = 'Data van mezelf';
+                changed = true;
+            }
+            return changed;
+        }
+
         function currentDayIsoFallback() {
             return new Date().toISOString().split('T')[0];
-        }
-
-        function ensureTeamRunId(seed = '') {
-            const cleaned = (seed || '').trim();
-            if(cleaned) return cleaned;
-            const day = (typeof picker !== 'undefined' && picker?.value) ? picker.value : currentDayIsoFallback();
-            return `team_${day}_${randomHex(6)}`;
-        }
-
-        function normalizeTeamLabel(label = '') {
-            const v = (label || '').trim();
-            return v || '🐸';
-        }
-
-        function teamLabelToKey(label = '🐸') {
-            const map = { '🐸': 'kikker', '🦎': 'salamander', '🐢': 'schildpad', '🦉': 'uil', '🦔': 'egel', '🐍': 'slang' };
-            if(map[label]) return map[label];
-            const slug = toSlug(label);
-            return slug || `team${simpleHash(label).slice(0, 6)}`;
-        }
-
-        function teamLabelFromRunId(runId = '') {
-            if(typeof runId !== 'string' || !runId) return '🐸';
-            if(runId.includes('_kikker')) return '🐸';
-            if(runId.includes('_salamander')) return '🦎';
-            if(runId.includes('_schildpad')) return '🐢';
-            if(runId.includes('_uil')) return '🦉';
-            if(runId.includes('_egel')) return '🦔';
-            if(runId.includes('_slang')) return '🐍';
-            return '🐸';
-        }
-
-        function deriveTeamRunId(daySeed = '', teamLabel = '🐸') {
-            const day = /^\d{4}-\d{2}-\d{2}$/.test(daySeed || '')
-                ? daySeed
-                : ((typeof picker !== 'undefined' && picker?.value) ? picker.value : currentDayIsoFallback());
-            const key = teamLabelToKey(normalizeTeamLabel(teamLabel));
-            return `team_${day}_${key}`;
         }
 
         function updateContributorInputsFromProfile() {
@@ -634,13 +865,9 @@ document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
             const hint = document.getElementById('share-identity-hint');
             const name = (nameInput?.value || '').trim();
             const route = normalizeRouteName(routeInput?.value || profile.lastRouteName || '');
-            const daySeed = (typeof picker !== 'undefined' && picker?.value) ? picker.value : currentDayIsoFallback();
-            const teamRunId = deriveTeamRunId(daySeed, '🐸');
             saveContributorProfile({
                 ...profile,
                 name: name || profile.name || '',
-                lastTeamRunId: teamRunId,
-                lastTeamLabel: '🐸',
                 lastRouteName: route
             });
             if(hint) {
@@ -666,16 +893,12 @@ document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
                 if(nameInput) nameInput.focus();
                 return null;
             }
-            const daySeed = (typeof picker !== 'undefined' && picker?.value) ? picker.value : currentDayIsoFallback();
-            const teamRunId = deriveTeamRunId(daySeed, '🐸');
             const nextProfile = saveContributorProfile({
                 ...profile,
-                name: contributorName,
-                lastTeamRunId: teamRunId,
-                lastTeamLabel: '🐸'
+                name: contributorName
             });
             if(nameInput) nameInput.value = nextProfile.name;
-            return { contributorId: nextProfile.id, contributorName: nextProfile.name, teamRunId, teamLabel: '🐸' };
+            return { contributorId: nextProfile.id, contributorName: nextProfile.name };
         }
 
         function getImportedSyncIds() {
@@ -742,15 +965,12 @@ document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
             const fallback = listLegacyStorageSnapshots()[0];
             storage = fallback ? cloneJSON(fallback.data) : {};
             localStorage.setItem(STORAGE_KEY, JSON.stringify(storage));
-            localStorage.setItem(STORAGE_KEY_VERSIONED, JSON.stringify(storage));
         } else {
-            // schrijf onder beide keys om oude builds niet te laten “wissen”
+            // Schrijf enkel nog naar paddentrek_data; versie-keys blijven legacy fallback.
             localStorage.setItem(STORAGE_KEY, JSON.stringify(storage));
-            localStorage.setItem(STORAGE_KEY_VERSIONED, JSON.stringify(storage));
         }
-        migrateLegacyDays();
-        migrateOldSchema();
-        migrateLegacyContributions();
+        reportTrendShowEmptyDays = getReportTrendShowEmptySetting();
+        runCoreSchemaMigrations();
         let activeSessionId = null;
         // Schema v2: per day stores counts, custom, photos, notes, weather, sessions
         // session object: { id, start, end?, counts: {}, notes: '' }
@@ -796,6 +1016,22 @@ document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
             if(typeof picker.onchange === 'function') picker.onchange();
         }
 
+        function shouldHideHeaderSelectors() {
+            const day = ensureDay();
+            const hasActiveSession = !!getActiveSession(day);
+            const trendCard = document.getElementById('report-trend-card');
+            const trendOpen = !!(trendCard && !trendCard.classList.contains('hidden') && trendCard.open);
+            return hasActiveSession || (currentTab === 'report' && trendOpen);
+        }
+
+        function refreshHeaderSelectorVisibility() {
+            const dateControls = document.getElementById('header-date-controls');
+            const quickRow = document.getElementById('quick-session-row');
+            const hide = shouldHideHeaderSelectors();
+            if(dateControls) dateControls.classList.toggle('header-selectors-hidden', hide);
+            if(quickRow) quickRow.classList.toggle('header-selectors-hidden', hide);
+        }
+
         setDateInputsToToday();
 
         function migrateLegacyDays() {
@@ -824,15 +1060,13 @@ document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
                     includeInReports: true,
                     contributions: [],
                     contributorRoster: [],
-                    autoContributorNote: '',
-                    teamRunId: day.teamRunId || ''
+                    autoContributorNote: ''
                 }];
                 changed = true;
             }
             if(changed) {
                 const str = JSON.stringify(storage);
                 localStorage.setItem(STORAGE_KEY, str);
-                localStorage.setItem(STORAGE_KEY_VERSIONED, str);
             }
         }
 
@@ -1042,16 +1276,17 @@ document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
 
         // Zorgt dat een dag-object altijd alle sleutels heeft voordat we ermee werken
         function ensureDay(d = picker.value) {
-            if(!storage[d]) storage[d] = { counts: {}, custom: [], photos: [], notes: "", sessions: [], weather: null, teamRunId: '' };
+            if(!storage[d]) storage[d] = { counts: {}, custom: [], photos: [], notes: "", sessions: [], weather: null };
             const day = storage[d];
+            stripLegacyTeamFields(day);
             if(!day.counts) day.counts = {};
             if(!day.custom) day.custom = [];
             if(!day.photos) day.photos = [];
             if(typeof day.notes !== 'string') day.notes = "";
             if(!day.sessions) day.sessions = [];
             if(!day.weather) day.weather = null;
-            if(typeof day.teamRunId !== 'string') day.teamRunId = '';
             day.sessions.forEach(s => {
+                stripLegacyTeamFields(s);
                 if(!s.counts) s.counts = {};
                 if(!s.photos) s.photos = [];
                 if(!s.determinations) s.determinations = [];
@@ -1060,9 +1295,10 @@ document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
                 if(!s.weather) s.weather = null;
                 if(typeof s.includeInReports !== 'boolean') s.includeInReports = true;
                 if(!Array.isArray(s.contributions)) s.contributions = [];
+                s.contributions.forEach(c => stripLegacyTeamFields(c));
                 if(!Array.isArray(s.contributorRoster)) s.contributorRoster = [];
                 if(typeof s.autoContributorNote !== 'string') s.autoContributorNote = '';
-                if(typeof s.teamRunId !== 'string') s.teamRunId = day.teamRunId || '';
+                ensureLocalSessionContributorDefaults(s);
             });
             return day;
         }
@@ -1105,9 +1341,9 @@ document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
                 includeInReports: true,
                 contributions: [],
                 contributorRoster: [],
-                autoContributorNote: '',
-                teamRunId: sess.teamRunId || ''
+                autoContributorNote: ''
             };
+            ensureLocalSessionContributorDefaults(newSession);
             newDay.sessions.push(newSession);
             activeSessionId = newSession.id;
             viewedSessionId = newSession.id;
@@ -1119,13 +1355,14 @@ document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
         function migrateOldSchema() {
             for(const d in storage) {
                 const day = storage[d];
+                stripLegacyTeamFields(day);
                 if(!day.sessions) day.sessions = [];
                 if(!day.custom) day.custom = [];
                 if(!day.photos) day.photos = [];
                 if(typeof day.notes !== 'string') day.notes = "";
                 if(!day.weather) day.weather = null;
-                if(typeof day.teamRunId !== 'string') day.teamRunId = '';
                 day.sessions.forEach(s => {
+                    stripLegacyTeamFields(s);
                     if(!s.counts) s.counts = {};
                     if(!s.photos) s.photos = [];
                     if(!s.determinations) s.determinations = [];
@@ -1134,9 +1371,10 @@ document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
                     if(!s.weather) s.weather = null;
                     if(typeof s.includeInReports !== 'boolean') s.includeInReports = true;
                     if(!Array.isArray(s.contributions)) s.contributions = [];
+                    s.contributions.forEach(c => stripLegacyTeamFields(c));
                     if(!Array.isArray(s.contributorRoster)) s.contributorRoster = [];
                     if(typeof s.autoContributorNote !== 'string') s.autoContributorNote = '';
-                    if(typeof s.teamRunId !== 'string') s.teamRunId = day.teamRunId || '';
+                    ensureLocalSessionContributorDefaults(s);
                 });
             }
             save();
@@ -1146,11 +1384,8 @@ document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
             let changed = false;
             for(const d in storage) {
                 const day = ensureDay(d);
-                const legacyTeam = day.teamRunId || `legacy_${d}`;
-                if(!day.teamRunId) day.teamRunId = legacyTeam;
                 (day.sessions || []).forEach(s => {
                     if(!Array.isArray(s.contributions)) s.contributions = [];
-                    if(typeof s.teamRunId !== 'string' || !s.teamRunId) s.teamRunId = legacyTeam;
                     if(typeof s.includeInReports !== 'boolean') s.includeInReports = true;
                     if(!sumCounts(s.counts || {})) return;
                     if(!s.contributions.length) {
@@ -1165,8 +1400,6 @@ document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
                             sourceLabel: s.id || 'legacy',
                             contributorId: `legacy_user_${simpleHash(`${d}|${s.id}|local`)}`,
                             contributorName: 'mezelf',
-                            teamRunId: s.teamRunId,
-                            teamLabel: teamLabelFromRunId(s.teamRunId),
                             importedAt: Date.now()
                         });
                         changed = true;
@@ -1175,6 +1408,166 @@ document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
                 });
             }
             if(changed) save();
+        }
+
+        function runCoreSchemaMigrations() {
+            migrateLegacyDays();
+            migrateOldSchema();
+            migrateLegacyContributions();
+        }
+
+        function removeLegacyVersionedKeysAfterAutoMigration() {
+            const keys = listVersionedStorageKeys().filter(k => k !== STORAGE_KEY_VERSIONED);
+            keys.forEach(k => localStorage.removeItem(k));
+            return keys;
+        }
+
+        function countInlinePhotoDataUrlsInStorage() {
+            let total = 0;
+            for(const dayKey in storage || {}) {
+                const day = storage[dayKey];
+                if(!day || typeof day !== 'object') continue;
+                (Array.isArray(day.photos) ? day.photos : []).forEach(v => { if(isDataImageUrl(v)) total++; });
+                (Array.isArray(day.sessions) ? day.sessions : []).forEach(session => {
+                    (Array.isArray(session?.photos) ? session.photos : []).forEach(v => { if(isDataImageUrl(v)) total++; });
+                    (Array.isArray(session?.determinations) ? session.determinations : []).forEach(det => {
+                        (Array.isArray(det?.photos) ? det.photos : []).forEach(v => { if(isDataImageUrl(v)) total++; });
+                    });
+                });
+            }
+            return total;
+        }
+
+        async function migratePhotoArrayToIndexedDbRefs(photoArr, meta = {}, cache = new Map()) {
+            if(!Array.isArray(photoArr) || !photoArr.length) {
+                return { converted: 0, failed: 0 };
+            }
+            let converted = 0;
+            let failed = 0;
+            for(let i = 0; i < photoArr.length; i++) {
+                const value = photoArr[i];
+                if(!isDataImageUrl(value)) continue;
+                if(cache.has(value)) {
+                    const cached = cache.get(value);
+                    if(cached && cached !== value) {
+                        photoArr[i] = cached;
+                        converted++;
+                    }
+                    continue;
+                }
+                try {
+                    const ref = await putPhotoRecord(value, meta);
+                    cache.set(value, ref);
+                    photoArr[i] = ref;
+                    converted++;
+                } catch(err) {
+                    cache.set(value, value);
+                    failed++;
+                    console.warn('Foto-migratie naar IndexedDB mislukt voor 1 item.', err);
+                }
+            }
+            return { converted, failed };
+        }
+
+        async function migrateStoragePhotosToIndexedDbRefs() {
+            const cache = new Map();
+            let converted = 0;
+            let failed = 0;
+            const dayKeys = Object.keys(storage || {});
+            for(let i = 0; i < dayKeys.length; i++) {
+                const dayKey = dayKeys[i];
+                const day = ensureDay(dayKey);
+                const dayPhotoResult = await migratePhotoArrayToIndexedDbRefs(day.photos, { dayKey, source: 'day' }, cache);
+                converted += dayPhotoResult.converted;
+                failed += dayPhotoResult.failed;
+
+                for(let j = 0; j < (day.sessions || []).length; j++) {
+                    const session = day.sessions[j];
+                    const sessionResult = await migratePhotoArrayToIndexedDbRefs(
+                        session.photos,
+                        { dayKey, sessionId: session.id || '', source: 'session' },
+                        cache
+                    );
+                    converted += sessionResult.converted;
+                    failed += sessionResult.failed;
+                    for(let k = 0; k < (session.determinations || []).length; k++) {
+                        const det = session.determinations[k];
+                        const detResult = await migratePhotoArrayToIndexedDbRefs(
+                            det.photos,
+                            { dayKey, sessionId: session.id || '', source: 'determination' },
+                            cache
+                        );
+                        converted += detResult.converted;
+                        failed += detResult.failed;
+                    }
+                }
+                day.photos = (day.sessions || []).flatMap(s => Array.isArray(s.photos) ? s.photos : []);
+            }
+            return {
+                converted,
+                failed,
+                remainingInline: countInlinePhotoDataUrlsInStorage()
+            };
+        }
+
+        async function runAutomaticV3UpgradeMigration() {
+            if(!shouldRunAutoV3Migration()) return { ran: false, completed: true };
+            const startedAt = new Date().toISOString();
+            const sources = listLegacyStorageSnapshots();
+            let mergeStats = { addedDays: 0, replacedEmptyDays: 0, sourceStats: [] };
+            if(sources.length) {
+                const merged = mergeMultipleLegacySnapshots(sources, storage);
+                storage = merged.merged;
+                mergeStats = {
+                    addedDays: Number(merged.addedDays || 0),
+                    replacedEmptyDays: Number(merged.replacedEmptyDays || 0),
+                    sourceStats: Array.isArray(merged.sourceStats) ? merged.sourceStats : []
+                };
+            }
+
+            runCoreSchemaMigrations();
+            const beforeInline = countInlinePhotoDataUrlsInStorage();
+            const photoStats = await migrateStoragePhotosToIndexedDbRefs();
+            save();
+
+            const completed = Number(photoStats.failed || 0) === 0 && Number(photoStats.remainingInline || 0) === 0;
+            const removedLegacyKeys = completed ? removeLegacyVersionedKeysAfterAutoMigration() : [];
+            if(removedLegacyKeys.length) save();
+
+            const payload = {
+                version: APP_VERSION,
+                startedAt,
+                finishedAt: new Date().toISOString(),
+                doneAt: completed ? new Date().toISOString() : '',
+                sources: sources.map(s => s.key),
+                sourceStats: mergeStats.sourceStats,
+                addedDays: mergeStats.addedDays,
+                replacedEmptyDays: mergeStats.replacedEmptyDays,
+                beforeInlinePhotos: beforeInline,
+                convertedPhotos: Number(photoStats.converted || 0),
+                failedPhotos: Number(photoStats.failed || 0),
+                remainingInlinePhotos: Number(photoStats.remainingInline || 0),
+                removedLegacyKeys
+            };
+            setAutoV3MigrationState(payload);
+            if(completed && sources.length) {
+                setLegacyMigrationState({
+                    doneAt: payload.doneAt,
+                    sourceKey: sources[0]?.key || '',
+                    sources: sources.map(s => s.key),
+                    sourceStats: mergeStats.sourceStats,
+                    addedDays: mergeStats.addedDays,
+                    replacedEmptyDays: mergeStats.replacedEmptyDays
+                });
+            }
+
+            if(completed && (sources.length || photoStats.converted || removedLegacyKeys.length)) {
+                showToast('Data automatisch gemigreerd naar v3');
+            }
+            if(!completed) {
+                console.warn('Automatische v3-migratie nog niet volledig afgerond.', payload);
+            }
+            return { ran: true, completed, payload };
         }
 
         function buildUI() {
@@ -1284,7 +1677,6 @@ document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
         function save() {
             const str = JSON.stringify(storage);
             localStorage.setItem(STORAGE_KEY, str);
-            localStorage.setItem(STORAGE_KEY_VERSIONED, str);
         }
 
         // --- DEV STORAGE INSPECTOR ---
@@ -1312,9 +1704,9 @@ document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
                     const parsed = JSON.parse(raw);
                     pretty = JSON.stringify(parsed, null, 2);
                     type = Array.isArray(parsed) ? 'array' : (parsed && typeof parsed === 'object' ? 'object' : typeof parsed);
-                    // verzamel data:image... strings voor preview
+                    // verzamel foto-waarden (data URLs + IndexedDB refs) voor preview
                     const collect = v => {
-                        if(typeof v === 'string' && v.startsWith('data:image')) imgs.push(v);
+                        if(typeof v === 'string' && (isDataImageUrl(v) || isIdbPhotoRef(v))) imgs.push(v);
                         else if(Array.isArray(v)) v.forEach(collect);
                         else if(v && typeof v === 'object') Object.values(v).forEach(collect);
                     };
@@ -1323,7 +1715,7 @@ document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
                 const hay = `${k} ${pretty}`.toLowerCase();
                 if(search && !hay.includes(search)) return null;
                 const badge = k === STORAGE_KEY ? '<span class="text-[9px] bg-emerald-500/20 border border-emerald-400/30 text-emerald-100 px-2 py-1 rounded">actief</span>' : '';
-                const imgHtml = imgs.map((src,idx) => `<button type="button" onclick="openInspectorPhoto('${idx}', '${k}')" class="block"><img src="${src}" alt="foto ${idx+1}" class="h-16 w-16 object-cover rounded border border-gray-700"></button>`).join('');
+                const imgHtml = imgs.map((src,idx) => `<button type="button" onclick="openInspectorPhoto('${idx}', '${k}')" class="block"><img src="${photoPreviewSrc(src)}" data-photo-ref="${encodePhotoRef(src)}" alt="foto ${idx+1}" class="h-16 w-16 object-cover rounded border border-gray-700"></button>`).join('');
                 return `<details class="bg-gray-900 border border-gray-800 rounded p-2">
                     <summary class="cursor-pointer flex justify-between items-center text-gray-200">${k} ${badge}<span class="text-[10px] text-gray-400">${type} · ${formatBytes(raw.length)}</span></summary>
                     <pre class="mt-2 bg-black/40 rounded p-2 whitespace-pre-wrap text-[10px] text-gray-200">${pretty.replace(/</g,'&lt;')}</pre>
@@ -1331,6 +1723,7 @@ document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
                 </details>`;
             }).filter(Boolean);
             box.innerHTML = rows.join('') || '<div class="text-gray-500 text-[11px]">Geen matches.</div>';
+            hydratePhotoElements(box);
             meta.innerText = `${keys.length} keys · ${formatBytes(totalBytes)} totaal opgeslagen`;
         }
 
@@ -1418,7 +1811,7 @@ document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
                             <div class="grid grid-cols-3 gap-2">
                                 ${photos.map((p,i)=>`
                                     <div class="relative">
-                                        <img src="${p}" class="rounded w-full aspect-square object-cover shadow cursor-pointer" onclick="openPhoto('${s.id}', ${i})">
+                                        <img src="${photoPreviewSrc(p)}" data-photo-ref="${encodePhotoRef(p)}" class="rounded w-full aspect-square object-cover shadow cursor-pointer" onclick="openPhoto('${s.id}', ${i})">
                                         <button class="absolute top-1 right-1 bg-red-700 rounded-full w-5 h-5 text-[9px] font-bold" onclick="removeSessionPhoto('${s.id}', ${i})">X</button>
                                     </div>
                                 `).join('')}
@@ -1427,6 +1820,7 @@ document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
                     </div>
                 `;
             }).join('');
+            hydratePhotoElements(box);
             buildRouteSuggestions();
         }
 
@@ -1531,7 +1925,7 @@ document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
             if(inp) { inp.value=''; inp.click(); }
         }
 
-        function handleDetPhoto(ev) {
+        async function handleDetPhoto(ev) {
             const file = ev.target.files?.[0];
             if(!file) return;
             const day = ensureDay();
@@ -1543,36 +1937,40 @@ document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
             if(!det) det = currentDetermination();
             
             if(!det || !sess) { alert('Geen actieve determinatie.'); return; }
-            const reader = new FileReader();
-            reader.onload = r => {
-                const img = new Image();
-                img.onload = () => {
-                    const c = document.createElement('canvas'); const m = 700;
-                    const fct = Math.min(1, m/Math.max(img.width, img.height));
-                    c.width = img.width*fct; c.height = img.height*fct;
-                    c.getContext('2d').drawImage(img,0,0,c.width,c.height);
-                    const data = c.toDataURL('image/jpeg', 0.7);
-                    det.photos.push(data);
-                    det.updatedAt = Date.now();
-                    // ook toevoegen aan sessie-foto's zodat delen werkt
-                    sess.photos.push(data);
-                    if(!det.pending) save();
-                    renderDeterminationUI();
-                    renderDeterminationList();
-                    recordUserAction();
-                    detPhotoTargetId = null;
-                };
-                img.src = r.target.result;
-            };
-            reader.readAsDataURL(file);
+            try {
+                const data = await resizeImageFileToDataUrl(file, 700, 0.7);
+                const photoRef = await persistPhotoDataUrl(data, { dayKey: picker.value, sessionId: sess.id, source: 'determination' });
+                det.photos.push(photoRef);
+                det.updatedAt = Date.now();
+                // ook toevoegen aan sessie-foto's zodat delen werkt
+                sess.photos.push(photoRef);
+                save();
+                renderDeterminationUI();
+                renderDeterminationList();
+                recordUserAction();
+            } catch(err) {
+                console.error(err);
+                alert('Foto kon niet verwerkt worden.');
+            } finally {
+                detPhotoTargetId = null;
+            }
         }
 
         function removeDetPhoto(idx) {
             const det = currentDetermination();
-            if(!det) return;
+            const sess = getDetSession();
+            if(!det || !sess) return;
+            const removedRef = det.photos?.[idx];
+            if(typeof removedRef === 'undefined') return;
             det.photos.splice(idx,1);
+            const sessionPhotoIdx = (sess.photos || []).indexOf(removedRef);
+            if(sessionPhotoIdx >= 0) sess.photos.splice(sessionPhotoIdx, 1);
+            const day = ensureDay();
+            day.photos = day.sessions.flatMap(s => s.photos || []);
+            save();
             renderDeterminationUI();
             renderDeterminationList();
+            cleanupPhotoRefsIfUnused([removedRef]).catch(err => console.warn('Photo cleanup failed', err));
         }
 
         
@@ -1661,10 +2059,11 @@ function answerDetermination(ans) {
             if(strip) {
                 strip.innerHTML = det ? det.photos.map((p,i)=>`
                     <div class="relative">
-                        <img src="${p}" class="rounded-lg w-full aspect-square object-cover cursor-pointer" onclick="openDetPhoto('${det.id}', ${i})">
+                        <img src="${photoPreviewSrc(p)}" data-photo-ref="${encodePhotoRef(p)}" class="rounded-lg w-full aspect-square object-cover cursor-pointer" onclick="openDetPhoto('${det.id}', ${i})">
                         <button class="absolute top-1 right-1 bg-black/60 text-white rounded-full w-6 h-6 text-[10px]" onclick="removeDetPhoto(${i})">✕</button>
                     </div>
                 `).join('') : '<div class="text-gray-500 text-[11px]">Nog geen foto\'s.</div>';
+                hydratePhotoElements(strip);
             }
             if(!det || !qBox) {
                 if(qBox) qBox.innerText = 'Start een nieuwe determinatie om vragen te krijgen.';
@@ -1733,7 +2132,7 @@ function answerDetermination(ans) {
                     `<div class="text-[11px] flex gap-2"><span class="text-gray-500">${idx+1}.</span><span class="flex-1 text-gray-200">${detQuestionText(a.node)}</span><span class="font-bold ${a.answer==='yes' ? 'text-emerald-400' : 'text-red-400'}">${detAnswerLabel(a.answer)}</span></div>`
                 ).join('');
                 const photoList = photos
-                    ? d.photos.map((p,i)=>`<div class="relative"><img src="${p}" class="h-16 w-16 object-cover rounded-lg border border-emerald-500/30 shadow" onclick="openDetPhoto('${d.id}', ${i})"><span class="absolute -top-1 -left-1 bg-black/70 text-[9px] px-1 rounded-full">${i+1}</span></div>`).join('')
+                    ? d.photos.map((p,i)=>`<div class="relative"><img src="${photoPreviewSrc(p)}" data-photo-ref="${encodePhotoRef(p)}" class="h-16 w-16 object-cover rounded-lg border border-emerald-500/30 shadow" onclick="openDetPhoto('${d.id}', ${i})"><span class="absolute -top-1 -left-1 bg-black/70 text-[9px] px-1 rounded-full">${i+1}</span></div>`).join('')
                     : '<div class="text-gray-500 text-[10px]">Geen foto\'s</div>';
                 return (
                     '<div class="bg-gradient-to-br from-gray-900 via-gray-900 to-gray-800 border border-emerald-500/20 rounded-xl p-3 space-y-2 shadow-lg">' +
@@ -1754,6 +2153,7 @@ function answerDetermination(ans) {
                 );
             });
             list.innerHTML = cards.join('');
+            hydratePhotoElements(list);
         }
 
         
@@ -1813,6 +2213,7 @@ function openDetermination(id) {
             buildViewedSessionOptions();
             buildRouteSuggestions();
             syncTellingUI();
+            refreshHeaderSelectorVisibility();
         }
 
         function buildViewedSessionOptions() {
@@ -1927,13 +2328,17 @@ function openDetermination(id) {
             const day = ensureDay();
             const s = day.sessions.find(x => x.id === id);
             if(!s) return;
+            const removedRef = s.photos?.[idx];
+            if(typeof removedRef === 'undefined') return;
             s.photos.splice(idx,1);
             // dagbuffer opschonen grof (herstelt duplicaten niet exact, maar voldoende)
             day.photos = day.sessions.flatMap(ss => ss.photos);
-            save(); renderSessionLog();
+            save();
+            renderSessionLog();
+            cleanupPhotoRefsIfUnused([removedRef]).catch(err => console.warn('Photo cleanup failed', err));
         }
 
-        function openPhoto(sessionId, idx) {
+        async function openPhoto(sessionId, idx) {
             const day = ensureDay();
             let photo = null;
             if(sessionId === 'det') {
@@ -1945,45 +2350,52 @@ function openDetermination(id) {
                 photo = s.photos?.[idx];
             }
             if(!photo) return;
+            const src = await resolvePhotoDataUrl(photo);
+            if(!src) {
+                alert('Foto niet gevonden.');
+                return;
+            }
             const box = document.getElementById('photo-lightbox');
             const img = document.getElementById('photo-lightbox-img');
-            img.src = photo;
+            img.src = src;
             box.classList.remove('hidden');
         }
 
         // open foto uit storage inspector
-        function openInspectorPhoto(idx, key) {
+        async function openInspectorPhoto(idx, key) {
             const raw = localStorage.getItem(key || STORAGE_KEY);
             if(!raw) return;
             try {
                 const parsed = JSON.parse(raw);
                 const imgs = [];
                 const collect = v => {
-                    if(typeof v === 'string' && v.startsWith('data:image')) imgs.push(v);
+                    if(typeof v === 'string' && (isDataImageUrl(v) || isIdbPhotoRef(v))) imgs.push(v);
                     else if(Array.isArray(v)) v.forEach(collect);
                     else if(v && typeof v === 'object') Object.values(v).forEach(collect);
                 };
                 collect(parsed);
-                const photo = imgs[idx];
-                if(!photo) return;
+                const src = await resolvePhotoDataUrl(imgs[idx]);
+                if(!src) return;
                 const box = document.getElementById('photo-lightbox');
                 const img = document.getElementById('photo-lightbox-img');
-                img.src = photo;
+                img.src = src;
                 box.classList.remove('hidden');
             } catch(e) { console.log(e); }
         }
 
 
-        function openDetPhoto(detId, idx) {
+        async function openDetPhoto(detId, idx) {
             const day = ensureDay();
             for(const s of day.sessions || []) {
                 const det = (s.determinations || []).find(d => d.id === detId);
                 if(det) {
                     const photo = det.photos?.[idx];
                     if(photo) {
+                        const src = await resolvePhotoDataUrl(photo);
+                        if(!src) return;
                         const box = document.getElementById('photo-lightbox');
                         const img = document.getElementById('photo-lightbox-img');
-                        img.src = photo;
+                        img.src = src;
                         box.classList.remove('hidden');
                     }
                     return;
@@ -2054,6 +2466,31 @@ function openDetermination(id) {
             const notes = (s?.notes || '').trim();
             if(auto && notes) return `${auto}. ${notes}`;
             return auto || notes;
+        }
+
+        function sessionContributorNames(session) {
+            if(!session || typeof session !== 'object') return '';
+            const names = [];
+            const seen = new Set();
+            const pushName = (name, contributorId = '') => {
+                const normalized = normalizeContributorDisplayName(name || '', contributorId || '');
+                if(!normalized) return;
+                const key = normalized.toLowerCase();
+                if(seen.has(key)) return;
+                seen.add(key);
+                names.push(normalized);
+            };
+            (Array.isArray(session.contributorRoster) ? session.contributorRoster : []).forEach(r => {
+                pushName(r?.name || '', r?.id || '');
+            });
+            if(!names.length) {
+                (Array.isArray(session.contributions) ? session.contributions : []).forEach(c => {
+                    pushName(c?.contributorName || '', c?.contributorId || '');
+                });
+            }
+            if(!names.length && !Array.isArray(session.contributions)) return '';
+            if(!names.length && session.contributions.length === 0) return 'mezelf';
+            return names.join(', ');
         }
 
         function getActiveSession(day) {
@@ -2131,9 +2568,9 @@ function openDetermination(id) {
                 includeInReports: true,
                 contributions: [],
                 contributorRoster: [],
-                autoContributorNote: '',
-                teamRunId: day.teamRunId || ''
+                autoContributorNote: ''
             };
+            ensureLocalSessionContributorDefaults(session);
             day.sessions.push(session);
             activeSessionId = session.id;
             viewedSessionId = session.id;
@@ -2332,6 +2769,7 @@ function openDetermination(id) {
             const day = ensureDay(dayKey);
             const target = day.sessions.find(s => s.id === id);
             if(!target) return;
+            const refsToCleanup = collectSessionPhotoRefs(target);
             const detCount = (target.determinations || []).filter(d => !!d.result && !d.pending).length;
             const photoCount = (target.photos || []).length;
             const ok = confirm(`Telling verwijderen? Opgelet: ook ${detCount} determinaties en ${photoCount} foto's in deze telling gaan verloren.`);
@@ -2339,7 +2777,11 @@ function openDetermination(id) {
             day.sessions = day.sessions.filter(s => s.id !== id);
             recalcDayFromSessions(day);
             if(activeSessionId === id) activeSessionId = null;
-            save(); render(); renderSessionAdmin(); showToast('Telling verwijderd');
+            save();
+            render();
+            renderSessionAdmin();
+            showToast('Telling verwijderd');
+            cleanupPhotoRefsIfUnused(refsToCleanup).catch(err => console.warn('Photo cleanup failed', err));
         }
 
         function confirmMerge(id) {
@@ -2443,6 +2885,41 @@ function openDetermination(id) {
         }
         function removeC(id) { if(confirm("Soort wissen?")) { const day = ensureDay(); day.custom = day.custom.filter(c => c.id!==id); save(); buildUI(); render(); } }
 
+        function resizeImageFileToDataUrl(file, maxSide = 700, quality = 0.7) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onerror = () => reject(reader.error || new Error('FILE_READ_FAILED'));
+                reader.onload = ev => {
+                    const img = new Image();
+                    img.onerror = () => reject(new Error('IMAGE_DECODE_FAILED'));
+                    img.onload = () => {
+                        const c = document.createElement('canvas');
+                        const fct = Math.min(1, maxSide / Math.max(img.width || 1, img.height || 1));
+                        c.width = Math.max(1, Math.round(img.width * fct));
+                        c.height = Math.max(1, Math.round(img.height * fct));
+                        const ctx = c.getContext('2d');
+                        if(!ctx) {
+                            reject(new Error('CANVAS_CONTEXT_FAILED'));
+                            return;
+                        }
+                        ctx.drawImage(img, 0, 0, c.width, c.height);
+                        resolve(c.toDataURL('image/jpeg', quality));
+                    };
+                    img.src = ev.target.result;
+                };
+                reader.readAsDataURL(file);
+            });
+        }
+
+        async function persistPhotoDataUrl(dataUrl, meta = {}) {
+            try {
+                return await putPhotoRecord(dataUrl, meta);
+            } catch(err) {
+                console.warn('IndexedDB foto-opslag niet beschikbaar, fallback naar localStorage string.', err);
+                return dataUrl;
+            }
+        }
+
         function triggerPhoto(sessionId = null) {
             const day = ensureDay();
             const target = sessionId || (getActiveSession(day)?.id || null);
@@ -2454,73 +2931,134 @@ function openDetermination(id) {
             input.click();
         }
 
-        function handlePhoto(e) {
+        async function handlePhoto(e) {
             const f = e.target.files[0]; if(!f) return;
             const day = ensureDay();
             const session = photoTargetSession
                 ? day.sessions.find(s => s.id === photoTargetSession)
                 : getActiveSession(day);
             if(!session) { alert('Geen actieve sessie gevonden.'); return; }
-            const r = new FileReader(); r.onload = ev => {
-                const img = new Image(); img.onload = () => {
-                    const c = document.createElement('canvas'); const m = 600;
-                    const fct = Math.min(1, m/Math.max(img.width, img.height));
-                    c.width = img.width*fct; c.height = img.height*fct;
-                    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-                    const data = c.toDataURL('image/jpeg', 0.6);
-                    session.photos.push(data);
-                    // ook op dag-niveau voor aggregatie en legacy
-                    day.photos.push(data);
-                    save(); renderSessionLog();
-                    recordUserAction();
-                }; img.src = ev.target.result;
-            }; r.readAsDataURL(f);
+            try {
+                const data = await resizeImageFileToDataUrl(f, 600, 0.6);
+                const photoRef = await persistPhotoDataUrl(data, { dayKey: picker.value, sessionId: session.id, source: 'session' });
+                session.photos.push(photoRef);
+                // ook op dag-niveau voor aggregatie en legacy
+                day.photos.push(photoRef);
+                save();
+                renderSessionLog();
+                recordUserAction();
+            } catch(err) {
+                console.error(err);
+                alert('Foto kon niet verwerkt worden.');
+            }
         }
 
         function clearAllPhotos(dayKey = null) {
             if(!confirm(dayKey ? `Alle foto\'s van ${dayKey} wissen?` : 'Alle foto\'s in alle dagen wissen?')) return;
+            let refsToCleanup = [];
             if(dayKey) {
                 const d = ensureDay(dayKey);
+                refsToCleanup = collectDayPhotoRefs(d);
                 d.photos = [];
-                d.sessions.forEach(s => s.photos = []);
+                d.sessions.forEach(s => {
+                    s.photos = [];
+                    (Array.isArray(s.determinations) ? s.determinations : []).forEach(det => {
+                        det.photos = [];
+                    });
+                });
             } else {
-                for(const d in storage) { const day = ensureDay(d); day.photos = []; day.sessions.forEach(s => s.photos = []); }
+                for(const d in storage) {
+                    const day = ensureDay(d);
+                    refsToCleanup = refsToCleanup.concat(collectDayPhotoRefs(day));
+                    day.photos = [];
+                    day.sessions.forEach(s => {
+                        s.photos = [];
+                        (Array.isArray(s.determinations) ? s.determinations : []).forEach(det => {
+                            det.photos = [];
+                        });
+                    });
+                }
             }
-            save(); renderSessionLog(); showToast('Foto\'s gewist');
+            save();
+            renderSessionLog();
+            showToast('Foto\'s gewist');
+            cleanupPhotoRefsIfUnused(refsToCleanup).catch(err => console.warn('Photo cleanup failed', err));
         }
 
         async function shareSessionPhotos(sessionId) {
             const day = ensureDay();
             const session = day.sessions.find(s => s.id === sessionId);
             if(!session) return alert('Tellingen niet gevonden');
-            const photos = session.photos || [];
+            const photos = uniquePhotoRefs(session.photos || []);
             if(!photos.length) return alert('Geen foto\'s in deze sessie.');
-            const files = photos.map((dataUrl, idx) => {
-                const res = dataURLToBlob(dataUrl);
-                return new File([res.blob], `paddentrek-${picker.value}-${sessionId}-${idx+1}.${res.ext}`, { type: res.blob.type });
-            });
-            const text = `Foto's ${picker.value} (${fmtTime(session.start)}): ${photos.length} stuks`;
+            const files = await buildShareFilesFromPhotoRefs(photos, (idx, ext) =>
+                `paddentrek-${picker.value}-${sessionId}-${idx + 1}.${ext}`
+            );
+            if(!files.length) return alert('Foto\'s konden niet geladen worden.');
+            const text = `Foto's ${picker.value} (${fmtTime(session.start)}): ${files.length} stuks`;
             const shareData = { title: 'Paddentrek Teller Pro', text, files };
             try {
                 if (navigator.share) {
+                    if(navigator.canShare && !navigator.canShare({ files })) {
+                        throw new Error('FILES_NOT_SUPPORTED');
+                    }
                     await navigator.share(shareData);
                     return;
                 }
             } catch(err) {
                 if(err?.name === 'AbortError') return;
+                if(err?.message === 'FILES_NOT_SUPPORTED') {
+                    alert('Je toestel ondersteunt geen delen met foto’s. Probeer zonder foto’s.');
+                    return;
+                }
             }
             const wa = `https://wa.me/?text=${encodeURIComponent(text)}`;
             window.open(wa, '_blank');
         }
 
         function dataURLToBlob(dataUrl) {
+            if(!isDataImageUrl(dataUrl) || !dataUrl.includes(',')) return null;
             const [meta, b64] = dataUrl.split(',');
-            const mime = meta.match(/data:(.*);base64/)[1] || 'image/jpeg';
+            const match = meta.match(/data:(.*);base64/);
+            if(!match || !match[1]) return null;
+            const mime = match[1];
             const ext = mime.split('/')[1] || 'jpg';
-            const bin = atob(b64);
-            const arr = new Uint8Array(bin.length);
-            for(let i=0;i<bin.length;i++) arr[i] = bin.charCodeAt(i);
-            return { blob: new Blob([arr], { type: mime }), ext };
+            try {
+                const bin = atob(b64);
+                const arr = new Uint8Array(bin.length);
+                for(let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+                return { blob: new Blob([arr], { type: mime }), ext };
+            } catch(_) {
+                return null;
+            }
+        }
+
+        function uniquePhotoRefs(photos = []) {
+            const out = [];
+            const seen = new Set();
+            (Array.isArray(photos) ? photos : []).forEach(ref => {
+                if(typeof ref !== 'string' || !ref) return;
+                if(seen.has(ref)) return;
+                seen.add(ref);
+                out.push(ref);
+            });
+            return out;
+        }
+
+        async function buildShareFilesFromPhotoRefs(photoRefs = [], fileNameFactory = null) {
+            const refs = uniquePhotoRefs(photoRefs);
+            const files = [];
+            for(let i = 0; i < refs.length; i++) {
+                const src = await resolvePhotoDataUrl(refs[i]);
+                const blobResult = dataURLToBlob(src);
+                if(!blobResult?.blob) continue;
+                const ext = blobResult.ext || 'jpg';
+                const fileName = typeof fileNameFactory === 'function'
+                    ? fileNameFactory(i, ext, refs[i])
+                    : `paddentrek-photo-${i + 1}.${ext}`;
+                files.push(new File([blobResult.blob], fileName, { type: blobResult.blob.type || 'image/jpeg' }));
+            }
+            return files;
         }
 
         function dayTotalForTrend(day) {
@@ -2531,6 +3069,16 @@ function openDetermination(id) {
             if(hasSessions) return reportTotal;
             if(reportTotal > 0) return reportTotal;
             return sumCounts(day.counts || {});
+        }
+
+        function dayIsTrendTellingDay(day) {
+            if(!day || typeof day !== 'object') return false;
+            const sessions = Array.isArray(day.sessions) ? day.sessions : [];
+            if(sessions.length) {
+                return sessions.some(sessionIncludedInReports);
+            }
+            if(typeof day.notes === 'string' && day.notes.trim()) return true;
+            return dayTotalForTrend(day) > 0;
         }
 
         function trendDateLabel(dateIso) {
@@ -2609,29 +3157,92 @@ function openDetermination(id) {
             });
         }
 
+        function toggleReportTrendZeroDays(checked) {
+            setReportTrendShowEmptySetting(!!checked);
+            renderReportTrend();
+        }
+
         function renderReportTrend() {
             const card = document.getElementById('report-trend-card');
             const meta = document.getElementById('report-trend-meta');
             const chart = document.getElementById('report-trend-chart');
             const peaks = document.getElementById('report-trend-peaks');
+            const toggle = document.getElementById('report-trend-toggle-empty');
             if(!card || !meta || !chart || !peaks) return;
+            if(toggle) toggle.checked = !!reportTrendShowEmptyDays;
 
-            const points = Object.keys(storage || {})
+            const knownPoints = Object.keys(storage || {})
                 .filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d))
                 .sort()
-                .map(d => ({ date: d, total: dayTotalForTrend(storage[d]) }))
-                .filter(p => p.total > 0);
+                .map(d => {
+                    const day = storage[d];
+                    return {
+                        date: d,
+                        total: dayTotalForTrend(day),
+                        hasTellingDay: dayIsTrendTellingDay(day)
+                    };
+                })
+                .filter(p => p.hasTellingDay);
 
-            if(!points.length) {
+            if(!knownPoints.length) {
                 card.classList.add('hidden');
+                refreshHeaderSelectorVisibility();
                 return;
             }
             card.classList.remove('hidden');
 
+            const knownByDate = new Map(knownPoints.map(p => [p.date, p]));
+            const minDate = knownPoints[0].date;
+            const maxKnownDate = knownPoints[knownPoints.length - 1].date;
+            const selectedDate = /^\d{4}-\d{2}-\d{2}$/.test(picker?.value || '') ? picker.value : todayISO();
+            const maxDate = selectedDate > maxKnownDate ? selectedDate : maxKnownDate;
+            const daySpanMs = new Date(`${maxDate}T00:00:00`).getTime() - new Date(`${minDate}T00:00:00`).getTime();
+            const fullRangeCount = Math.max(1, Math.round(daySpanMs / 86400000) + 1);
+
+            let points = [];
+            let assumedZeroCount = 0;
+            let hiddenZeroCount = 0;
+            if(reportTrendShowEmptyDays) {
+                let cursor = minDate;
+                while(cursor <= maxDate) {
+                    const existing = knownByDate.get(cursor);
+                    if(existing) {
+                        points.push({ date: cursor, total: existing.total, hasTellingDay: true, assumed: false });
+                    } else {
+                        points.push({ date: cursor, total: 0, hasTellingDay: false, assumed: true });
+                        assumedZeroCount++;
+                    }
+                    cursor = isoWithDayOffset(cursor, 1);
+                }
+            } else {
+                points = knownPoints.filter(p => p.total > 0).map(p => ({ ...p, assumed: false }));
+                hiddenZeroCount = Math.max(0, fullRangeCount - points.length);
+            }
+            const emptyCount = points.filter(p => p.total === 0).length;
+
+            if(!points.length) {
+                meta.innerHTML = `Alle <strong>${fullRangeCount}</strong> dag(en) in deze periode hebben <strong>0</strong> dieren of zijn verborgen.`;
+                chart.innerHTML = `
+                    <div class="min-h-[220px] flex items-center justify-center text-center text-[12px] text-emerald-100/90 px-4">
+                        Geen dagen met dieren in beeld. Zet "Toon lege teldagen (0)" aan om 0-dagen te tonen.
+                    </div>
+                `;
+                peaks.innerHTML = `
+                    <span class="px-2 py-1 rounded-full border bg-gray-800/70 border-gray-600 text-gray-200">
+                        Lege dagen verborgen (${reportTrendShowEmptyDays ? emptyCount : hiddenZeroCount})
+                    </span>
+                `;
+                return;
+            }
+
             const top = points.reduce((best, p) => p.total > best.total ? p : best, points[0]);
             const totalSum = points.reduce((n, p) => n + p.total, 0);
             const avg = Math.round(totalSum / points.length);
-            meta.innerHTML = `Topdag: <strong>${trendDateLabel(top.date)}</strong> met <strong>${top.total}</strong> dieren · Gemiddeld <strong>${avg}</strong> per teldag`;
+            const avgLabel = reportTrendShowEmptyDays ? 'per dag in periode' : 'per teldag';
+            const emptyInfo = reportTrendShowEmptyDays
+                ? `${emptyCount} lege dag(en) zichtbaar${assumedZeroCount ? ` (${assumedZeroCount} automatisch als 0)` : ''}`
+                : `${hiddenZeroCount} lege dag(en) verborgen`;
+            meta.innerHTML = `Topdag: <strong>${trendDateLabel(top.date)}</strong> met <strong>${top.total}</strong> dieren · Gemiddeld <strong>${avg}</strong> ${avgLabel} · ${emptyInfo}`;
 
             const sortedTop = points.slice().sort((a,b)=>b.total-a.total).slice(0,3);
             peaks.innerHTML = sortedTop.map((p, i) => `
@@ -2714,6 +3325,7 @@ function openDetermination(id) {
                 </svg>
             `;
             bindReportTrendInteractions();
+            refreshHeaderSelectorVisibility();
         }
 
         function updateReport() {
@@ -2751,7 +3363,9 @@ function openDetermination(id) {
                     const total = sumCounts(s.counts);
                     const wtxt = s.weather ? ` | ${weatherSummaryText(s.weather, ' • ', true)}` : '';
                     const route = s.routeName ? ` | 🚶‍♂️ ${s.routeName}` : '';
-                    txt += `  - ${sessionDisplayLabel(s, data)}: ${total} stuks${route}${wtxt}\n`;
+                    const contributors = sessionContributorNames(s);
+                    const who = contributors ? ` | 👤 ${contributors}` : '';
+                    txt += `  - ${sessionDisplayLabel(s, data)}: ${total} stuks${route}${who}${wtxt}\n`;
                 });
                 if(reportMode === 'day' && excludedSessions.length) {
                     txt += `\n⚠️ ${excludedSessions.length} sessie(s) tellen niet mee in dit rapport.\n`;
@@ -2786,7 +3400,7 @@ function openDetermination(id) {
                         ).join(' ');
                         const ansList = answers.map((a,idx) => `<div class="text-[11px] flex gap-2"><span class="text-gray-500">${idx+1}.</span><span class="flex-1 text-gray-200">${detQuestionText(a.node)}</span><span class="font-bold ${a.answer==='yes' ? 'text-emerald-400' : 'text-red-400'}">${detAnswerLabel(a.answer)}</span></div>`).join('');
                         const photoList = photos
-                            ? det.photos.map((p,i)=>`<div class="relative"><img src="${p}" class="h-16 w-16 object-cover rounded-lg border border-emerald-500/30 shadow" onclick="openDetPhoto('${det.id}', ${i})"><span class="absolute -top-1 -left-1 bg-black/70 text-[9px] px-1 rounded-full">${i+1}</span></div>`).join('')
+                            ? det.photos.map((p,i)=>`<div class="relative"><img src="${photoPreviewSrc(p)}" data-photo-ref="${encodePhotoRef(p)}" class="h-16 w-16 object-cover rounded-lg border border-emerald-500/30 shadow" onclick="openDetPhoto('${det.id}', ${i})"><span class="absolute -top-1 -left-1 bg-black/70 text-[9px] px-1 rounded-full">${i+1}</span></div>`).join('')
                             : '<div class="text-gray-500 text-[10px]">Geen foto\'s</div>';
                         parts.push(
                             '<div class="bg-gradient-to-br from-gray-900 via-gray-900 to-gray-800 border border-emerald-500/20 rounded-xl p-3 space-y-2 shadow-lg">' +
@@ -2805,6 +3419,7 @@ function openDetermination(id) {
                         );
                     });
                     detBox.innerHTML = parts.join('');
+                    hydratePhotoElements(detBox);
                 }
             }
         }
@@ -2837,10 +3452,10 @@ function openDetermination(id) {
                     ? (session.photos || [])
                     : getReportEligibleSessions(day).flatMap(s => s.photos || []);
                 if(!photos.length) { alert('Geen foto’s beschikbaar voor deze selectie.'); return; }
-                files = photos.map((dataUrl, idx) => {
-                    const res = dataURLToBlob(dataUrl);
-                    return new File([res.blob], `paddentrek-${picker.value}-${idx+1}.${res.ext}`, { type: res.blob.type });
-                });
+                files = await buildShareFilesFromPhotoRefs(photos, (idx, ext) =>
+                    `paddentrek-${picker.value}-${idx + 1}.${ext}`
+                );
+                if(!files.length) { alert('Foto’s konden niet geladen worden voor delen.'); return; }
             }
 
             const shareData = includePhotos ? { title: 'Paddentrek Teller Pro', text, files } : { title: 'Paddentrek Teller Pro', text };
@@ -2897,12 +3512,11 @@ ${lines.join('\n\n')}`;
             let files = [];
             const photos = dets.flatMap(d => d.photos || []).slice(0,10); // limiet om share API vriendelijk te houden
             if(photos.length) {
-                files = photos.map((dataUrl, idx) => {
-                    const res = dataURLToBlob(dataUrl);
-                    return new File([res.blob], `det-${picker.value}-${idx+1}.${res.ext}`, { type: res.blob.type });
-                });
+                files = await buildShareFilesFromPhotoRefs(photos, (idx, ext) =>
+                    `det-${picker.value}-${idx + 1}.${ext}`
+                );
             }
-            const shareData = photos.length && navigator.canShare && navigator.canShare({ files })
+            const shareData = files.length && navigator.canShare && navigator.canShare({ files })
                 ? { title:'Determinaties', text, files }
                 : { title:'Determinaties', text };
             try {
@@ -3336,16 +3950,12 @@ ${lines.join('\n\n')}`;
             const nameInput = document.getElementById('share-contributor-name');
             const rawName = nameInput ? (nameInput.value || '').trim() : (profile.name || '').trim();
             const contributorName = rawName || 'Onbekende teller';
-            const daySeed = (typeof picker !== 'undefined' && picker?.value) ? picker.value : currentDayIsoFallback();
-            const teamRunId = deriveTeamRunId(daySeed, '🐸');
             const nextProfile = saveContributorProfile({
                 ...profile,
-                name: contributorName === 'Onbekende teller' ? (profile.name || '') : contributorName,
-                lastTeamRunId: teamRunId,
-                lastTeamLabel: '🐸'
+                name: contributorName === 'Onbekende teller' ? (profile.name || '') : contributorName
             });
             if(nameInput && !nameInput.value.trim()) nameInput.value = nextProfile.name;
-            return { contributorId: nextProfile.id, contributorName, teamRunId, teamLabel: '🐸' };
+            return { contributorId: nextProfile.id, contributorName };
         }
 
         function buildSyncPayloadForSource(dayKey, day, session, identity) {
@@ -3354,9 +3964,6 @@ ${lines.join('\n\n')}`;
             const custom = normalizeCustomSpeciesList(cloneJSON(day.custom || []));
             const sourceLabel = session ? sessionDisplayLabel(session, day) : 'Volledige dag';
             const sourceRoute = normalizeRouteName(session?.routeName || document.getElementById('share-route-name')?.value || '');
-            const teamRunId = day.teamRunId || identity.teamRunId || deriveTeamRunId(dayKey, '🐸');
-            if(!day.teamRunId && teamRunId) day.teamRunId = teamRunId;
-            if(session && !session.teamRunId && teamRunId) session.teamRunId = teamRunId;
             const contributionId = buildContributionId(identity.contributorId, dayKey, sessionId || '');
             const payload = {
                 v: SYNC_PAYLOAD_VERSION,
@@ -3370,9 +3977,7 @@ ${lines.join('\n\n')}`;
                 c: counts,
                 s: custom,
                 contributorName: identity.contributorName || 'Onbekende teller',
-                contributorId: identity.contributorId || `legacy_${simpleHash(identity.contributorName || 'unknown')}`,
-                teamRunId,
-                teamLabel: normalizeTeamLabel(identity.teamLabel || '🐸')
+                contributorId: identity.contributorId || `legacy_${simpleHash(identity.contributorName || 'unknown')}`
             };
             payload.h = buildPayloadHash(payload);
             return payload;
@@ -3537,15 +4142,6 @@ ${lines.join('\n\n')}`;
             const contributorId = typeof payload.contributorId === 'string' && payload.contributorId.trim()
                 ? payload.contributorId.trim()
                 : `legacy_${simpleHash(`${contributorName}|${contributionId}`)}`;
-            const teamLabel = normalizeTeamLabel(
-                typeof payload.teamLabel === 'string' && payload.teamLabel.trim()
-                    ? payload.teamLabel.trim()
-                    : teamLabelFromRunId(typeof payload.teamRunId === 'string' ? payload.teamRunId : '')
-            );
-            const teamRunSeed = typeof payload.teamRunId === 'string' && payload.teamRunId.trim()
-                ? payload.teamRunId.trim()
-                : deriveTeamRunId(sourceDate || currentDayIsoFallback(), teamLabel);
-            const teamRunId = ensureTeamRunId(teamRunSeed);
             const normalized = {
                 v: Number(payload.v) || 1,
                 id: contributionId,
@@ -3558,9 +4154,7 @@ ${lines.join('\n\n')}`;
                 c: counts,
                 s: custom,
                 contributorName,
-                contributorId,
-                teamRunId,
-                teamLabel
+                contributorId
             };
             normalized.h = typeof payload.h === 'string' ? payload.h : buildPayloadHash(normalized);
             return normalized;
@@ -3736,8 +4330,7 @@ ${lines.join('\n\n')}`;
                 includeInReports: true,
                 contributions: [],
                 contributorRoster: [],
-                autoContributorNote: '',
-                teamRunId: payload?.teamRunId || day.teamRunId || ''
+                autoContributorNote: ''
             };
             day.sessions.push(session);
             return session;
@@ -3817,7 +4410,6 @@ ${lines.join('\n\n')}`;
 
             const targetDayKey = located?.dayKey || dayKey;
             const day = ensureDay(targetDayKey);
-            if(payload.teamRunId && !day.teamRunId) day.teamRunId = payload.teamRunId;
             mergeIncomingCustomSpecies(day, payload);
 
             const targetSession = ensureImportSessionForContribution(targetDayKey, payload, located?.session || null);
@@ -3828,7 +4420,6 @@ ${lines.join('\n\n')}`;
             targetSession.end = targetSession.end || createdIso;
             targetSession.counts = cloneJSON(payload.c || {});
             if(route) targetSession.routeName = route;
-            if(payload.teamRunId && !targetSession.teamRunId) targetSession.teamRunId = payload.teamRunId;
             if(typeof targetSession.includeInReports !== 'boolean') targetSession.includeInReports = true;
             if(!Array.isArray(targetSession.contributions)) targetSession.contributions = [];
             const rec = {
@@ -3841,8 +4432,6 @@ ${lines.join('\n\n')}`;
                 sourceRoute: route,
                 contributorId: payload.contributorId || '',
                 contributorName: payload.contributorName || 'Onbekende teller',
-                teamRunId: payload.teamRunId || '',
-                teamLabel: payload.teamLabel || '🐸',
                 importedAt: Date.now()
             };
             targetSession.contributions = [rec];
@@ -4161,8 +4750,7 @@ ${lines.join('\n\n')}`;
                             includeInReports: true,
                             contributions: [],
                             contributorRoster: [],
-                            autoContributorNote: '',
-                            teamRunId: day.teamRunId || ''
+                            autoContributorNote: ''
                         };
                         if(!existing) day.sessions.push(sess);
                         importSessions[key] = sess;
@@ -4260,8 +4848,7 @@ ${lines.join('\n\n')}`;
                         includeInReports: true,
                         contributions: [],
                         contributorRoster: [],
-                        autoContributorNote: '',
-                        teamRunId: day.teamRunId || ''
+                        autoContributorNote: ''
                     });
                 }
             });
@@ -4487,6 +5074,7 @@ ${lines.join('\n\n')}`;
         }
 
         function switchTab(t) {
+            currentTab = t;
             document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
             const view = document.getElementById('view-' + t);
             if(view) view.classList.remove('hidden');
@@ -4519,6 +5107,7 @@ ${lines.join('\n\n')}`;
                 renderDeterminationUI();
                 renderDeterminationList();
             }
+            refreshHeaderSelectorVisibility();
         }
 
         function resetCurrentDate() { if(confirm("Alles wissen voor vandaag?")) { delete storage[picker.value]; save(); buildUI(); render(); } }
@@ -4537,8 +5126,33 @@ ${lines.join('\n\n')}`;
             const reportView = document.getElementById('view-report');
             if(reportView && !reportView.classList.contains('hidden')) renderReportTrend();
         });
-        splitSessionOverMidnightIfNeeded();
-        buildUI(); render(); renderSessionAdmin(); buildQRSessionOptions(); buildReportSessionOptions(); renderDetSessionOptions(); renderDeterminationUI(); renderDeterminationList();
-        updateContributorInputsFromProfile();
-        handleShareIdentityChange(false);
-        handleIncomingSyncFromUrl();
+        function runInitialRender() {
+            splitSessionOverMidnightIfNeeded();
+            buildUI();
+            render();
+            renderSessionAdmin();
+            buildQRSessionOptions();
+            buildReportSessionOptions();
+            renderDetSessionOptions();
+            renderDeterminationUI();
+            renderDeterminationList();
+            updateContributorInputsFromProfile();
+            handleShareIdentityChange(false);
+            handleIncomingSyncFromUrl();
+            const trendCard = document.getElementById('report-trend-card');
+            if(trendCard && trendCard.dataset.headerVisibilityBound !== '1') {
+                trendCard.addEventListener('toggle', refreshHeaderSelectorVisibility);
+                trendCard.dataset.headerVisibilityBound = '1';
+            }
+            refreshHeaderSelectorVisibility();
+        }
+
+        async function bootstrapApp() {
+            await runAutomaticV3UpgradeMigration();
+            runInitialRender();
+        }
+
+        bootstrapApp().catch(err => {
+            console.error('Bootstrap met automatische migratie faalde, fallback init wordt gestart.', err);
+            runInitialRender();
+        });
