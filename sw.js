@@ -33,8 +33,41 @@ self.addEventListener('activate', e => {
   );
 });
 
+self.addEventListener('message', e => {
+  if(e?.data?.type === 'SKIP_WAITING') self.skipWaiting();
+});
+
 self.addEventListener('fetch', e => {
-  e.respondWith(
-    caches.match(e.request).then(r => r || fetch(e.request))
-  );
+  const req = e.request;
+  if(req.method !== 'GET') return;
+
+  // Navigaties: probeer eerst netwerk zodat nieuwe shell sneller doorbreekt.
+  if(req.mode === 'navigate') {
+    e.respondWith((async () => {
+      try {
+        const net = await fetch(req);
+        const cache = await caches.open(NAME);
+        cache.put(req, net.clone());
+        return net;
+      } catch(_) {
+        return (await caches.match(req)) || (await caches.match('./index.html')) || new Response('Offline', { status: 503 });
+      }
+    })());
+    return;
+  }
+
+  e.respondWith((async () => {
+    const cached = await caches.match(req);
+    if(cached) return cached;
+    try {
+      const net = await fetch(req);
+      if(net && net.status === 200 && (new URL(req.url)).origin === self.location.origin) {
+        const cache = await caches.open(NAME);
+        cache.put(req, net.clone());
+      }
+      return net;
+    } catch(_) {
+      return new Response('Offline', { status: 503 });
+    }
+  })());
 });

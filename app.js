@@ -53,14 +53,21 @@ document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
 
                 // Luister naar nieuwe versies
                 reg.addEventListener('updatefound', () => {
-                    const u = reg.installing?.scriptURL || '';
-                    const m = u.match(/v=([^&]+)/);
-                    showUpdateBadge(m ? m[1] : null);
+                    // updatefound kan ook "zelfde query, andere inhoud" zijn via importScripts(version.js)
+                    if(navigator.serviceWorker.controller) showUpdateBadge();
                 });
                 navigator.serviceWorker.addEventListener('controllerchange', () => {
                     const u = reg.active?.scriptURL || '';
                     const m = u.match(/v=([^&]+)/);
                     showUpdateBadge(m ? m[1] : null);
+                });
+                if(reg.waiting && navigator.serviceWorker.controller) showUpdateBadge();
+
+                const requestSwUpdateCheck = () => reg.update().catch(() => {});
+                requestSwUpdateCheck();
+                window.addEventListener('online', requestSwUpdateCheck);
+                document.addEventListener('visibilitychange', () => {
+                    if(document.visibilityState === 'visible') requestSwUpdateCheck();
                 });
             }).catch(() => {
                 document.getElementById('status-icon').className = 'status-dot bg-red-500';
@@ -3611,14 +3618,24 @@ ${lines.join('\n\n')}`;
         // --- UPDATE BADGE ---
         const updateBtn = document.getElementById('update-btn');
         function showUpdateBadge(version) {
-            if(!version || version === APP_VERSION) return; // niets nieuw
+            if(version && version === APP_VERSION) return; // niets nieuw
             updateBtn.classList.remove('hidden');
-            updateBtn.innerText = `UPDATE ${version}`;
+            updateBtn.innerText = version ? `UPDATE ${version}` : 'UPDATE BESCHIKBAAR';
         }
-        updateBtn.onclick = () => {
+        updateBtn.onclick = async () => {
             updateBtn.innerText = 'Bezig...';
             updateBtn.disabled = true;
-            navigator.serviceWorker.getRegistration().then(reg => reg?.update()).finally(() => location.reload());
+            try {
+                const reg = await navigator.serviceWorker.getRegistration();
+                if(reg) {
+                    await reg.update();
+                    if(reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+                }
+            } catch(_) {
+                // noop
+            } finally {
+                setTimeout(() => location.reload(), 600);
+            }
         };
 
         function showToast(m) {
