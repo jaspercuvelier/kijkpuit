@@ -344,6 +344,22 @@ document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
             return details ? `${base}${separator}${details}` : base;
         }
 
+        const WEATHER_FETCH_MAX_AGE_MS = 3 * 60 * 60 * 1000;
+
+        function getSessionWeatherFetchPolicy(session, nowTs = Date.now()) {
+            if(!session || typeof session !== 'object') return { allowed: true, ageMs: 0, active: false };
+            const active = !session.end;
+            if(active) return { allowed: true, ageMs: 0, active: true };
+            const refTs = new Date(session.end || session.start || '').getTime();
+            if(!isFinite(refTs)) return { allowed: true, ageMs: 0, active: false };
+            const ageMs = Math.max(0, nowTs - refTs);
+            return {
+                allowed: ageMs < WEATHER_FETCH_MAX_AGE_MS,
+                ageMs,
+                active: false
+            };
+        }
+
         // Bewaar data onder vaste key; schrijf ook naar versie-key voor backward compat.
         const STORAGE_KEY = 'paddentrek_data';
         const STORAGE_KEY_VERSIONED = `paddentrek_${APP_VERSION}`;
@@ -359,6 +375,7 @@ document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
         let sessionScanner = null;
         let pendingQrImportPayload = null;
         let pendingSyncLinkPayload = null;
+        let shareSelectionStateByDay = {};
 
         function isPlainObject(v) {
             return !!v && typeof v === 'object' && !Array.isArray(v);
@@ -763,6 +780,22 @@ document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
             if(pd) pd.value = today;
         }
 
+        function isoWithDayOffset(baseIso, offsetDays = 0) {
+            const base = /^\d{4}-\d{2}-\d{2}$/.test(baseIso || '') ? baseIso : todayISO();
+            const d = new Date(`${base}T00:00:00`);
+            d.setDate(d.getDate() + Number(offsetDays || 0));
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const day = String(d.getDate()).padStart(2, '0');
+            return `${y}-${m}-${day}`;
+        }
+
+        function changePickerDay(offsetDays = 0) {
+            if(!picker) return;
+            picker.value = isoWithDayOffset(picker.value || todayISO(), offsetDays);
+            if(typeof picker.onchange === 'function') picker.onchange();
+        }
+
         setDateInputsToToday();
 
         function migrateLegacyDays() {
@@ -823,6 +856,28 @@ document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
             return { merged, addedDays, replacedEmptyDays };
         }
 
+        function mergeMultipleLegacySnapshots(snapshots, targetData) {
+            let merged = cloneJSON(targetData || {});
+            let addedDays = 0;
+            let replacedEmptyDays = 0;
+            const sourceStats = [];
+            (Array.isArray(snapshots) ? snapshots : []).forEach(source => {
+                if(!source || !isPlainObject(source.data)) return;
+                const result = mergeLegacyIntoStorage(source.data, merged);
+                merged = result.merged;
+                addedDays += result.addedDays;
+                replacedEmptyDays += result.replacedEmptyDays;
+                sourceStats.push({
+                    key: source.key,
+                    dayCount: Number(source.dayCount || 0),
+                    nonEmptyDayCount: Number(source.nonEmptyDayCount || 0),
+                    addedDays: result.addedDays,
+                    replacedEmptyDays: result.replacedEmptyDays
+                });
+            });
+            return { merged, addedDays, replacedEmptyDays, sourceStats };
+        }
+
         function updateLegacyMigrationUI() {
             const card = document.getElementById('legacy-migrate-card');
             const btn = document.getElementById('legacy-migrate-btn');
@@ -832,11 +887,6 @@ document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
             if(!card || !btn || !status || !cleanupBtn || !cleanupHint) return;
 
             const versionedKeys = listVersionedStorageKeys();
-            const hasMultipleVersioned = versionedKeys.length > 1;
-            if(!hasMultipleVersioned) {
-                card.classList.add('hidden');
-                return;
-            }
             card.classList.remove('hidden');
 
             const legacyKeys = versionedKeys.filter(k => k !== STORAGE_KEY_VERSIONED);
@@ -852,7 +902,22 @@ document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
                 const when = new Date(state.doneAt).toLocaleString('nl-BE');
                 const added = Number(state.addedDays || 0);
                 const replaced = Number(state.replacedEmptyDays || 0);
-                status.innerText = `Migratie uitgevoerd op ${when}. Bron: ${state.sourceKey || 'onbekend'} (${added} toegevoegd, ${replaced} aangevuld).`;
+                const sourcesFromState = Array.isArray(state.sources)
+                    ? state.sources.filter(Boolean)
+                    : (state.sourceKey ? [state.sourceKey] : []);
+                const inferredSources = sourcesFromState.length ? sourcesFromState : legacyKeys;
+                const sourceLines = Array.isArray(state.sourceStats)
+                    ? state.sourceStats
+                        .filter(s => s && s.key)
+                        .map(s => `${s.key}: ${Number(s.addedDays || 0)} toegevoegd, ${Number(s.replacedEmptyDays || 0)} aangevuld`)
+                    : [];
+                const sourceSummary = inferredSources.length
+                    ? `Bronnen (${inferredSources.length}): ${inferredSources.join(', ')}`
+                    : 'Bronnen: onbekend';
+                const detailSummary = sourceLines.length ? ` Details: ${sourceLines.join(' | ')}` : '';
+                status.innerText =
+                    `Migratie uitgevoerd op ${when}. ${sourceSummary} (${added} toegevoegd, ${replaced} aangevuld).` +
+                    detailSummary;
                 if(legacyKeys.length > 0) {
                     cleanupBtn.disabled = false;
                     cleanupBtn.classList.remove('hidden');
@@ -862,16 +927,32 @@ document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
                 return;
             }
 
-            const source = listLegacyStorageSnapshots()[0];
-            if(!source) {
+            if(!legacyKeys.length) {
                 btn.disabled = true;
                 btn.classList.add('opacity-60', 'cursor-not-allowed');
-                status.innerText = 'Meerdere versie-keys gevonden, maar geen leesbare oude data om te migreren.';
+                status.innerText =
+                    'Geen oude versie-key(s) gevonden op dit toestel. ' +
+                    'Gebruik exact dezelfde browser + URL als vroeger om legacy data te vinden.';
+                return;
+            }
+
+            const sources = listLegacyStorageSnapshots();
+            if(!sources.length) {
+                btn.disabled = true;
+                btn.classList.add('opacity-60', 'cursor-not-allowed');
+                status.innerText =
+                    `Oude versie-key(s) gevonden (${legacyKeys.length}), maar geen leesbare oude data om te migreren.`;
                 return;
             }
 
             btn.disabled = false;
-            status.innerText = `Klaar om te migreren vanuit ${source.key} (${source.nonEmptyDayCount || source.dayCount} dag(en) met data).`;
+            const preview = sources
+                .slice(0, 4)
+                .map(s => `${s.key} (${s.nonEmptyDayCount || s.dayCount} dag(en))`)
+                .join(', ');
+            const more = sources.length > 4 ? ` +${sources.length - 4} extra` : '';
+            status.innerText =
+                `Klaar om te migreren vanuit ${sources.length} bron(nen): ${preview}${more}.`;
         }
 
         function migrateLegacyStorageManually() {
@@ -882,26 +963,30 @@ document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
                 return;
             }
 
-            const source = listLegacyStorageSnapshots()[0];
-            if(!source) {
+            const sources = listLegacyStorageSnapshots();
+            if(!sources.length) {
                 alert('Geen oude data gevonden onder paddentrek_*.');
                 updateLegacyMigrationUI();
                 return;
             }
 
+            const sourceKeys = sources.map(s => s.key);
             const ok = confirm(
-                `Oude data overzetten van ${source.key} naar ${STORAGE_KEY}?\n\n` +
+                `Oude data overzetten van ${sources.length} bron(nen) naar ${STORAGE_KEY}?\n\n` +
+                `${sourceKeys.join('\n')}\n\n` +
                 'Dit kan maar 1 keer via deze knop.'
             );
             if(!ok) return;
 
-            const result = mergeLegacyIntoStorage(source.data, storage);
+            const result = mergeMultipleLegacySnapshots(sources, storage);
             storage = result.merged;
             migrateLegacyDays();
             save();
             setLegacyMigrationState({
                 doneAt: new Date().toISOString(),
-                sourceKey: source.key,
+                sourceKey: sourceKeys[0] || '',
+                sources: sourceKeys,
+                sourceStats: result.sourceStats,
                 addedDays: result.addedDays,
                 replacedEmptyDays: result.replacedEmptyDays
             });
@@ -917,12 +1002,15 @@ document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
 
             if((result.addedDays + result.replacedEmptyDays) === 0) {
                 showToast('Migratie uitgevoerd (geen nieuwe dagen)');
-                alert(`Migratie uitgevoerd, maar er was geen ontbrekende data om toe te voegen.\nBron: ${source.key}`);
+                alert(
+                    `Migratie uitgevoerd, maar er was geen ontbrekende data om toe te voegen.\n\n` +
+                    `Bronnen:\n${sourceKeys.join('\n')}`
+                );
                 return;
             }
             showToast('Oude data overgezet');
             alert(
-                `Migratie klaar.\nBron: ${source.key}\n` +
+                `Migratie klaar.\nBronnen (${sourceKeys.length}):\n${sourceKeys.join('\n')}\n\n` +
                 `Toegevoegd: ${result.addedDays} dag(en)\n` +
                 `Aangevuld: ${result.replacedEmptyDays} lege dag(en).`
             );
@@ -1280,6 +1368,14 @@ document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
             .map(s => {
                 const total = sumCounts(s.counts);
                 const weather = weatherSummaryText(s.weather, ' • ', true);
+                const weatherPolicy = getSessionWeatherFetchPolicy(s);
+                const weatherDisabled = weatherPolicy.allowed ? '' : 'disabled';
+                const weatherButtonClass = weatherPolicy.allowed
+                    ? 'bg-yellow-600 text-white'
+                    : 'bg-gray-600 text-gray-300 opacity-70 cursor-not-allowed';
+                const weatherHint = weatherPolicy.allowed
+                    ? ''
+                    : `<div class="text-[10px] text-amber-200 mt-1">Automatisch weer ophalen kan enkel tot 3 uur na einde sessie. Zet het weer manueel in notities.</div>`;
                 const photos = s.photos || [];
                 const label = sessionDisplayLabel(s, day);
                 const autoNote = (s.autoContributorNote || '').trim();
@@ -1304,8 +1400,9 @@ document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
                                 <div>
                                     <div class="text-[10px] uppercase text-gray-400 font-bold">Weer</div>
                                     <div class="text-sm text-gray-200">${weather}</div>
+                                    ${weatherHint}
                                 </div>
-                                <button class="bg-yellow-600 text-white px-3 py-1 rounded text-[10px]" onclick="fetchWeather(picker.value, '${s.id}')">Weerbericht ophalen</button>
+                                <button class="${weatherButtonClass} px-3 py-1 rounded text-[10px]" ${weatherDisabled} onclick="fetchWeather(picker.value, '${s.id}')">Weerbericht ophalen</button>
                             </div>
                             <label class="text-[10px] uppercase text-gray-400 font-bold">Notities</label>
                             <textarea oninput="updateSessionNotes('${s.id}', this.value)" class="w-full bg-gray-700 border-none rounded p-3 text-sm h-20 text-white focus:ring-1 focus:ring-blue-500" placeholder="${autoNote ? 'Persoonlijke notities (onder teamdata)' : 'Notities'}">${s.notes || ''}</textarea>
@@ -2269,6 +2366,20 @@ function openDetermination(id) {
 
         async function fetchWeather(dayOverride, sessionId) {
             if(!navigator.geolocation) return;
+            const dayKey = dayOverride || picker.value;
+            const day = ensureDay(dayKey);
+            if(sessionId) {
+                const sess = day.sessions.find(s => s.id === sessionId) || null;
+                const policy = getSessionWeatherFetchPolicy(sess);
+                if(!policy.allowed) {
+                    showToast('Weerbericht geblokkeerd');
+                    alert(
+                        'Deze sessie is ouder dan 3 uur.\n\n' +
+                        'Automatisch weer ophalen kan nu afwijken. Zet het weer manueel bij Notities.'
+                    );
+                    return;
+                }
+            }
             showToast("Weerbericht ophalen...");
             navigator.geolocation.getCurrentPosition(async p => {
                 try {
@@ -2277,8 +2388,7 @@ function openDetermination(id) {
                         `&current=temperature_2m,weather_code,precipitation,rain,showers,snowfall,wind_speed_10m&timezone=auto`
                     );
                     const j = await r.json();
-                    const dayKey = dayOverride || picker.value;
-                    const day = ensureDay(dayKey);
+                    const nowDay = ensureDay(dayKey);
                     const current = j.current || j.current_weather || {};
                     const code = Number(current.weather_code ?? current.weathercode ?? 0);
                     const temp = Number(current.temperature_2m ?? current.temperature ?? 0);
@@ -2293,12 +2403,12 @@ function openDetermination(id) {
                         ws: weatherNumber(current.wind_speed_10m ?? current.windspeed, 0),
                         ts: Date.now()
                     };
-                    day.weather = w;
+                    nowDay.weather = w;
                     if(sessionId) {
-                        const sess = day.sessions.find(s => s.id === sessionId);
+                        const sess = nowDay.sessions.find(s => s.id === sessionId);
                         if(sess) sess.weather = w;
                     } else {
-                        const active = day.sessions.find(s => !s.end);
+                        const active = nowDay.sessions.find(s => !s.end);
                         if(active) active.weather = active.weather || w;
                     }
                     save(); render(); showToast("Weer OK");
@@ -2979,15 +3089,127 @@ ${lines.join('\n\n')}`;
             }
         }
 
+        function normalizeShareSelectionState(day, state = null) {
+            const sessions = Array.isArray(day?.sessions) ? day.sessions : [];
+            const validIds = new Set(sessions.map(s => s.id));
+            const incoming = state && typeof state === 'object' ? state : {};
+            let sessionIds = Array.isArray(incoming.sessionIds) ? incoming.sessionIds.filter(id => validIds.has(id)) : [];
+            let dayTotal = !!incoming.dayTotal;
+            if(dayTotal) sessionIds = [];
+            if(!dayTotal && !sessionIds.length) {
+                if(sessions.length) sessionIds = sessions.map(s => s.id);
+                else dayTotal = true;
+            }
+            return { dayTotal, sessionIds };
+        }
+
+        function getShareSelectionState(dayKey = picker.value) {
+            const day = ensureDay(dayKey);
+            const current = shareSelectionStateByDay[dayKey] || null;
+            const normalized = normalizeShareSelectionState(day, current);
+            shareSelectionStateByDay[dayKey] = normalized;
+            return normalized;
+        }
+
+        function setShareSelectionState(dayKey = picker.value, state = null) {
+            const day = ensureDay(dayKey);
+            shareSelectionStateByDay[dayKey] = normalizeShareSelectionState(day, state);
+        }
+
+        function collectShareSelectionFromDom() {
+            const dayCheckbox = document.getElementById('share-session-day-total');
+            const sessionCheckboxes = Array.from(document.querySelectorAll('[data-share-session-id]'));
+            const sessionIds = sessionCheckboxes.filter(cb => cb.checked).map(cb => cb.getAttribute('data-share-session-id')).filter(Boolean);
+            return {
+                dayTotal: !!dayCheckbox?.checked,
+                sessionIds
+            };
+        }
+
+        function syncShareSelectionFromDom(refreshQr = true) {
+            const dayCheckbox = document.getElementById('share-session-day-total');
+            const sessionCheckboxes = Array.from(document.querySelectorAll('[data-share-session-id]'));
+            const meta = document.getElementById('share-session-checklist-meta');
+            if(!dayCheckbox) return;
+            const hasCheckedSession = sessionCheckboxes.some(cb => cb.checked);
+            if(dayCheckbox.checked && hasCheckedSession) {
+                sessionCheckboxes.forEach(cb => cb.checked = false);
+            } else if(!dayCheckbox.checked && !hasCheckedSession) {
+                if(sessionCheckboxes.length) sessionCheckboxes[0].checked = true;
+                else dayCheckbox.checked = true;
+            }
+            setShareSelectionState(picker.value, collectShareSelectionFromDom());
+            if(meta) {
+                if(sessionCheckboxes.length) {
+                    const selectedCount = sessionCheckboxes.filter(cb => cb.checked).length;
+                    meta.innerText = dayCheckbox.checked
+                        ? 'Hele dag geselecteerd om te delen.'
+                        : `${selectedCount} van ${sessionCheckboxes.length} sessie(s) geselecteerd om te delen.`;
+                } else {
+                    meta.innerText = 'Geen sessies gevonden. Je kan enkel het dagtotaal delen.';
+                }
+            }
+            if(refreshQr) generateQR(false);
+            else updateQrSummary();
+        }
+
+        function onShareDayTotalChanged() {
+            const dayCheckbox = document.getElementById('share-session-day-total');
+            const sessionCheckboxes = Array.from(document.querySelectorAll('[data-share-session-id]'));
+            if(dayCheckbox?.checked) sessionCheckboxes.forEach(cb => cb.checked = false);
+            syncShareSelectionFromDom(true);
+        }
+
+        function onShareSessionSelectionChanged() {
+            const dayCheckbox = document.getElementById('share-session-day-total');
+            const hasCheckedSession = Array.from(document.querySelectorAll('[data-share-session-id]')).some(cb => cb.checked);
+            if(dayCheckbox && hasCheckedSession) dayCheckbox.checked = false;
+            syncShareSelectionFromDom(true);
+        }
+
         function buildQRSessionOptions() {
-            const sel = document.getElementById('qr-session-select');
-            if(!sel) return;
+            const list = document.getElementById('share-session-checklist');
+            const meta = document.getElementById('share-session-checklist-meta');
+            if(!list || !meta) return;
             const day = ensureDay();
-            sel.innerHTML = '<option value=\"\">Alle sessies (dagtotaal)</option>' + day.sessions.map(s => {
+            const sessions = day.sessions.slice().sort((a,b)=>new Date(a.start)-new Date(b.start));
+            const state = getShareSelectionState(picker.value);
+            const totalSessions = sessions.length;
+            if(totalSessions) {
+                meta.innerText = state.dayTotal
+                    ? 'Hele dag geselecteerd om te delen.'
+                    : `${state.sessionIds.length} van ${totalSessions} sessie(s) geselecteerd om te delen.`;
+            } else {
+                meta.innerText = 'Geen sessies gevonden. Je kan enkel het dagtotaal delen.';
+            }
+            const dayChecked = state.dayTotal ? 'checked' : '';
+            const dayTotal = sumCounts(day.counts || {});
+            list.innerHTML = `
+                <label class="flex items-start gap-2 bg-gray-900/65 border border-gray-700 rounded-lg px-2 py-2 cursor-pointer">
+                    <input id="share-session-day-total" type="checkbox" class="mt-0.5 accent-cyan-500" ${dayChecked} onchange="onShareDayTotalChanged()">
+                    <div class="flex-1 min-w-0">
+                        <div class="text-[11px] text-cyan-100 font-semibold">Hele dag (samenvatting)</div>
+                        <div class="text-[10px] text-gray-400">${dayTotal} dieren</div>
+                    </div>
+                </label>
+            `;
+            const sessionRows = sessions.map(s => {
+                const checked = state.sessionIds.includes(s.id) ? 'checked' : '';
+                const total = sumCounts(s.counts || {});
                 const label = sessionDisplayLabel(s, day);
                 const route = normalizeRouteName(s.routeName || '');
-                return `<option value="${s.id}">${label}${route ? ` · ${route}` : ''}</option>`;
+                return `
+                    <label class="flex items-start gap-2 bg-gray-900/65 border border-gray-700 rounded-lg px-2 py-2 cursor-pointer">
+                        <input type="checkbox" class="mt-0.5 accent-cyan-500" data-share-session-id="${s.id}" ${checked} onchange="onShareSessionSelectionChanged()">
+                        <div class="flex-1 min-w-0">
+                            <div class="text-[11px] text-gray-100 font-semibold">${label}${route ? ` · ${route}` : ''}</div>
+                            <div class="text-[10px] text-gray-400">${total} dieren</div>
+                        </div>
+                    </label>
+                `;
             }).join('');
+            list.innerHTML += sessionRows;
+            syncShareSelectionFromDom(false);
         }
 
         function buildReportSessionOptions() {
@@ -3126,29 +3348,22 @@ ${lines.join('\n\n')}`;
             return { contributorId: nextProfile.id, contributorName, teamRunId, teamLabel: '🐸' };
         }
 
-        function buildSyncPayloadFromSelection(requireIdentity = false) {
-            const d = picker.value;
-            const day = ensureDay(d);
-            const sel = document.getElementById('qr-session-select');
-            const sessionId = sel ? sel.value : '';
-            const session = sessionId ? day.sessions.find(s => s.id === sessionId) : null;
+        function buildSyncPayloadForSource(dayKey, day, session, identity) {
+            const sessionId = session?.id || '';
             const counts = cloneJSON(session ? (session.counts || {}) : (day.counts || {}));
             const custom = normalizeCustomSpeciesList(cloneJSON(day.custom || []));
             const sourceLabel = session ? sessionDisplayLabel(session, day) : 'Volledige dag';
             const sourceRoute = normalizeRouteName(session?.routeName || document.getElementById('share-route-name')?.value || '');
-            const identity = ensureShareIdentity(requireIdentity);
-            if(!identity) return null;
-
-            const teamRunId = day.teamRunId || identity.teamRunId || deriveTeamRunId(d, '🐸');
+            const teamRunId = day.teamRunId || identity.teamRunId || deriveTeamRunId(dayKey, '🐸');
             if(!day.teamRunId && teamRunId) day.teamRunId = teamRunId;
             if(session && !session.teamRunId && teamRunId) session.teamRunId = teamRunId;
-            const contributionId = buildContributionId(identity.contributorId, d, sessionId || '');
+            const contributionId = buildContributionId(identity.contributorId, dayKey, sessionId || '');
             const payload = {
                 v: SYNC_PAYLOAD_VERSION,
                 id: contributionId,
                 contributionId,
                 createdAt: Date.now(),
-                sourceDate: d,
+                sourceDate: dayKey,
                 sourceLabel,
                 sourceRoute,
                 sess: sessionId || null,
@@ -3163,46 +3378,115 @@ ${lines.join('\n\n')}`;
             return payload;
         }
 
+        function buildSyncPayloadListFromSelection(requireIdentity = false) {
+            const d = picker.value;
+            const day = ensureDay(d);
+            const identity = ensureShareIdentity(requireIdentity);
+            if(!identity) return [];
+            const state = getShareSelectionState(d);
+            const selectedSessions = state.dayTotal
+                ? [null]
+                : state.sessionIds
+                    .map(id => day.sessions.find(s => s.id === id))
+                    .filter(Boolean);
+            const fallbackSources = selectedSessions.length ? selectedSessions : [null];
+            return fallbackSources
+                .map(session => buildSyncPayloadForSource(d, day, session, identity))
+                .filter(payload => sumCounts(payload.c || {}) > 0);
+        }
+
+        function buildSyncPayloadFromSelection(requireIdentity = false) {
+            return buildSyncPayloadListFromSelection(requireIdentity)[0] || null;
+        }
+
+        function listSyncPayloadsFromTransfer(transfer) {
+            if(!transfer) return [];
+            if(Array.isArray(transfer.items)) return transfer.items.filter(item => item && typeof item === 'object');
+            return (transfer && typeof transfer === 'object') ? [transfer] : [];
+        }
+
+        function buildSyncTransferFromSelection(requireIdentity = false) {
+            const payloads = buildSyncPayloadListFromSelection(requireIdentity);
+            if(!payloads.length) return null;
+            if(payloads.length === 1) return payloads[0];
+            return {
+                v: SYNC_PAYLOAD_VERSION,
+                kind: 'bundle',
+                createdAt: Date.now(),
+                sourceDate: picker.value,
+                sourceLabel: `${payloads.length} sessies`,
+                items: payloads
+            };
+        }
+
         function generateQR(requireIdentity = false) {
             const container = document.getElementById("qrcode-area");
             if(container) container.innerHTML = "";
-            const payload = buildSyncPayloadFromSelection(requireIdentity);
-            if(!payload || !container) return;
-            new QRCode(container, { text: JSON.stringify(payload), width: 160, height: 160, correctLevel: QRCode.CorrectLevel.L });
-            updateQrSummary(payload);
+            const transfer = buildSyncTransferFromSelection(requireIdentity);
+            if(!transfer || !container) return;
+            const raw = JSON.stringify(transfer);
+            if(raw.length > 3000) {
+                alert('Deze selectie is te groot voor een stabiele QR-code. Kies minder sessies of gebruik de deel-link.');
+                updateQrSummary(transfer);
+                return;
+            }
+            new QRCode(container, { text: raw, width: 160, height: 160, correctLevel: QRCode.CorrectLevel.L });
+            updateQrSummary(transfer);
             save();
         }
 
         function updateQrSummary(payloadOverride = null) {
             const d = picker.value;
-            const sel = document.getElementById('qr-session-select');
             const box = document.getElementById('qr-summary-box');
-            if(!sel || !box) return;
-            const payload = payloadOverride || buildSyncPayloadFromSelection(false);
-            if(!payload) return;
-            const sessionId = payload.sess || '';
-            const day = ensureDay(d);
-            const session = sessionId ? day.sessions.find(s => s.id === sessionId) : null;
-            const counts = payload.c || {};
-            const total = sumCounts(counts);
-            let lines = [
-                `Dag: ${payload.sourceDate || d}`,
-                `Bron: ${payload.sourceLabel || (session ? sessionDisplayLabel(session, day) : 'Volledige dag')}`,
-                payload.sourceRoute ? `Traject: ${payload.sourceRoute}` : '',
-                `Teller: ${payload.contributorName || 'Onbekende teller'}`,
-                `Totaal dieren: ${total}`
-            ].filter(Boolean);
-            const perSpecies = {};
-            for(const k in counts) {
-                const [sid, suf] = k.split('_');
-                perSpecies[sid] = perSpecies[sid] || 0;
-                perSpecies[sid] += counts[k] * (suf.includes('p_') ? 2 : 1);
+            if(!box) return;
+            const transfer = payloadOverride || buildSyncTransferFromSelection(false);
+            const payloads = listSyncPayloadsFromTransfer(transfer);
+            if(!payloads.length) {
+                box.innerText = 'Geen data geselecteerd om te delen.';
+                return;
             }
-            Object.entries(perSpecies).sort((a,b)=>b[1]-a[1]).slice(0,4).forEach(([sid, val]) => {
-                const name = (SPECIES.find(s=>s.id===sid) || (payload.s||[]).find(c=>c.id===sid) || {name:sid}).name;
-                lines.push(`${name}: ${val}`);
+            if(payloads.length === 1) {
+                const payload = payloads[0];
+                const day = ensureDay(d);
+                const sessionId = payload.sess || '';
+                const session = sessionId ? day.sessions.find(s => s.id === sessionId) : null;
+                const counts = payload.c || {};
+                const total = sumCounts(counts);
+                const lines = [
+                    `Dag: ${payload.sourceDate || d}`,
+                    `Bron: ${payload.sourceLabel || (session ? sessionDisplayLabel(session, day) : 'Volledige dag')}`,
+                    payload.sourceRoute ? `Traject: ${payload.sourceRoute}` : '',
+                    `Teller: ${payload.contributorName || 'Onbekende teller'}`,
+                    `Totaal dieren: ${total}`
+                ].filter(Boolean);
+                const perSpecies = {};
+                for(const k in counts) {
+                    const [sid, suf] = k.split('_');
+                    perSpecies[sid] = perSpecies[sid] || 0;
+                    perSpecies[sid] += counts[k] * (suf.includes('p_') ? 2 : 1);
+                }
+                Object.entries(perSpecies).sort((a,b)=>b[1]-a[1]).slice(0,4).forEach(([sid, val]) => {
+                    const name = (SPECIES.find(s=>s.id===sid) || (payload.s||[]).find(c=>c.id===sid) || {name:sid}).name;
+                    lines.push(`${name}: ${val}`);
+                });
+                box.innerText = `Wie deze QR scant, krijgt eerst een wizard en kan deze data als aparte telling toevoegen:\n\n${lines.join('\n')}`;
+                return;
+            }
+
+            const total = payloads.reduce((acc, payload) => acc + sumCounts(payload.c || {}), 0);
+            const contributors = Array.from(new Set(payloads.map(p => p.contributorName || 'Onbekende teller')));
+            const lines = payloads.slice(0, 6).map((payload, idx) => {
+                const route = normalizeRouteName(payload.sourceRoute || '');
+                const count = sumCounts(payload.c || {});
+                return `${idx + 1}. ${payload.sourceLabel || `Telling ${idx + 1}`}${route ? ` · ${route}` : ''} (${count} dieren)`;
             });
-            box.innerText = `Wie deze QR scant, krijgt eerst een wizard en kan deze data als aparte telling toevoegen:\n\n${lines.join('\n')}`;
+            if(payloads.length > 6) lines.push(`+${payloads.length - 6} extra telling(en)`);
+            box.innerText =
+                `Wie deze QR scant, krijgt eerst een wizard en kan ${payloads.length} aparte telling(en) toevoegen.\n\n` +
+                `Dag: ${payloads[0]?.sourceDate || d}\n` +
+                `Teller(s): ${contributors.join(', ')}\n` +
+                `Totaal dieren in selectie: ${total}\n\n` +
+                lines.join('\n');
         }
 
         function summarizeIncomingCounts(incoming) {
@@ -3282,6 +3566,52 @@ ${lines.join('\n\n')}`;
             return normalized;
         }
 
+        function extractIncomingSyncPayloadList(payloadInput) {
+            if(!payloadInput || typeof payloadInput !== 'object') return [];
+            const seen = new Set();
+            if(Array.isArray(payloadInput.items)) {
+                return payloadInput.items
+                    .map(item => sanitizeIncomingSyncPayload(item))
+                    .filter(item => item && Object.keys(item.c || {}).length > 0)
+                    .filter(item => {
+                        if(seen.has(item.id)) return false;
+                        seen.add(item.id);
+                        return true;
+                    });
+            }
+            const parsed = sanitizeIncomingSyncPayload(payloadInput);
+            if(!parsed || !Object.keys(parsed.c || {}).length) return [];
+            return [parsed];
+        }
+
+        function normalizeIncomingSyncTransfer(payloadInput) {
+            const items = extractIncomingSyncPayloadList(payloadInput);
+            if(!items.length) return null;
+            if(items.length === 1) return items[0];
+            return {
+                v: Number(payloadInput?.v) || SYNC_PAYLOAD_VERSION,
+                kind: 'bundle',
+                createdAt: Number(payloadInput?.createdAt) || Date.now(),
+                sourceDate: typeof payloadInput?.sourceDate === 'string' ? payloadInput.sourceDate : (items[0]?.sourceDate || ''),
+                sourceLabel: typeof payloadInput?.sourceLabel === 'string' ? payloadInput.sourceLabel : `${items.length} sessies`,
+                items
+            };
+        }
+
+        function summarizeIncomingPayloadList(payloads, limit = 6) {
+            const list = Array.isArray(payloads) ? payloads.filter(Boolean) : [];
+            if(!list.length) return 'Geen teldata ontvangen.';
+            if(list.length === 1) return summarizeIncomingCounts(list[0]);
+            const lines = list.slice(0, limit).map((p, idx) => {
+                const route = normalizeRouteName(p.sourceRoute || '');
+                const total = sumCounts(p.c || {});
+                const already = !!findImportedSessionLocation(p.id, getSyncImportEntry(p.id));
+                return `${idx + 1}. ${p.sourceLabel || `Telling ${idx + 1}`}${route ? ` · ${route}` : ''} (${total} dieren)${already ? ' [al bekend]' : ''}`;
+            });
+            if(list.length > limit) lines.push(`+${list.length - limit} extra telling(en)`);
+            return lines.join('\n');
+        }
+
         function clearSyncQueryFromUrl() {
             const url = new URL(window.location.href);
             if(!url.searchParams.has(SYNC_QUERY_PARAM)) return;
@@ -3300,19 +3630,24 @@ ${lines.join('\n\n')}`;
                 return;
             }
             card.classList.remove('hidden');
-            const p = pendingSyncLinkPayload;
-            const total = sumCounts(p.c || {});
-            const created = p.createdAt ? new Date(p.createdAt).toLocaleString('nl-BE') : 'onbekend';
-            const srcDate = p.sourceDate || 'onbekend';
-            const srcLabel = p.sourceLabel ? ` (${p.sourceLabel})` : '';
-            const srcRoute = normalizeRouteName(p.sourceRoute || '');
-            const already = !!findImportedSessionLocation(p.id, getSyncImportEntry(p.id));
+            const payloads = listSyncPayloadsFromTransfer(pendingSyncLinkPayload);
+            if(!payloads.length) {
+                card.classList.add('hidden');
+                return;
+            }
+            const total = payloads.reduce((acc, p) => acc + sumCounts(p.c || {}), 0);
+            const createdAt = Number(pendingSyncLinkPayload?.createdAt) || Number(payloads[0]?.createdAt) || Date.now();
+            const created = new Date(createdAt).toLocaleString('nl-BE');
+            const srcDate = payloads[0]?.sourceDate || pendingSyncLinkPayload?.sourceDate || 'onbekend';
+            const contributors = Array.from(new Set(payloads.map(p => p.contributorName || 'Onbekende teller')));
+            const alreadyCount = payloads.filter(p => !!findImportedSessionLocation(p.id, getSyncImportEntry(p.id))).length;
             meta.innerText =
-                `Bron: ${srcDate}${srcLabel} · ${created}\n` +
-                `Teller: ${p.contributorName || 'Onbekende teller'}${srcRoute ? ` · Traject ${srcRoute}` : ''}\n` +
-                `${total} dieren.${already ? ' Deze bijdrage is al bekend en wordt niet dubbel geteld.' : ''}\n` +
+                `Bron: ${srcDate} · ${created}\n` +
+                `Teller(s): ${contributors.join(', ')}\n` +
+                `${payloads.length} telling(en), ${total} dieren totaal.` +
+                `${alreadyCount ? ` ${alreadyCount} bijdrage(n) zijn al bekend en worden overgeslagen.` : ''}\n` +
                 `De wizard opent normaal automatisch. Deze kaart is een fallback als je later alsnog wil toevoegen.`;
-            summary.innerText = summarizeIncomingCounts(p);
+            summary.innerText = summarizeIncomingPayloadList(payloads);
         }
 
         function buildSyncWizardTargetOptions() {
@@ -3329,7 +3664,7 @@ ${lines.join('\n\n')}`;
             if(!dateInput || !hint) return;
             const dayKey = dateInput.value || picker.value || todayISO();
             hint.innerText =
-                `Stap 3: voeg deze link toe als aparte telling op ${dayKey}.\n` +
+                `Stap 3: voeg deze link toe als aparte telling(en) op ${dayKey}.\n` +
                 `Er wordt niets bijgeteld in bestaande tellingen.`;
         }
 
@@ -3339,23 +3674,23 @@ ${lines.join('\n\n')}`;
             const summary = document.getElementById('sync-wizard-summary');
             const dateInput = document.getElementById('sync-wizard-date');
             if(!modal || !meta || !summary || !dateInput || !pendingSyncLinkPayload) return;
-            const p = pendingSyncLinkPayload;
-            const total = sumCounts(p.c || {});
-            const created = p.createdAt ? new Date(p.createdAt).toLocaleString('nl-BE') : 'onbekend';
-            const srcDate = p.sourceDate || 'onbekend';
-            const srcLabel = p.sourceLabel ? ` (${p.sourceLabel})` : '';
-            const srcRoute = normalizeRouteName(p.sourceRoute || '');
-            const already = !!findImportedSessionLocation(p.id, getSyncImportEntry(p.id));
+            const payloads = listSyncPayloadsFromTransfer(pendingSyncLinkPayload);
+            if(!payloads.length) return;
+            const total = payloads.reduce((acc, p) => acc + sumCounts(p.c || {}), 0);
+            const createdAt = Number(pendingSyncLinkPayload?.createdAt) || Number(payloads[0]?.createdAt) || Date.now();
+            const created = new Date(createdAt).toLocaleString('nl-BE');
+            const srcDate = payloads[0]?.sourceDate || pendingSyncLinkPayload?.sourceDate || 'onbekend';
+            const contributors = Array.from(new Set(payloads.map(p => p.contributorName || 'Onbekende teller')));
+            const alreadyCount = payloads.filter(p => !!findImportedSessionLocation(p.id, getSyncImportEntry(p.id))).length;
             meta.innerText =
                 `Stap 1: controleer de bron.\n` +
-                `• ${srcDate}${srcLabel}\n` +
-                `• Teller: ${p.contributorName || 'Onbekende teller'}\n` +
-                `${srcRoute ? `• Traject: ${srcRoute}\n` : ''}` +
+                `• ${srcDate}\n` +
+                `• Teller(s): ${contributors.join(', ')}\n` +
                 `• ${created}\n` +
-                `• ${total} dieren\n` +
-                `${already ? '• Deze bijdrage is al bekend en wordt overgeslagen.\n' : ''}` +
-                `• Na toevoegen staat deze data als aparte telling in je lijst.`;
-            summary.innerText = `Stap 2: inhoud van de link\n\n${summarizeIncomingCounts(p)}`;
+                `• ${payloads.length} telling(en), ${total} dieren\n` +
+                `${alreadyCount ? `• ${alreadyCount} bijdrage(n) zijn al bekend en worden overgeslagen.\n` : ''}` +
+                `• Na toevoegen staan deze data als aparte tellingen in je lijst.`;
+            summary.innerText = `Stap 2: inhoud van de link\n\n${summarizeIncomingPayloadList(payloads)}`;
             dateInput.value = picker.value || todayISO();
             buildSyncWizardTargetOptions();
             modal.classList.remove('hidden');
@@ -3524,10 +3859,63 @@ ${lines.join('\n\n')}`;
             return { ok: true, status, summary, payload, targetSession, targetDayKey };
         }
 
+        function importContributionPayloadBatch(payloadInput, dayKey) {
+            const payloads = extractIncomingSyncPayloadList(payloadInput);
+            if(!payloads.length) {
+                return {
+                    ok: false,
+                    status: 'invalid',
+                    summary: 'Geen teldata ontvangen.',
+                    batch: { total: 0, newCount: 0, updatedCount: 0, alreadyCount: 0 }
+                };
+            }
+            if(payloads.length === 1) {
+                const single = importContributionPayload(payloads[0], dayKey);
+                const singleStatus = single?.status || 'invalid';
+                return {
+                    ...single,
+                    batch: {
+                        total: 1,
+                        newCount: singleStatus === 'new' ? 1 : 0,
+                        updatedCount: singleStatus === 'updated' ? 1 : 0,
+                        alreadyCount: singleStatus === 'already' ? 1 : 0
+                    }
+                };
+            }
+            const results = payloads.map(payload => importContributionPayload(payload, dayKey)).filter(Boolean);
+            const okResults = results.filter(r => r?.ok);
+            if(!okResults.length) {
+                return {
+                    ok: false,
+                    status: 'invalid',
+                    summary: 'Geen teldata ontvangen.',
+                    batch: { total: payloads.length, newCount: 0, updatedCount: 0, alreadyCount: 0 }
+                };
+            }
+            const newCount = okResults.filter(r => r.status === 'new').length;
+            const updatedCount = okResults.filter(r => r.status === 'updated').length;
+            const alreadyCount = okResults.filter(r => r.status === 'already').length;
+            const added = newCount + updatedCount;
+            const status = added ? (alreadyCount ? 'mixed' : 'new') : 'already';
+            const lines = [
+                `Resultaat: ${payloads.length} telling(en) verwerkt.`,
+                `Nieuw: ${newCount} · Bijgewerkt: ${updatedCount} · Al bekend: ${alreadyCount}`
+            ];
+            const preview = summarizeIncomingPayloadList(okResults.map(r => r.payload), 8);
+            const summary = `${lines.join('\n')}\n\n${preview}`;
+            return {
+                ok: true,
+                status,
+                summary,
+                batch: { total: payloads.length, newCount, updatedCount, alreadyCount },
+                results: okResults
+            };
+        }
+
         function applyPendingSyncToDay(dayKey) {
             const p = pendingSyncLinkPayload;
             if(!p) return null;
-            const result = importContributionPayload(p, dayKey);
+            const result = importContributionPayloadBatch(p, dayKey);
             if(!result?.ok) return result;
             pendingSyncLinkPayload = null;
             save();
@@ -3543,18 +3931,19 @@ ${lines.join('\n\n')}`;
         }
 
         function generateSyncLink() {
-            const payload = buildSyncPayloadFromSelection(true);
-            if(!payload) return;
-            const total = sumCounts(payload.c || {});
+            const transfer = buildSyncTransferFromSelection(true);
+            if(!transfer) return;
+            const payloads = listSyncPayloadsFromTransfer(transfer);
+            const total = payloads.reduce((acc, payload) => acc + sumCounts(payload.c || {}), 0);
             if(total <= 0) { alert('Geen aantallen om te delen in deze selectie.'); return; }
-            const encoded = encodeBase64Url(JSON.stringify(payload));
+            const encoded = encodeBase64Url(JSON.stringify(transfer));
             const link = `${window.location.origin}${window.location.pathname}?${SYNC_QUERY_PARAM}=${encoded}`;
             const box = document.getElementById('sync-link-box');
             const out = document.getElementById('sync-link-output');
             if(box) box.classList.remove('hidden');
             if(out) out.value = link;
             if(link.length > 3500) showToast('Let op: erg lange deel-link');
-            else showToast('Deel-link klaar');
+            else showToast(payloads.length > 1 ? `Deel-link klaar (${payloads.length} sessies)` : 'Deel-link klaar');
         }
 
         function copySyncLink() {
@@ -3580,7 +3969,7 @@ ${lines.join('\n\n')}`;
             if(!link) { alert('Maak eerst een deel-link.'); return; }
             try {
                 if(navigator.share) {
-                    await navigator.share({ title: 'Paddentrek deel-link', text: 'Open deze link en synchroniseer deze bijdrage in je app.', url: link });
+                    await navigator.share({ title: 'Paddentrek deel-link', text: 'Open deze link en synchroniseer deze telling(en) in je app.', url: link });
                     return;
                 }
             } catch(err) {
@@ -3596,12 +3985,14 @@ ${lines.join('\n\n')}`;
             const result = applyPendingSyncToDay(dayKey);
             if(!result?.ok) return;
             closeSyncWizard();
-            if(result.status === 'already') {
-                showToast('Bijdrage al bekend (overgeslagen)');
+            const added = Number(result.batch?.newCount || 0) + Number(result.batch?.updatedCount || 0);
+            const already = Number(result.batch?.alreadyCount || 0);
+            if(added === 0 && already > 0) {
+                showToast('Alle bijdragen al bekend (overgeslagen)');
                 alert(result.summary);
                 return;
             }
-            showToast(result.status === 'updated' ? 'Bijdrage bijgewerkt' : 'Telling toegevoegd');
+            showToast(added > 1 ? `${added} tellingen toegevoegd` : (result.status === 'updated' ? 'Bijdrage bijgewerkt' : 'Telling toegevoegd'));
             alert(result.summary);
             switchTab('sessions');
         }
@@ -3613,12 +4004,14 @@ ${lines.join('\n\n')}`;
             const result = applyPendingSyncToDay(dayKey);
             if(!result?.ok) return;
             closeSyncWizard();
-            if(result.status === 'already') {
-                showToast('Bijdrage al bekend (overgeslagen)');
+            const added = Number(result.batch?.newCount || 0) + Number(result.batch?.updatedCount || 0);
+            const already = Number(result.batch?.alreadyCount || 0);
+            if(added === 0 && already > 0) {
+                showToast('Alle bijdragen al bekend (overgeslagen)');
                 alert(result.summary);
                 return;
             }
-            showToast(result.status === 'updated' ? 'Bijdrage bijgewerkt' : 'Telling toegevoegd');
+            showToast(added > 1 ? `${added} tellingen toegevoegd` : (result.status === 'updated' ? 'Bijdrage bijgewerkt' : 'Telling toegevoegd'));
             alert(result.summary);
             switchTab('sessions');
         }
@@ -3636,8 +4029,8 @@ ${lines.join('\n\n')}`;
             clearSyncQueryFromUrl();
             try {
                 const json = decodeBase64Url(raw);
-                const parsed = sanitizeIncomingSyncPayload(JSON.parse(json));
-                if(!parsed || !Object.keys(parsed.c || {}).length) throw new Error('EMPTY');
+                const parsed = normalizeIncomingSyncTransfer(JSON.parse(json));
+                if(!parsed || !listSyncPayloadsFromTransfer(parsed).length) throw new Error('EMPTY');
                 pendingSyncLinkPayload = parsed;
                 renderIncomingSyncCard();
                 openSyncWizard();
@@ -3917,18 +4310,20 @@ ${lines.join('\n\n')}`;
                     const i = JSON.parse(t);
                     const payload = sanitizeQrImportPayload(i);
                     if(!payload) throw new Error('INVALID');
-                    const result = importContributionPayload(payload, picker.value);
+                    const result = importContributionPayloadBatch(payload, picker.value);
                     if(!result?.ok) throw new Error('IMPORT');
                     save();
                     buildUI();
                     render();
                     sc.stop();
-                    if(result.status === 'already') {
+                    const added = Number(result.batch?.newCount || 0) + Number(result.batch?.updatedCount || 0);
+                    const already = Number(result.batch?.alreadyCount || 0);
+                    if(added === 0 && already > 0) {
                         alert(result.summary);
-                        showToast("Bijdrage al bekend");
+                        showToast("Alle bijdragen al bekend");
                     } else {
                         alert(result.summary);
-                        showToast(result.status === 'updated' ? "Bijdrage bijgewerkt" : "Telling toegevoegd");
+                        showToast(added > 1 ? `${added} tellingen toegevoegd` : (result.status === 'updated' ? "Bijdrage bijgewerkt" : "Telling toegevoegd"));
                     }
                     switchTab('count');
                 } catch(e) { alert("QR fout"); }
@@ -3936,9 +4331,7 @@ ${lines.join('\n\n')}`;
         }
 
         function sanitizeQrImportPayload(payload) {
-            const parsed = sanitizeIncomingSyncPayload(payload);
-            if(!parsed || !Object.keys(parsed.c || {}).length) return null;
-            return parsed;
+            return normalizeIncomingSyncTransfer(payload);
         }
 
         function buildQrWizardTargetOptions() {
@@ -3955,7 +4348,7 @@ ${lines.join('\n\n')}`;
             if(!dateInput || !hint) return;
             const dayKey = dateInput.value || picker.value || todayISO();
             hint.innerText =
-                `Stap 3: voeg deze QR toe als aparte telling op ${dayKey}.\n` +
+                `Stap 3: voeg deze QR toe als aparte telling(en) op ${dayKey}.\n` +
                 `Er wordt niets bijgeteld in bestaande tellingen.`;
         }
 
@@ -3976,19 +4369,27 @@ ${lines.join('\n\n')}`;
             const summary = document.getElementById('qr-wizard-summary');
             const btnImport = document.getElementById('qr-wizard-import-btn');
             if(!meta || !summary || !btnImport) return;
-            const total = sumCounts(payload.c || {});
-            const already = !!findImportedSessionLocation(payload.id, getSyncImportEntry(payload.id));
-            const sourceRoute = normalizeRouteName(payload.sourceRoute || '');
+            const payloads = listSyncPayloadsFromTransfer(payload);
+            if(!payloads.length) {
+                meta.innerText = 'QR bevat geen geldige teldata.';
+                summary.innerText = 'Scan een andere QR.';
+                btnImport.disabled = true;
+                btnImport.classList.add('opacity-60');
+                return;
+            }
+            const total = payloads.reduce((acc, p) => acc + sumCounts(p.c || {}), 0);
+            const contributors = Array.from(new Set(payloads.map(p => p.contributorName || 'Onbekende teller')));
+            const sourceDate = payloads[0]?.sourceDate || payload?.sourceDate || 'onbekend';
+            const alreadyCount = payloads.filter(p => !!findImportedSessionLocation(p.id, getSyncImportEntry(p.id))).length;
             meta.innerText =
                 `Stap 1 klaar: QR gelezen.\n` +
-                `Bron-datum: ${payload.sourceDate || payload.d || 'onbekend'}\n` +
-                `Teller: ${payload.contributorName || 'Onbekende teller'}\n` +
-                `${sourceRoute ? `Traject: ${sourceRoute}\n` : ''}` +
-                `Totaal in QR: ${total} dieren\n` +
-                `${already ? 'Status: al bekend (wordt overgeslagen)\n' : ''}` +
+                `Bron-datum: ${sourceDate}\n` +
+                `Teller(s): ${contributors.join(', ')}\n` +
+                `In QR: ${payloads.length} telling(en), ${total} dieren\n` +
+                `${alreadyCount ? `Status: ${alreadyCount} bijdrage(n) al bekend (wordt overgeslagen)\n` : ''}` +
                 `Stap 2: controleer hieronder de inhoud.\n` +
-                `Na toevoegen staat deze data als aparte telling in je lijst.`;
-            summary.innerText = `Stap 2: inhoud van de QR\n\n${summarizeIncomingCounts(payload)}`;
+                `Na toevoegen staan deze data als aparte telling(en) in je lijst.`;
+            summary.innerText = `Stap 2: inhoud van de QR\n\n${summarizeIncomingPayloadList(payloads)}`;
             btnImport.disabled = false;
             btnImport.classList.remove('opacity-60');
         }
@@ -4021,7 +4422,7 @@ ${lines.join('\n\n')}`;
             const payload = pendingQrImportPayload;
             if(!payload) { alert('Scan eerst een QR-code.'); return; }
             const dayKey = document.getElementById('qr-wizard-date')?.value || picker.value || todayISO();
-            const result = importContributionPayload(payload, dayKey);
+            const result = importContributionPayloadBatch(payload, dayKey);
             if(!result?.ok) return;
             pendingQrImportPayload = null;
             save();
@@ -4033,12 +4434,14 @@ ${lines.join('\n\n')}`;
             buildImportTargetOptions();
             buildRouteSuggestions();
             closeQrModal();
-            if(result.status === 'already') {
-                showToast('Bijdrage al bekend (overgeslagen)');
+            const added = Number(result.batch?.newCount || 0) + Number(result.batch?.updatedCount || 0);
+            const already = Number(result.batch?.alreadyCount || 0);
+            if(added === 0 && already > 0) {
+                showToast('Alle bijdragen al bekend (overgeslagen)');
                 alert(result.summary);
                 return;
             }
-            showToast(result.status === 'updated' ? 'Bijdrage bijgewerkt' : 'Telling toegevoegd');
+            showToast(added > 1 ? `${added} tellingen toegevoegd` : (result.status === 'updated' ? 'Bijdrage bijgewerkt' : 'Telling toegevoegd'));
             alert(result.summary);
             switchTab('sessions');
         }
@@ -4080,7 +4483,7 @@ ${lines.join('\n\n')}`;
         function updateImportTargetHint() {
             const hint = document.getElementById('import-target-hint');
             if(!hint) return;
-            hint.innerText = `Tellen uit QR of deel-link worden als aparte telling toegevoegd op ${picker.value}.`;
+            hint.innerText = `Data uit QR of deel-link wordt als aparte telling(en) toegevoegd op ${picker.value}.`;
         }
 
         function switchTab(t) {

@@ -195,7 +195,15 @@
         </div>
         <div class="mt-2 flex flex-col gap-2">
             <div class="flex gap-2 items-center">
-                <input type="date" id="datePicker" class="bg-gray-700 border-none rounded px-2 py-1.5 text-sm focus:ring-2 focus:ring-emerald-500 text-white w-full shadow-inner">
+                <div class="flex items-center gap-1.5 w-full">
+                    <button onclick="changePickerDay(-1)" class="bg-gray-700 hover:bg-gray-600 text-white px-3 py-1.5 rounded text-sm font-bold border border-gray-600" title="Vorige dag" aria-label="Vorige dag">
+                        ◀
+                    </button>
+                    <input type="date" id="datePicker" class="bg-gray-700 border-none rounded px-2 py-1.5 text-sm focus:ring-2 focus:ring-emerald-500 text-white w-full shadow-inner">
+                    <button onclick="changePickerDay(1)" class="bg-gray-700 hover:bg-gray-600 text-white px-3 py-1.5 rounded text-sm font-bold border border-gray-600" title="Volgende dag" aria-label="Volgende dag">
+                        ▶
+                    </button>
+                </div>
                 <div class="flex items-center gap-1.5">
                     <button id="record-btn" onclick="stopTelling()" class="hidden record-btn" title="Stop telling">
                         <span id="record-dot" class="w-3 h-3 rounded-full bg-red-500 shadow-[0_0_0_6px_rgba(248,113,113,0.25)] animate-rec"></span>
@@ -369,9 +377,10 @@
                     <span class="text-[10px] uppercase tracking-wide text-purple-300/80">Link + QR</span>
                 </summary>
                 <div class="settings-accordion-body space-y-3">
-                    <div class="flex gap-2 mb-2 text-[10px] text-gray-300 items-center">
-                        <span>Data:</span>
-                        <select id="qr-session-select" class="bg-gray-700 border border-gray-600 rounded px-2 py-1 flex-1 text-left text-white" onchange="generateQR();updateQrSummary();"></select>
+                    <div class="space-y-2 mb-2">
+                        <div class="text-[10px] text-gray-300 font-bold uppercase tracking-wide">Data om te delen</div>
+                        <div id="share-session-checklist-meta" class="text-[10px] text-cyan-100"></div>
+                        <div id="share-session-checklist" class="space-y-2"></div>
                     </div>
                     <div class="grid grid-cols-1 gap-2">
                         <div class="space-y-1">
@@ -414,7 +423,7 @@
                             <div>• Met twee (of meer) tellers die tegelijk op een ander stuk van het traject zitten.</div>
                             <div>• Eén toestel maakt de QR (bron), de anderen scannen (ontvanger).</div>
                             <div class="font-bold text-purple-200 pt-1">Hoe?</div>
-                            <div>1) Kies hierboven welke data je deelt (hele dag of 1 telling).</div>
+                            <div>1) Kies hierboven welke data je deelt (hele dag, 1 telling of meerdere tellingen).</div>
                             <div>2) Tik op Refresh QR en toon de code.</div>
                             <div>3) Op het andere toestel: tik “Scan QR”, controleer de wizard en voeg toe.</div>
                             <div class="text-purple-300 pt-1">Er worden enkel aantallen gedeeld, geen foto’s.</div>
@@ -425,7 +434,7 @@
                     <h4 class="text-purple-200 font-bold text-sm">Importeer telling via QR</h4>
                     <div class="text-[11px] text-gray-200 mb-2 space-y-1">
                         <div><strong class="text-purple-200">Gebruik:</strong> voeg data van andere tellers toe aan je eigen sessielijst.</div>
-                        <div>1) Kies hierboven de bron (dag of telling) en toon de QR.</div>
+                        <div>1) Kies hierboven de bron (dag, 1 telling of meerdere tellingen) en toon de QR.</div>
                         <div>2) Tik “Scan QR” en richt op de code van de andere teller.</div>
                         <div>3) Volg de wizard: controleer inhoud en bevestig.</div>
                         <div class="text-purple-300">Alleen aantallen gaan mee, geen foto’s.</div>
@@ -449,12 +458,25 @@
                 </div>
             </details>
 
-            <details class="settings-accordion">
+            <details class="settings-accordion" open>
                 <summary>
                     <span class="font-bold text-gray-100 text-sm">Geavanceerde instellingen</span>
                     <span class="text-[10px] uppercase tracking-wide text-gray-300/80">CSV · migratie · storage</span>
                 </summary>
                 <div class="settings-accordion-body space-y-4">
+                    <div id="legacy-migrate-card" class="bg-gray-800 p-4 rounded-xl border border-emerald-500/30 space-y-3">
+                        <h3 class="font-bold text-emerald-200 text-sm">Migratie oude app-data</h3>
+                        <p class="text-[11px] text-gray-300">Zet oude opslag (<code>paddentrek_*</code>) eenmalig over naar de nieuwe opslag <code>paddentrek_data</code>.</p>
+                        <button id="legacy-migrate-btn" onclick="migrateLegacyStorageManually()" class="w-full bg-emerald-700 py-2 rounded-lg font-bold uppercase text-xs">
+                            ⬆️ Migreer oude data (1x)
+                        </button>
+                        <div id="legacy-migrate-status" class="text-[10px] text-gray-400"></div>
+                        <button id="legacy-cleanup-btn" onclick="cleanupLegacyStorageKeys()" class="hidden w-full bg-amber-700 py-2 rounded-lg font-bold uppercase text-xs">
+                            🧹 Verwijder oude data
+                        </button>
+                        <div id="legacy-cleanup-hint" class="hidden text-[10px] text-amber-200"></div>
+                    </div>
+
                     <div class="text-[11px] text-gray-300 bg-gray-900/60 border border-gray-700 rounded px-3 py-2">
                         CSV, migratie, storage inspector en foto-databeheer.
                     </div>
@@ -484,19 +506,6 @@
                             <button onclick="exportAllSessionsCSV()" class="w-full bg-indigo-600 py-2 rounded-lg font-bold uppercase text-xs">⬇️ Exporteer alle tellingen (vandaag)</button>
                             <button onclick="exportRangeCSV(true)" class="w-full bg-indigo-500 py-2 rounded-lg font-bold uppercase text-xs">⬇️ Exporteer alle tellingen (range)</button>
                         </div>
-                    </div>
-
-                    <div id="legacy-migrate-card" class="hidden bg-gray-800 p-4 rounded-xl border border-emerald-500/30 space-y-3">
-                        <h3 class="font-bold text-emerald-200 text-sm">Migratie oude app-data</h3>
-                        <p class="text-[11px] text-gray-300">Zet oude opslag (<code>paddentrek_*</code>) eenmalig over naar de nieuwe opslag <code>paddentrek_data</code>.</p>
-                        <button id="legacy-migrate-btn" onclick="migrateLegacyStorageManually()" class="w-full bg-emerald-700 py-2 rounded-lg font-bold uppercase text-xs">
-                            ⬆️ Migreer oude data (1x)
-                        </button>
-                        <div id="legacy-migrate-status" class="text-[10px] text-gray-400"></div>
-                        <button id="legacy-cleanup-btn" onclick="cleanupLegacyStorageKeys()" class="hidden w-full bg-amber-700 py-2 rounded-lg font-bold uppercase text-xs">
-                            🧹 Verwijder oude data
-                        </button>
-                        <div id="legacy-cleanup-hint" class="hidden text-[10px] text-amber-200"></div>
                     </div>
 
                     <div class="bg-gray-800 p-4 rounded-xl border border-amber-500/30 space-y-3">
