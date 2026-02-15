@@ -259,7 +259,90 @@ document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
         function detAnswerLabel(ans) { return ans === 'yes' ? 'JA' : 'NEE'; }
 
 
-        const WMO = { 0: "Helder", 1: "Licht bewolkt", 2:"Half bewolkt", 3: "Bewolkt", 61: "Regen", 80: "Buien" };
+        const WMO = {
+            0: "Helder",
+            1: "Licht bewolkt",
+            2: "Half bewolkt",
+            3: "Bewolkt",
+            45: "Mist",
+            48: "Rijpende mist",
+            51: "Lichte motregen",
+            53: "Motregen",
+            55: "Dichte motregen",
+            56: "Lichte ijzelmotregen",
+            57: "Dichte ijzelmotregen",
+            61: "Lichte regen",
+            63: "Regen",
+            65: "Harde regen",
+            66: "Lichte ijzel",
+            67: "Harde ijzel",
+            71: "Lichte sneeuw",
+            73: "Sneeuw",
+            75: "Hevige sneeuw",
+            77: "Sneeuwkorrels",
+            80: "Lichte buien",
+            81: "Buien",
+            82: "Hevige buien",
+            85: "Lichte sneeuwbuien",
+            86: "Sneeuwbuien",
+            95: "Onweer",
+            96: "Onweer met hagel",
+            99: "Zwaar onweer met hagel"
+        };
+
+        function precipitationLabelFromCode(code) {
+            const c = Number(code);
+            if([0,1,2,3].includes(c)) return 'Droog';
+            if([45,48].includes(c)) return 'Nevel/mist';
+            if([51,53,55,56,57].includes(c)) return 'Motregen';
+            if([61,63,65,66,67].includes(c)) return 'Regen';
+            if([80,81,82].includes(c)) return 'Buien';
+            if([71,73,75,77,85,86].includes(c)) return 'Sneeuw';
+            if([95,96,99].includes(c)) return 'Onweer';
+            return 'Onbekend';
+        }
+
+        function weatherIconFromCode(code) {
+            const c = Number(code);
+            if(c === 0) return '☀️';
+            if([1,2].includes(c)) return '🌤️';
+            if(c === 3) return '☁️';
+            if([45,48].includes(c)) return '🌫️';
+            if([51,53,55,56,57].includes(c)) return '🌦️';
+            if([61,63,65,66,67].includes(c)) return '🌧️';
+            if([80,81,82].includes(c)) return '🌦️';
+            if([71,73,75,77,85,86].includes(c)) return '🌨️';
+            if([95,96,99].includes(c)) return '⛈️';
+            return '🌡️';
+        }
+
+        function weatherNumber(val, digits = 1) {
+            const n = Number(val);
+            if(!isFinite(n)) return null;
+            return Number(n.toFixed(digits));
+        }
+
+        function weatherDetailsText(weather, separator = ' • ') {
+            if(!weather) return '';
+            const details = [];
+            const precip = weatherNumber(weather.pr, 1);
+            const wind = weatherNumber(weather.ws, 0);
+            if(precip !== null) details.push(`🌧️ ${precip.toFixed(1)} mm/u`);
+            if(wind !== null) details.push(`💨 ${wind.toFixed(0)} km/u`);
+            return details.join(separator);
+        }
+
+        function weatherSummaryText(weather, separator = ' • ', includeDetails = false) {
+            if(!weather) return 'Onbekend';
+            const code = Number(weather.c);
+            const condition = WMO[code] || `Code ${code}`;
+            const precipitation = weather.p || precipitationLabelFromCode(code);
+            const icon = weatherIconFromCode(code);
+            const base = `${icon} ${weather.t}°C${separator}${condition}${separator}${precipitation}`;
+            if(!includeDetails) return base;
+            const details = weatherDetailsText(weather, separator);
+            return details ? `${base}${separator}${details}` : base;
+        }
 
         // Bewaar data onder vaste key; schrijf ook naar versie-key voor backward compat.
         const STORAGE_KEY = 'paddentrek_data';
@@ -270,7 +353,7 @@ document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
         const SYNC_IMPORTED_IDS_KEY = 'paddentrek_sync_imported_ids_v1';
         const SYNC_IMPORTED_REGISTRY_KEY = 'paddentrek_sync_imported_registry_v1';
         const CONTRIBUTOR_PROFILE_KEY = 'paddentrek_contributor_profile_v1';
-        let reportMode = 'session'; // 'session' | 'day'
+        let reportMode = 'day'; // 'session' | 'day'
         let photoTargetSession = null;
         let viewedSessionId = '';
         let sessionScanner = null;
@@ -502,10 +585,8 @@ document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
         function updateContributorInputsFromProfile() {
             const profile = getContributorProfile();
             const nameInput = document.getElementById('share-contributor-name');
-            const teamLabelInput = document.getElementById('share-team-label');
             const routeInput = document.getElementById('share-route-name');
             if(nameInput && !nameInput.value.trim() && profile.name) nameInput.value = profile.name;
-            if(teamLabelInput && !teamLabelInput.value.trim()) teamLabelInput.value = normalizeTeamLabel(profile.lastTeamLabel || '🐸');
             if(routeInput && !routeInput.value.trim() && profile.lastRouteName) routeInput.value = profile.lastRouteName;
         }
 
@@ -532,26 +613,23 @@ document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
         function handleShareIdentityChange(refreshQr = true) {
             const profile = getContributorProfile();
             const nameInput = document.getElementById('share-contributor-name');
-            const teamLabelInput = document.getElementById('share-team-label');
             const routeInput = document.getElementById('share-route-name');
             const hint = document.getElementById('share-identity-hint');
             const name = (nameInput?.value || '').trim();
-            const teamLabel = normalizeTeamLabel(teamLabelInput?.value || profile.lastTeamLabel || '🐸');
             const route = normalizeRouteName(routeInput?.value || profile.lastRouteName || '');
-            if(teamLabelInput && !teamLabelInput.value.trim()) teamLabelInput.value = teamLabel;
             const daySeed = (typeof picker !== 'undefined' && picker?.value) ? picker.value : currentDayIsoFallback();
-            const teamRunId = deriveTeamRunId(daySeed, teamLabel);
+            const teamRunId = deriveTeamRunId(daySeed, '🐸');
             saveContributorProfile({
                 ...profile,
                 name: name || profile.name || '',
                 lastTeamRunId: teamRunId,
-                lastTeamLabel: teamLabel,
+                lastTeamLabel: '🐸',
                 lastRouteName: route
             });
             if(hint) {
                 hint.innerText = name
-                    ? `Je deelt als ${name} · Team ${teamLabel}${route ? ` · Traject ${route}` : ''}`
-                    : `Vul je naam in voor je deelt. Team ${teamLabel}${route ? ` · Traject ${route}` : ''}`;
+                    ? `Je deelt als ${name}${route ? ` · Traject ${route}` : ''}`
+                    : `Vul je naam in voor je deelt.${route ? ` Traject: ${route}` : ''}`;
             }
             if(refreshQr) generateQR(false);
         }
@@ -559,7 +637,6 @@ document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
         function ensureContributorIdentity() {
             const profile = getContributorProfile();
             const nameInput = document.getElementById('share-contributor-name');
-            const teamLabelInput = document.getElementById('share-team-label');
             const fromInput = (nameInput?.value || '').trim();
             const contributorName = (fromInput || profile.name || '').trim();
             if(nameInput && !fromInput) {
@@ -572,19 +649,16 @@ document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
                 if(nameInput) nameInput.focus();
                 return null;
             }
-            const teamLabel = normalizeTeamLabel(teamLabelInput?.value || profile.lastTeamLabel || '🐸');
-            if(teamLabelInput && !teamLabelInput.value.trim()) teamLabelInput.value = teamLabel;
             const daySeed = (typeof picker !== 'undefined' && picker?.value) ? picker.value : currentDayIsoFallback();
-            const teamRunId = deriveTeamRunId(daySeed, teamLabel);
+            const teamRunId = deriveTeamRunId(daySeed, '🐸');
             const nextProfile = saveContributorProfile({
                 ...profile,
                 name: contributorName,
                 lastTeamRunId: teamRunId,
-                lastTeamLabel: teamLabel
+                lastTeamLabel: '🐸'
             });
             if(nameInput) nameInput.value = nextProfile.name;
-            if(teamLabelInput) teamLabelInput.value = nextProfile.lastTeamLabel;
-            return { contributorId: nextProfile.id, contributorName: nextProfile.name, teamRunId, teamLabel: nextProfile.lastTeamLabel };
+            return { contributorId: nextProfile.id, contributorName: nextProfile.name, teamRunId, teamLabel: '🐸' };
         }
 
         function getImportedSyncIds() {
@@ -1002,7 +1076,7 @@ document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
                             sourceDate: d,
                             sourceLabel: s.id || 'legacy',
                             contributorId: `legacy_user_${simpleHash(`${d}|${s.id}|local`)}`,
-                            contributorName: 'Legacy telling',
+                            contributorName: 'mezelf',
                             teamRunId: s.teamRunId,
                             teamLabel: teamLabelFromRunId(s.teamRunId),
                             importedAt: Date.now()
@@ -1189,6 +1263,7 @@ document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
             (d.custom || []).forEach(up);
             renderSessions();
             renderSessionLog();
+            buildReportSessionOptions();
             updateReport(); updateWeather();
             renderDetSessionOptions(); renderDeterminationUI(); renderDeterminationList();
         }
@@ -1204,7 +1279,7 @@ document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
             .filter(s => s.id === selected)
             .map(s => {
                 const total = sumCounts(s.counts);
-                const weather = s.weather ? `${s.weather.t}°C • ${WMO[s.weather.c] || 'OK'}` : 'Onbekend';
+                const weather = weatherSummaryText(s.weather, ' • ', true);
                 const photos = s.photos || [];
                 const label = sessionDisplayLabel(s, day);
                 const autoNote = (s.autoContributorNote || '').trim();
@@ -1230,7 +1305,7 @@ document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
                                     <div class="text-[10px] uppercase text-gray-400 font-bold">Weer</div>
                                     <div class="text-sm text-gray-200">${weather}</div>
                                 </div>
-                                <button class="bg-yellow-600 text-white px-3 py-1 rounded text-[10px]" onclick="fetchWeather(picker.value, '${s.id}')">GPS Update</button>
+                                <button class="bg-yellow-600 text-white px-3 py-1 rounded text-[10px]" onclick="fetchWeather(picker.value, '${s.id}')">Weerbericht ophalen</button>
                             </div>
                             <label class="text-[10px] uppercase text-gray-400 font-bold">Notities</label>
                             <textarea oninput="updateSessionNotes('${s.id}', this.value)" class="w-full bg-gray-700 border-none rounded p-3 text-sm h-20 text-white focus:ring-1 focus:ring-blue-500" placeholder="${autoNote ? 'Persoonlijke notities (onder teamdata)' : 'Notities'}">${s.notes || ''}</textarea>
@@ -1286,7 +1361,8 @@ document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
             const sessions = day.sessions.slice().sort((a,b)=>new Date(a.start)-new Date(b.start));
             sel.innerHTML = sessions.map(s => {
                 const l = sessionDisplayLabel(s, day);
-                return `<option value="${s.id}">${l}</option>`;
+                const route = normalizeRouteName(s.routeName || '');
+                return `<option value="${s.id}">${l}${route ? ` · ${route}` : ''}</option>`;
             }).join('') || '<option value=\"\">Geen sessies</option>';
             const sess = getDetSession();
             if(sess && !sess.determinations) sess.determinations = [];
@@ -1295,7 +1371,10 @@ document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
                 activeDeterminationSessionId = null;
             }
             if(sess) sel.value = sess.id;
-            if(label) label.innerText = sess ? sessionDisplayLabel(sess, day) : 'Geen telling';
+            if(label) {
+                const route = normalizeRouteName(sess?.routeName || '');
+                label.innerText = sess ? `${sessionDisplayLabel(sess, day)}${route ? ` · ${route}` : ''}` : 'Geen telling';
+            }
             const hasActive = !!getActiveSession(day);
             if(btnStart) btnStart.classList.add('hidden');
             if(btnLoose) btnLoose.classList.toggle('hidden', hasActive);
@@ -1683,7 +1762,7 @@ function openDetermination(id) {
                     quickMeta.innerText = route ? `${total} dieren · ${route}` : `${total} dieren`;
                 }
             }
-            if(reportSel && viewedSessionId && Array.from(reportSel.options).some(o => o.value === viewedSessionId)) {
+            if(reportSel && reportMode === 'session' && viewedSessionId && Array.from(reportSel.options).some(o => o.value === viewedSessionId)) {
                 reportSel.value = viewedSessionId;
             }
         }
@@ -1907,13 +1986,15 @@ function openDetermination(id) {
                 const total = sumCounts(s.counts);
                 const detCount = (s.determinations || []).filter(d => !!d.result && !d.pending).length;
                 const photoCount = (s.photos || []).length;
-                const weather = s.weather ? `<div class="text-[10px] text-sky-300">🌤️ ${s.weather.t}°C ${WMO[s.weather.c]||'OK'}</div>` : '';
+                const route = normalizeRouteName(s.routeName || '');
+                const weather = s.weather ? `<div class="text-[10px] text-sky-300">${weatherSummaryText(s.weather, ' • ', true)}</div>` : '';
                 const autoNote = (s.autoContributorNote || '').trim();
                 return `<div class="bg-gray-900 p-3 rounded border border-gray-800 flex items-center gap-2">
                     <input type="checkbox" class="session-merge-checkbox accent-emerald-500" value="${s.id}">
                     <div class="flex-1">
                         <div class="font-bold text-gray-100">${fmtTime(s.start)} - ${s.end ? fmtTime(s.end) : 'lopend'}</div>
                         <div class="text-gray-400 text-[10px]">${total} stuks · ${detCount} determinaties · ${photoCount} foto's</div>
+                        ${route ? `<div class="text-emerald-200 text-[10px]">🚶‍♂️ ${route}</div>` : ''}
                         ${autoNote ? `<div class="text-cyan-200 text-[10px]">${autoNote}</div>` : ''}
                         <label class="inline-flex items-center gap-1 text-[10px] mt-1 text-gray-300">
                             <input type="checkbox" class="accent-emerald-500" ${s.includeInReports !== false ? 'checked' : ''} onchange="event.stopPropagation(); toggleSessionInclude('${s.id}','${dayKey}', this.checked)">
@@ -2188,14 +2269,30 @@ function openDetermination(id) {
 
         async function fetchWeather(dayOverride, sessionId) {
             if(!navigator.geolocation) return;
-            showToast("GPS zoekt...");
+            showToast("Weerbericht ophalen...");
             navigator.geolocation.getCurrentPosition(async p => {
                 try {
-                    const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${p.coords.latitude}&longitude=${p.coords.longitude}&current_weather=true`);
+                    const r = await fetch(
+                        `https://api.open-meteo.com/v1/forecast?latitude=${p.coords.latitude}&longitude=${p.coords.longitude}` +
+                        `&current=temperature_2m,weather_code,precipitation,rain,showers,snowfall,wind_speed_10m&timezone=auto`
+                    );
                     const j = await r.json();
                     const dayKey = dayOverride || picker.value;
                     const day = ensureDay(dayKey);
-                    const w = { t: j.current_weather.temperature, c: j.current_weather.weathercode, ts: Date.now() };
+                    const current = j.current || j.current_weather || {};
+                    const code = Number(current.weather_code ?? current.weathercode ?? 0);
+                    const temp = Number(current.temperature_2m ?? current.temperature ?? 0);
+                    const w = {
+                        t: temp,
+                        c: code,
+                        p: precipitationLabelFromCode(code),
+                        pr: weatherNumber(current.precipitation, 1),
+                        rr: weatherNumber(current.rain, 1),
+                        sh: weatherNumber(current.showers, 1),
+                        sn: weatherNumber(current.snowfall, 1),
+                        ws: weatherNumber(current.wind_speed_10m ?? current.windspeed, 0),
+                        ts: Date.now()
+                    };
                     day.weather = w;
                     if(sessionId) {
                         const sess = day.sessions.find(s => s.id === sessionId);
@@ -2213,7 +2310,7 @@ function openDetermination(id) {
             const el = document.getElementById('weather-display');
             if(!el) return;
             const w = storage[picker.value]?.weather;
-            el.innerText = w ? `${w.t}°C - ${WMO[w.c] || "OK"}` : "Geen weerdata bekend.";
+            el.innerText = w ? weatherSummaryText(w, ' - ', true) : "Geen weerdata bekend.";
         }
 
         function addCustomSpecies() {
@@ -2515,11 +2612,12 @@ function openDetermination(id) {
             const sessionId = sel ? (sel.value || (reportMode === 'session' ? viewedSessionId : '')) : (reportMode === 'session' ? viewedSessionId : '');
             const session = sessionId ? (data.sessions || []).find(s => s.id === sessionId) : null;
             const reportSessions = getReportEligibleSessions(data);
+            renderReportSessionChecklist();
             const excludedSessions = (data.sessions || []).filter(s => !sessionIncludedInReports(s));
             const targetCounts = reportMode === 'session' && session ? (session.counts || {}) : getReportCountsForDay(data);
             let txt = `🐸 *OVERZET-UPDATE - ${d}*\n\n`;
             const w = (reportMode === 'session' ? session?.weather : data.weather) || session?.weather;
-            if(w) txt += `🌤️ *Weer:* ${w.t}°C, ${WMO[w.c] || "OK"}\n\n`;
+            if(w) txt += `*Weer:* ${weatherSummaryText(w, ', ', true)}\n\n`;
             const all = [...SPECIES, ...(data.custom || [])]; let h = false;
             all.forEach(s => {
                 const pl = targetCounts[`${s.id}_p_l`]||0, pd = targetCounts[`${s.id}_p_d`]||0;
@@ -2541,7 +2639,7 @@ function openDetermination(id) {
                 txt += `\n⏱️ *Tellingen:*\n`;
                 sessionsToShow.sort((a,b)=>new Date(a.start)-new Date(b.start)).forEach(s => {
                     const total = sumCounts(s.counts);
-                    const wtxt = s.weather ? ` | 🌤️ ${s.weather.t}°C ${WMO[s.weather.c]||'OK'}` : '';
+                    const wtxt = s.weather ? ` | ${weatherSummaryText(s.weather, ' • ', true)}` : '';
                     const route = s.routeName ? ` | 🚶‍♂️ ${s.routeName}` : '';
                     txt += `  - ${sessionDisplayLabel(s, data)}: ${total} stuks${route}${wtxt}\n`;
                 });
@@ -2549,8 +2647,11 @@ function openDetermination(id) {
                     txt += `\n⚠️ ${excludedSessions.length} sessie(s) tellen niet mee in dit rapport.\n`;
                 }
             }
+            if(reportMode === 'day' && !sessionsToShow.length && (data.sessions || []).length) {
+                txt += `\n⚠️ Geen tellingen geselecteerd. Zet minstens 1 sessie aan bovenaan.\n`;
+            }
             txt += `\n#Paddentrek #Telling`;
-            document.getElementById('report-text').innerText = h || data.notes ? txt : "Nog geen data ingevoerd.";
+            document.getElementById('report-text').innerText = h || data.notes || reportSessions.length || (data.sessions || []).length ? txt : "Nog geen data ingevoerd.";
             renderReportTrend();
 
             // determinaties blok
@@ -2607,6 +2708,9 @@ function openDetermination(id) {
                 if(sel && viewedSessionId && Array.from(sel.options).some(o => o.value === viewedSessionId)) {
                     sel.value = viewedSessionId;
                 }
+            } else {
+                const sel = document.getElementById('report-session-select');
+                if(sel) sel.value = '';
             }
             updateReport();
         }
@@ -2660,7 +2764,7 @@ function openDetermination(id) {
             const session = sessionId ? day.sessions.find(s => s.id === sessionId) : null;
             let dets = (reportMode === 'session' && session)
                 ? (session?.determinations || [])
-                : (day.sessions || []).flatMap(s => s.determinations || []);
+                : getReportEligibleSessions(day).flatMap(s => s.determinations || []);
             dets = dets.filter(d => !!d.result && !d.pending);
             const selected = Array.from(document.querySelectorAll('#report-dets .share-det-checkbox:checked')).map(cb => cb.value);
             if(selected.length) dets = dets.filter(d => selected.includes(d.id));
@@ -2881,7 +2985,8 @@ ${lines.join('\n\n')}`;
             const day = ensureDay();
             sel.innerHTML = '<option value=\"\">Alle sessies (dagtotaal)</option>' + day.sessions.map(s => {
                 const label = sessionDisplayLabel(s, day);
-                return `<option value="${s.id}">${label}</option>`;
+                const route = normalizeRouteName(s.routeName || '');
+                return `<option value="${s.id}">${label}${route ? ` · ${route}` : ''}</option>`;
             }).join('');
         }
 
@@ -2892,12 +2997,57 @@ ${lines.join('\n\n')}`;
             const preferred = viewedSessionId && day.sessions.some(s => s.id === viewedSessionId)
                 ? viewedSessionId
                 : sel.value;
-            sel.innerHTML = '<option value=\"\">Alle sessies die meetellen</option>' + day.sessions.map(s => {
+            sel.innerHTML = '<option value=\"\">Overzicht geselecteerde tellingen</option>' + day.sessions.map(s => {
                 const includeTag = s.includeInReports === false ? ' · (niet meetellen)' : '';
                 const label = `${sessionDisplayLabel(s, day)}${s.routeName ? ' · '+s.routeName : ''}${includeTag}`;
                 return `<option value="${s.id}">${label}</option>`;
             }).join('');
-            sel.value = day.sessions.some(s => s.id === preferred) ? preferred : '';
+            if(reportMode === 'day') {
+                sel.value = '';
+            } else {
+                sel.value = day.sessions.some(s => s.id === preferred) ? preferred : '';
+            }
+        }
+
+        function renderReportSessionChecklist() {
+            const box = document.getElementById('report-session-checklist');
+            const meta = document.getElementById('report-session-checklist-meta');
+            if(!box || !meta) return;
+            const day = ensureDay();
+            const sessions = day.sessions.slice().sort((a,b)=>new Date(a.start)-new Date(b.start));
+            if(!sessions.length) {
+                box.innerHTML = '<div class="text-[11px] text-gray-500">Nog geen tellingen voor deze datum.</div>';
+                meta.innerText = '';
+                return;
+            }
+            const includedCount = sessions.filter(sessionIncludedInReports).length;
+            meta.innerText = `${includedCount} van ${sessions.length} tellingen opgenomen in het rapport.`;
+            box.innerHTML = sessions.map(s => {
+                const total = sumCounts(s.counts || {});
+                const label = sessionDisplayLabel(s, day);
+                const route = normalizeRouteName(s.routeName || '');
+                const autoNote = (s.autoContributorNote || '').trim();
+                return `
+                    <label class="flex items-start gap-2 bg-gray-900/65 border border-gray-700 rounded-lg px-2 py-2 cursor-pointer">
+                        <input type="checkbox" class="mt-0.5 accent-emerald-500" ${s.includeInReports !== false ? 'checked' : ''} onchange="toggleSessionInclude('${s.id}','${picker.value}', this.checked)">
+                        <div class="flex-1 min-w-0">
+                            <div class="text-[11px] text-gray-100 font-semibold">${label}${route ? ` · ${route}` : ''}</div>
+                            <div class="text-[10px] text-gray-400">${total} dieren</div>
+                            ${autoNote ? `<div class="text-[10px] text-cyan-200">${autoNote}</div>` : ''}
+                        </div>
+                    </label>
+                `;
+            }).join('');
+        }
+
+        function setAllReportSessionsIncluded(include = true, dayKey = picker.value) {
+            const day = ensureDay(dayKey);
+            if(!day.sessions.length) return;
+            day.sessions.forEach(s => s.includeInReports = !!include);
+            save();
+            render();
+            renderSessionAdmin();
+            showToast(include ? 'Alle tellingen tellen mee' : 'Geen tellingen geselecteerd');
         }
 
         function buildRouteSuggestions() {
@@ -2947,15 +3097,14 @@ ${lines.join('\n\n')}`;
                 s: normalizeCustomSpeciesList(payload?.s || []).map(s => ({ id: s.id, name: s.name })),
                 sourceDate: payload?.sourceDate || payload?.d || '',
                 sourceLabel: payload?.sourceLabel || '',
-                contributorId: payload?.contributorId || '',
-                teamRunId: payload?.teamRunId || '',
-                teamLabel: payload?.teamLabel || ''
+                sourceRoute: payload?.sourceRoute || '',
+                contributorId: payload?.contributorId || ''
             };
             return simpleHash(stableStringify(basis));
         }
 
-        function buildContributionId(teamRunId, contributorId, sourceDate, sessionId = '') {
-            const seed = `${teamRunId || ''}|${contributorId || ''}|${sourceDate || ''}|${sessionId || 'day'}`;
+        function buildContributionId(contributorId, sourceDate, sessionId = '') {
+            const seed = `${contributorId || ''}|${sourceDate || ''}|${sessionId || 'day'}`;
             return `contrib_${simpleHash(seed)}`;
         }
 
@@ -2963,22 +3112,18 @@ ${lines.join('\n\n')}`;
             if(requireInput) return ensureContributorIdentity();
             const profile = getContributorProfile();
             const nameInput = document.getElementById('share-contributor-name');
-            const teamLabelInput = document.getElementById('share-team-label');
             const rawName = nameInput ? (nameInput.value || '').trim() : (profile.name || '').trim();
             const contributorName = rawName || 'Onbekende teller';
-            const teamLabel = normalizeTeamLabel(teamLabelInput?.value || profile.lastTeamLabel || '🐸');
-            if(teamLabelInput && !teamLabelInput.value.trim()) teamLabelInput.value = teamLabel;
             const daySeed = (typeof picker !== 'undefined' && picker?.value) ? picker.value : currentDayIsoFallback();
-            const teamRunId = deriveTeamRunId(daySeed, teamLabel);
+            const teamRunId = deriveTeamRunId(daySeed, '🐸');
             const nextProfile = saveContributorProfile({
                 ...profile,
                 name: contributorName === 'Onbekende teller' ? (profile.name || '') : contributorName,
                 lastTeamRunId: teamRunId,
-                lastTeamLabel: teamLabel
+                lastTeamLabel: '🐸'
             });
             if(nameInput && !nameInput.value.trim()) nameInput.value = nextProfile.name;
-            if(teamLabelInput && !teamLabelInput.value.trim()) teamLabelInput.value = nextProfile.lastTeamLabel;
-            return { contributorId: nextProfile.id, contributorName, teamRunId, teamLabel: nextProfile.lastTeamLabel };
+            return { contributorId: nextProfile.id, contributorName, teamRunId, teamLabel: '🐸' };
         }
 
         function buildSyncPayloadFromSelection(requireIdentity = false) {
@@ -2990,13 +3135,14 @@ ${lines.join('\n\n')}`;
             const counts = cloneJSON(session ? (session.counts || {}) : (day.counts || {}));
             const custom = normalizeCustomSpeciesList(cloneJSON(day.custom || []));
             const sourceLabel = session ? sessionDisplayLabel(session, day) : 'Volledige dag';
+            const sourceRoute = normalizeRouteName(session?.routeName || document.getElementById('share-route-name')?.value || '');
             const identity = ensureShareIdentity(requireIdentity);
             if(!identity) return null;
 
-            const teamRunId = identity.teamRunId || day.teamRunId || deriveTeamRunId(d, identity.teamLabel || '🐸');
+            const teamRunId = day.teamRunId || identity.teamRunId || deriveTeamRunId(d, '🐸');
             if(!day.teamRunId && teamRunId) day.teamRunId = teamRunId;
             if(session && !session.teamRunId && teamRunId) session.teamRunId = teamRunId;
-            const contributionId = buildContributionId(teamRunId, identity.contributorId, d, sessionId || '');
+            const contributionId = buildContributionId(identity.contributorId, d, sessionId || '');
             const payload = {
                 v: SYNC_PAYLOAD_VERSION,
                 id: contributionId,
@@ -3004,6 +3150,7 @@ ${lines.join('\n\n')}`;
                 createdAt: Date.now(),
                 sourceDate: d,
                 sourceLabel,
+                sourceRoute,
                 sess: sessionId || null,
                 c: counts,
                 s: custom,
@@ -3041,10 +3188,10 @@ ${lines.join('\n\n')}`;
             let lines = [
                 `Dag: ${payload.sourceDate || d}`,
                 `Bron: ${payload.sourceLabel || (session ? sessionDisplayLabel(session, day) : 'Volledige dag')}`,
+                payload.sourceRoute ? `Traject: ${payload.sourceRoute}` : '',
                 `Teller: ${payload.contributorName || 'Onbekende teller'}`,
-                `Team: ${payload.teamLabel || '🐸'}`,
                 `Totaal dieren: ${total}`
-            ];
+            ].filter(Boolean);
             const perSpecies = {};
             for(const k in counts) {
                 const [sid, suf] = k.split('_');
@@ -3055,7 +3202,7 @@ ${lines.join('\n\n')}`;
                 const name = (SPECIES.find(s=>s.id===sid) || (payload.s||[]).find(c=>c.id===sid) || {name:sid}).name;
                 lines.push(`${name}: ${val}`);
             });
-            box.innerText = `Wie deze QR scant, krijgt eerst een wizard en kan veilig samenvoegen:\n\n${lines.join('\n')}`;
+            box.innerText = `Wie deze QR scant, krijgt eerst een wizard en kan deze data als aparte telling toevoegen:\n\n${lines.join('\n')}`;
         }
 
         function summarizeIncomingCounts(incoming) {
@@ -3091,6 +3238,11 @@ ${lines.join('\n\n')}`;
             const custom = normalizeCustomSpeciesList(payload.s || []);
             const sourceDate = typeof payload.sourceDate === 'string' ? payload.sourceDate : (typeof payload.d === 'string' ? payload.d : '');
             const sourceLabel = typeof payload.sourceLabel === 'string' ? payload.sourceLabel : '';
+            const sourceRoute = normalizeRouteName(
+                typeof payload.sourceRoute === 'string'
+                    ? payload.sourceRoute
+                    : (typeof payload.routeName === 'string' ? payload.routeName : '')
+            );
             const createdAt = Number(payload.createdAt) || Date.now();
             const incomingId = typeof payload.contributionId === 'string' ? payload.contributionId : (typeof payload.id === 'string' ? payload.id : '');
             const fallbackId = `legacy_${simpleHash(`${sourceDate}|${sourceLabel}|${stableStringify(counts)}`)}`;
@@ -3117,6 +3269,7 @@ ${lines.join('\n\n')}`;
                 createdAt,
                 sourceDate,
                 sourceLabel,
+                sourceRoute,
                 sess: payload.sess || null,
                 c: counts,
                 s: custom,
@@ -3152,10 +3305,11 @@ ${lines.join('\n\n')}`;
             const created = p.createdAt ? new Date(p.createdAt).toLocaleString('nl-BE') : 'onbekend';
             const srcDate = p.sourceDate || 'onbekend';
             const srcLabel = p.sourceLabel ? ` (${p.sourceLabel})` : '';
-            const already = isSyncAlreadyImported(p.id);
+            const srcRoute = normalizeRouteName(p.sourceRoute || '');
+            const already = !!findImportedSessionLocation(p.id, getSyncImportEntry(p.id));
             meta.innerText =
                 `Bron: ${srcDate}${srcLabel} · ${created}\n` +
-                `Teller: ${p.contributorName || 'Onbekende teller'} · Team ${p.teamLabel || '🐸'}\n` +
+                `Teller: ${p.contributorName || 'Onbekende teller'}${srcRoute ? ` · Traject ${srcRoute}` : ''}\n` +
                 `${total} dieren.${already ? ' Deze bijdrage is al bekend en wordt niet dubbel geteld.' : ''}\n` +
                 `De wizard opent normaal automatisch. Deze kaart is een fallback als je later alsnog wil toevoegen.`;
             summary.innerText = summarizeIncomingCounts(p);
@@ -3163,34 +3317,20 @@ ${lines.join('\n\n')}`;
 
         function buildSyncWizardTargetOptions() {
             const dateInput = document.getElementById('sync-wizard-date');
-            const sel = document.getElementById('sync-wizard-target-select');
             const hint = document.getElementById('sync-wizard-hint');
-            if(!dateInput || !sel || !hint) return;
-            const dayKey = dateInput.value || picker.value || todayISO();
-            const day = storage[dayKey] || { sessions: [] };
-            const sessions = (day.sessions || []).slice().sort((a,b)=>new Date(a.start)-new Date(b.start));
-            sel.innerHTML = `<option value="">Nieuwe teamsessie op ${dayKey}</option>` +
-                sessions.map(s => `<option value="${s.id}">${sessionDisplayLabel(s, day)}</option>`).join('');
-            sel.value = '';
+            if(!dateInput || !hint) return;
+            if(!dateInput.value) dateInput.value = picker.value || todayISO();
             updateSyncWizardHint();
         }
 
         function updateSyncWizardHint() {
             const dateInput = document.getElementById('sync-wizard-date');
-            const sel = document.getElementById('sync-wizard-target-select');
             const hint = document.getElementById('sync-wizard-hint');
-            if(!dateInput || !sel || !hint) return;
+            if(!dateInput || !hint) return;
             const dayKey = dateInput.value || picker.value || todayISO();
-            const val = sel.value;
-            if(!val) {
-                hint.innerText =
-                    `Stap 3: de ontvangen telling komt in een nieuwe teamsessie op ${dayKey}.\n` +
-                    `Na toevoegen zet de app automatisch andere ruwe sessies op "niet meetellen".`;
-            } else {
-                hint.innerText =
-                    `Stap 3: de ontvangen telling wordt bijgeteld in sessie ${sel.selectedOptions[0]?.textContent || val}.\n` +
-                    `Na toevoegen zet de app automatisch andere ruwe sessies op "niet meetellen".`;
-            }
+            hint.innerText =
+                `Stap 3: voeg deze link toe als aparte telling op ${dayKey}.\n` +
+                `Er wordt niets bijgeteld in bestaande tellingen.`;
         }
 
         function openSyncWizard() {
@@ -3204,16 +3344,17 @@ ${lines.join('\n\n')}`;
             const created = p.createdAt ? new Date(p.createdAt).toLocaleString('nl-BE') : 'onbekend';
             const srcDate = p.sourceDate || 'onbekend';
             const srcLabel = p.sourceLabel ? ` (${p.sourceLabel})` : '';
-            const already = isSyncAlreadyImported(p.id);
+            const srcRoute = normalizeRouteName(p.sourceRoute || '');
+            const already = !!findImportedSessionLocation(p.id, getSyncImportEntry(p.id));
             meta.innerText =
                 `Stap 1: controleer de bron.\n` +
                 `• ${srcDate}${srcLabel}\n` +
                 `• Teller: ${p.contributorName || 'Onbekende teller'}\n` +
-                `• Team: ${p.teamLabel || '🐸'}\n` +
+                `${srcRoute ? `• Traject: ${srcRoute}\n` : ''}` +
                 `• ${created}\n` +
                 `• ${total} dieren\n` +
                 `${already ? '• Deze bijdrage is al bekend en wordt overgeslagen.\n' : ''}` +
-                `• Na toevoegen zet de app automatisch ruwe sessies op niet-meetellen.`;
+                `• Na toevoegen staat deze data als aparte telling in je lijst.`;
             summary.innerText = `Stap 2: inhoud van de link\n\n${summarizeIncomingCounts(p)}`;
             dateInput.value = picker.value || todayISO();
             buildSyncWizardTargetOptions();
@@ -3233,20 +3374,28 @@ ${lines.join('\n\n')}`;
             });
         }
 
-        function ensureImportTargetSession(dayKey, targetSessionId = '', payload = null) {
+        function normalizeContributorDisplayName(name = '', contributorId = '') {
+            if(typeof contributorId === 'string' && contributorId.startsWith('legacy_user_')) return 'mezelf';
+            const raw = String(name || '').trim();
+            const low = raw.toLowerCase();
+            if(low === 'legacy telling' || low === 'legacy-telling' || low === 'legacy') return 'mezelf';
+            return raw || 'Onbekende teller';
+        }
+
+        function ensureImportSessionForContribution(dayKey, payload = null, existingSession = null) {
+            if(existingSession) return existingSession;
             const day = ensureDay(dayKey);
-            const existing = targetSessionId ? day.sessions.find(s => s.id === targetSessionId) : null;
-            if(existing) return existing;
-            const now = new Date();
+            const createdAt = Number(payload?.createdAt) || Date.now();
+            const createdIso = new Date(createdAt).toISOString();
             const session = {
-                id: `syncsess_${now.getTime()}_${randomHex(4)}`,
-                start: now.toISOString(),
-                end: now.toISOString(),
+                id: `syncsess_${createdAt}_${randomHex(4)}`,
+                start: createdIso,
+                end: createdIso,
                 counts: {},
                 notes: '',
                 weather: null,
                 photos: [],
-                routeName: '',
+                routeName: normalizeRouteName(payload?.sourceRoute || ''),
                 determinations: [],
                 detTemp: false,
                 includeInReports: true,
@@ -3259,69 +3408,62 @@ ${lines.join('\n\n')}`;
             return session;
         }
 
+        function findImportedSessionLocation(contributionId, hint = null) {
+            if(!contributionId) return null;
+            const tryLocate = (dayKey, sessionId = '') => {
+                if(!dayKey || !storage[dayKey]) return null;
+                const day = ensureDay(dayKey);
+                let session = sessionId ? day.sessions.find(s => s.id === sessionId) : null;
+                if(!session) {
+                    session = day.sessions.find(s => (s.contributions || []).some(c => c.contributionId === contributionId));
+                }
+                if(!session) return null;
+                const rec = (session.contributions || []).find(c => c.contributionId === contributionId) || null;
+                return { dayKey, day, session, record: rec };
+            };
+
+            const hinted = tryLocate(hint?.dayKey || '', hint?.sessionId || '');
+            if(hinted) return hinted;
+
+            const dayKeys = Object.keys(storage || {}).sort();
+            for(let i = 0; i < dayKeys.length; i++) {
+                const found = tryLocate(dayKeys[i]);
+                if(found) return found;
+            }
+            return null;
+        }
+
         function rebuildSessionContributorRoster(session) {
             if(!session) return;
             const map = new Map();
             (session.contributions || []).forEach(c => {
                 const id = c?.contributorId || '';
-                const name = (c?.contributorName || 'Onbekende teller').trim() || 'Onbekende teller';
+                const name = normalizeContributorDisplayName(c?.contributorName || '', id);
+                const route = normalizeRouteName(c?.sourceRoute || '');
                 const key = id || `name_${name.toLowerCase()}`;
-                if(!map.has(key)) map.set(key, { id: id || `legacy_${simpleHash(name)}`, name });
+                if(!map.has(key)) {
+                    map.set(key, { id: id || `legacy_${simpleHash(name)}`, name, route });
+                } else if(route && !map.get(key).route) {
+                    map.get(key).route = route;
+                }
             });
             session.contributorRoster = Array.from(map.values());
-            const names = session.contributorRoster.map(r => r.name).filter(Boolean);
+            const names = session.contributorRoster
+                .map(r => r.route ? `${r.name} (${r.route})` : r.name)
+                .filter(Boolean);
             session.autoContributorNote = names.length ? `Data van ${names.join(', ')}` : '';
         }
 
-        function removeImportedContribution(dayKey, sessionId, contributionId) {
-            if(!dayKey || !sessionId || !contributionId) return false;
-            if(!storage[dayKey]) return false;
-            const day = ensureDay(dayKey);
-            const session = (day.sessions || []).find(s => s.id === sessionId);
-            if(!session || !Array.isArray(session.contributions)) return false;
-            const idx = session.contributions.findIndex(c => c.contributionId === contributionId);
-            if(idx < 0) return false;
-            const rec = session.contributions[idx];
-            subtractCounts(session.counts, rec.counts || {});
-            session.contributions.splice(idx, 1);
-            rebuildSessionContributorRoster(session);
-            recalcDayFromSessions(day);
-            return true;
-        }
-
-        function maybeOfferReportInclusionFix(dayKey, keepSessionId, options = {}) {
-            const auto = !!options.auto;
-            const day = ensureDay(dayKey);
-            const keep = day.sessions.find(s => s.id === keepSessionId);
-            if(!keep) return false;
-            const includable = day.sessions.filter(s => sumCounts(s.counts || {}) > 0 && s.includeInReports !== false);
-            const others = includable.filter(s => s.id !== keepSessionId);
-            if(!others.length) return false;
-            if(!auto) {
-                const ok = confirm(
-                    `Mogelijke dubbeltelling in rapport.\n\n` +
-                    `Wil je ${others.length} andere sessie(s) op "niet meetellen" zetten?\n` +
-                    `De teamsessie blijft meetellen.`
-                );
-                if(!ok) return false;
-            }
-            others.forEach(s => s.includeInReports = false);
-            keep.includeInReports = true;
-            showToast(auto
-                ? `Rapport opgeschoond: ${others.length} ruwe sessie(s) tellen niet mee`
-                : 'Ruwe sessies op niet-meetellen gezet'
-            );
-            return true;
-        }
-
-        function importContributionPayload(payloadInput, dayKey, targetSessionId = '') {
+        function importContributionPayload(payloadInput, dayKey) {
             const payload = sanitizeIncomingSyncPayload(payloadInput);
             if(!payload || !Object.keys(payload.c || {}).length) {
                 return { ok: false, status: 'invalid', summary: 'Geen teldata ontvangen.' };
             }
             const hash = payload.h || buildPayloadHash(payload);
             const existing = getSyncImportEntry(payload.id);
-            if(existing && !existing.hash) {
+            const located = findImportedSessionLocation(payload.id, existing);
+
+            if(existing && existing.hash && existing.hash === hash && located?.session) {
                 return {
                     ok: true,
                     status: 'already',
@@ -3329,7 +3471,7 @@ ${lines.join('\n\n')}`;
                     payload
                 };
             }
-            if(existing && existing.hash && existing.hash === hash) {
+            if(existing && !existing.hash && located?.session) {
                 return {
                     ok: true,
                     status: 'already',
@@ -3338,48 +3480,54 @@ ${lines.join('\n\n')}`;
                 };
             }
 
-            if(existing && existing.hash && existing.hash !== hash) {
-                removeImportedContribution(existing.dayKey, existing.sessionId, payload.id);
-            }
-
-            const day = ensureDay(dayKey);
+            const targetDayKey = located?.dayKey || dayKey;
+            const day = ensureDay(targetDayKey);
             if(payload.teamRunId && !day.teamRunId) day.teamRunId = payload.teamRunId;
             mergeIncomingCustomSpecies(day, payload);
 
-            const targetSession = ensureImportTargetSession(dayKey, targetSessionId, payload);
-            addCounts(targetSession.counts, payload.c || {});
+            const targetSession = ensureImportSessionForContribution(targetDayKey, payload, located?.session || null);
+            const route = normalizeRouteName(payload.sourceRoute || targetSession.routeName || '');
+            const createdAt = Number(payload.createdAt) || Date.now();
+            const createdIso = new Date(createdAt).toISOString();
+            targetSession.start = targetSession.start || createdIso;
+            targetSession.end = targetSession.end || createdIso;
+            targetSession.counts = cloneJSON(payload.c || {});
+            if(route) targetSession.routeName = route;
             if(payload.teamRunId && !targetSession.teamRunId) targetSession.teamRunId = payload.teamRunId;
-            targetSession.includeInReports = true;
+            if(typeof targetSession.includeInReports !== 'boolean') targetSession.includeInReports = true;
             if(!Array.isArray(targetSession.contributions)) targetSession.contributions = [];
             const rec = {
                 contributionId: payload.id,
                 hash,
                 counts: cloneJSON(payload.c || {}),
-                createdAt: payload.createdAt || Date.now(),
+                createdAt,
                 sourceDate: payload.sourceDate || '',
                 sourceLabel: payload.sourceLabel || '',
+                sourceRoute: route,
                 contributorId: payload.contributorId || '',
                 contributorName: payload.contributorName || 'Onbekende teller',
                 teamRunId: payload.teamRunId || '',
                 teamLabel: payload.teamLabel || '🐸',
                 importedAt: Date.now()
             };
-            const existingIdx = targetSession.contributions.findIndex(c => c.contributionId === payload.id);
-            if(existingIdx >= 0) targetSession.contributions.splice(existingIdx, 1);
-            targetSession.contributions.push(rec);
+            targetSession.contributions = [rec];
             rebuildSessionContributorRoster(targetSession);
+            if(!targetSession.routeName) {
+                const rosterRoute = (targetSession.contributorRoster || []).find(r => normalizeRouteName(r.route || ''))?.route || '';
+                if(rosterRoute) targetSession.routeName = rosterRoute;
+            }
             recalcDayFromSessions(day);
 
-            markSyncImported(payload.id, { hash, dayKey, sessionId: targetSession.id });
-            const status = existing ? 'updated' : 'new';
-            const summary = describeSync({ ...payload, d: payload.sourceDate || dayKey }, dayKey);
-            return { ok: true, status, summary, payload, targetSession };
+            markSyncImported(payload.id, { hash, dayKey: targetDayKey, sessionId: targetSession.id });
+            const status = located?.session ? 'updated' : 'new';
+            const summary = describeSync({ ...payload, d: payload.sourceDate || targetDayKey }, targetDayKey);
+            return { ok: true, status, summary, payload, targetSession, targetDayKey };
         }
 
-        function applyPendingSyncToTarget(dayKey, targetSessionId = '') {
+        function applyPendingSyncToDay(dayKey) {
             const p = pendingSyncLinkPayload;
             if(!p) return null;
-            const result = importContributionPayload(p, dayKey, targetSessionId);
+            const result = importContributionPayload(p, dayKey);
             if(!result?.ok) return result;
             pendingSyncLinkPayload = null;
             save();
@@ -3391,13 +3539,6 @@ ${lines.join('\n\n')}`;
             buildImportTargetOptions();
             buildRouteSuggestions();
             renderIncomingSyncCard();
-            if(result.targetSession && result.payload?.teamRunId && (result.status === 'new' || result.status === 'updated')) {
-                if(maybeOfferReportInclusionFix(dayKey, result.targetSession.id, { auto: true })) {
-                    save();
-                    render();
-                    renderSessionAdmin();
-                }
-            }
             return result;
         }
 
@@ -3452,8 +3593,7 @@ ${lines.join('\n\n')}`;
             const p = pendingSyncLinkPayload;
             if(!p) { alert('Geen ontvangen deel-link.'); return; }
             const dayKey = picker.value;
-            const targetSessionId = document.getElementById('import-target-select')?.value || '';
-            const result = applyPendingSyncToTarget(dayKey, targetSessionId);
+            const result = applyPendingSyncToDay(dayKey);
             if(!result?.ok) return;
             closeSyncWizard();
             if(result.status === 'already') {
@@ -3461,7 +3601,7 @@ ${lines.join('\n\n')}`;
                 alert(result.summary);
                 return;
             }
-            showToast(result.status === 'updated' ? 'Bijdrage bijgewerkt' : 'Deel-link toegevoegd');
+            showToast(result.status === 'updated' ? 'Bijdrage bijgewerkt' : 'Telling toegevoegd');
             alert(result.summary);
             switchTab('sessions');
         }
@@ -3470,8 +3610,7 @@ ${lines.join('\n\n')}`;
             const p = pendingSyncLinkPayload;
             if(!p) { alert('Geen ontvangen deel-link.'); return; }
             const dayKey = document.getElementById('sync-wizard-date')?.value || picker.value || todayISO();
-            const targetSessionId = document.getElementById('sync-wizard-target-select')?.value || '';
-            const result = applyPendingSyncToTarget(dayKey, targetSessionId);
+            const result = applyPendingSyncToDay(dayKey);
             if(!result?.ok) return;
             closeSyncWizard();
             if(result.status === 'already') {
@@ -3479,7 +3618,7 @@ ${lines.join('\n\n')}`;
                 alert(result.summary);
                 return;
             }
-            showToast(result.status === 'updated' ? 'Bijdrage bijgewerkt' : 'Deel-link toegevoegd');
+            showToast(result.status === 'updated' ? 'Bijdrage bijgewerkt' : 'Telling toegevoegd');
             alert(result.summary);
             switchTab('sessions');
         }
@@ -3741,7 +3880,7 @@ ${lines.join('\n\n')}`;
             const sourceDay = incoming?.sourceDate || incoming?.d || picker.value;
             const dayKey = targetDay || sourceDay;
             const who = incoming?.contributorName || 'Onbekende teller';
-            const team = incoming?.teamLabel || '🐸';
+            const route = normalizeRouteName(incoming?.sourceRoute || '');
             const label = {
                 p_l: '❤️ koppels', p_d: '☠️ koppels', m_l: 'm levend', v_l: 'v levend', o_l: 'o levend',
                 m_d: 'm dood',   v_d: 'v dood',   o_d: 'o dood'
@@ -3768,7 +3907,7 @@ ${lines.join('\n\n')}`;
 
             if(!lines.length) return 'Geen teldata ontvangen.';
             const sourceTxt = sourceDay !== dayKey ? ` (bron ${sourceDay})` : '';
-            return `Toegevoegd op ${dayKey}${sourceTxt}.\nTeller: ${who}\nTeam: ${team}\n\n${lines.join('\n')}`;
+            return `Toegevoegd als aparte telling op ${dayKey}${sourceTxt}.\nTeller: ${who}${route ? `\nTraject: ${route}` : ''}\n\n${lines.join('\n')}`;
         }
 
         function startScanner() {
@@ -3778,7 +3917,7 @@ ${lines.join('\n\n')}`;
                     const i = JSON.parse(t);
                     const payload = sanitizeQrImportPayload(i);
                     if(!payload) throw new Error('INVALID');
-                    const result = importContributionPayload(payload, picker.value, '');
+                    const result = importContributionPayload(payload, picker.value);
                     if(!result?.ok) throw new Error('IMPORT');
                     save();
                     buildUI();
@@ -3789,7 +3928,7 @@ ${lines.join('\n\n')}`;
                         showToast("Bijdrage al bekend");
                     } else {
                         alert(result.summary);
-                        showToast(result.status === 'updated' ? "Bijdrage bijgewerkt" : "Partner gesynct!");
+                        showToast(result.status === 'updated' ? "Bijdrage bijgewerkt" : "Telling toegevoegd");
                     }
                     switchTab('count');
                 } catch(e) { alert("QR fout"); }
@@ -3804,34 +3943,20 @@ ${lines.join('\n\n')}`;
 
         function buildQrWizardTargetOptions() {
             const dateInput = document.getElementById('qr-wizard-date');
-            const sel = document.getElementById('qr-wizard-target-select');
             const hint = document.getElementById('qr-wizard-hint');
-            if(!dateInput || !sel || !hint) return;
-            const dayKey = dateInput.value || picker.value || todayISO();
-            const day = storage[dayKey] || { sessions: [] };
-            const sessions = (day.sessions || []).slice().sort((a,b)=>new Date(a.start)-new Date(b.start));
-            sel.innerHTML = `<option value="">Nieuwe teamsessie op ${dayKey}</option>` +
-                sessions.map(s => `<option value="${s.id}">${sessionDisplayLabel(s, day)}</option>`).join('');
-            sel.value = '';
+            if(!dateInput || !hint) return;
+            if(!dateInput.value) dateInput.value = picker.value || todayISO();
             updateQrWizardHint();
         }
 
         function updateQrWizardHint() {
             const dateInput = document.getElementById('qr-wizard-date');
-            const sel = document.getElementById('qr-wizard-target-select');
             const hint = document.getElementById('qr-wizard-hint');
-            if(!dateInput || !sel || !hint) return;
+            if(!dateInput || !hint) return;
             const dayKey = dateInput.value || picker.value || todayISO();
-            const val = sel.value;
-            if(!val) {
-                hint.innerText =
-                    `Stap 3: de gescande telling komt in een nieuwe teamsessie op ${dayKey}.\n` +
-                    `Na toevoegen zet de app automatisch andere ruwe sessies op "niet meetellen".`;
-            } else {
-                hint.innerText =
-                    `Stap 3: de gescande telling wordt bijgeteld in sessie ${sel.selectedOptions[0]?.textContent || val}.\n` +
-                    `Na toevoegen zet de app automatisch andere ruwe sessies op "niet meetellen".`;
-            }
+            hint.innerText =
+                `Stap 3: voeg deze QR toe als aparte telling op ${dayKey}.\n` +
+                `Er wordt niets bijgeteld in bestaande tellingen.`;
         }
 
         function setQrWizardIdleState() {
@@ -3852,16 +3977,17 @@ ${lines.join('\n\n')}`;
             const btnImport = document.getElementById('qr-wizard-import-btn');
             if(!meta || !summary || !btnImport) return;
             const total = sumCounts(payload.c || {});
-            const already = isSyncAlreadyImported(payload.id);
+            const already = !!findImportedSessionLocation(payload.id, getSyncImportEntry(payload.id));
+            const sourceRoute = normalizeRouteName(payload.sourceRoute || '');
             meta.innerText =
                 `Stap 1 klaar: QR gelezen.\n` +
                 `Bron-datum: ${payload.sourceDate || payload.d || 'onbekend'}\n` +
                 `Teller: ${payload.contributorName || 'Onbekende teller'}\n` +
-                `Team: ${payload.teamLabel || '🐸'}\n` +
+                `${sourceRoute ? `Traject: ${sourceRoute}\n` : ''}` +
                 `Totaal in QR: ${total} dieren\n` +
                 `${already ? 'Status: al bekend (wordt overgeslagen)\n' : ''}` +
                 `Stap 2: controleer hieronder de inhoud.\n` +
-                `Na toevoegen zet de app automatisch ruwe sessies op niet-meetellen.`;
+                `Na toevoegen staat deze data als aparte telling in je lijst.`;
             summary.innerText = `Stap 2: inhoud van de QR\n\n${summarizeIncomingCounts(payload)}`;
             btnImport.disabled = false;
             btnImport.classList.remove('opacity-60');
@@ -3895,8 +4021,7 @@ ${lines.join('\n\n')}`;
             const payload = pendingQrImportPayload;
             if(!payload) { alert('Scan eerst een QR-code.'); return; }
             const dayKey = document.getElementById('qr-wizard-date')?.value || picker.value || todayISO();
-            const targetSessionId = document.getElementById('qr-wizard-target-select')?.value || '';
-            const result = importContributionPayload(payload, dayKey, targetSessionId);
+            const result = importContributionPayload(payload, dayKey);
             if(!result?.ok) return;
             pendingQrImportPayload = null;
             save();
@@ -3907,20 +4032,13 @@ ${lines.join('\n\n')}`;
             buildReportSessionOptions();
             buildImportTargetOptions();
             buildRouteSuggestions();
-            if(result.targetSession && result.payload?.teamRunId && (result.status === 'new' || result.status === 'updated')) {
-                if(maybeOfferReportInclusionFix(dayKey, result.targetSession.id, { auto: true })) {
-                    save();
-                    render();
-                    renderSessionAdmin();
-                }
-            }
             closeQrModal();
             if(result.status === 'already') {
                 showToast('Bijdrage al bekend (overgeslagen)');
                 alert(result.summary);
                 return;
             }
-            showToast(result.status === 'updated' ? 'Bijdrage bijgewerkt' : 'Tellingen geïmporteerd');
+            showToast(result.status === 'updated' ? 'Bijdrage bijgewerkt' : 'Telling toegevoegd');
             alert(result.summary);
             switchTab('sessions');
         }
@@ -3954,27 +4072,15 @@ ${lines.join('\n\n')}`;
         }
 
         function buildImportTargetOptions() {
-            const sel = document.getElementById('import-target-select');
             const hint = document.getElementById('import-target-hint');
-            if(!sel || !hint) return;
-            const day = ensureDay();
-            const sessions = day.sessions.slice().sort((a,b)=>new Date(a.start)-new Date(b.start));
-            sel.innerHTML = `<option value=\"\">Nieuwe teamsessie op ${picker.value}</option>` +
-                sessions.map(s => `<option value="${s.id}">${sessionDisplayLabel(s, day)}</option>`).join('');
-            sel.value = '';
+            if(!hint) return;
             updateImportTargetHint();
         }
 
         function updateImportTargetHint() {
-            const sel = document.getElementById('import-target-select');
             const hint = document.getElementById('import-target-hint');
-            if(!sel || !hint) return;
-            const val = sel.value;
-            if(!val) {
-                hint.innerText = `Tellen uit QR of deel-link komen in een nieuwe teamsessie op ${picker.value}.`;
-            } else {
-                hint.innerText = `Tellen uit QR of deel-link worden bijgeteld in sessie ${sel.selectedOptions[0].textContent}.`;
-            }
+            if(!hint) return;
+            hint.innerText = `Tellen uit QR of deel-link worden als aparte telling toegevoegd op ${picker.value}.`;
         }
 
         function switchTab(t) {
@@ -3984,7 +4090,11 @@ ${lines.join('\n\n')}`;
             document.querySelectorAll('nav button').forEach(b => b.classList.remove('active-tab'));
             const tab = document.getElementById('tab-' + t);
             if(tab) tab.classList.add('active-tab');
-            if(t==='report') { buildReportSessionOptions(); updateReport(); }
+            if(t==='report') {
+                reportMode = 'day';
+                buildReportSessionOptions();
+                updateReport();
+            }
             if(t==='sessions') { renderSessionLog(); }
             if(t==='settings') {
                 const sd = document.getElementById('sessionDate');

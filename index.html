@@ -290,47 +290,73 @@
 
         <!-- TAB 4: RAPPORT -->
         <section id="view-report" class="hidden space-y-6 text-center">
-            <div class="bg-gray-800 p-4 rounded-xl border border-emerald-500/30 space-y-3 text-left">
-                <div class="flex items-center gap-2 text-[10px] text-gray-300">
-                    <span>Telling:</span>
-                    <select id="report-session-select" class="bg-gray-700 border border-gray-600 rounded px-2 py-1 flex-1 text-left text-white" onchange="selectReportSession(this.value)"></select>
-                    <button class="text-[10px] bg-gray-700 px-2 py-1 rounded" onclick="setReportMode('session')">Per telling</button>
-                    <button class="text-[10px] bg-gray-700 px-2 py-1 rounded" onclick="setReportMode('day')">Hele dag</button>
+            <h2 class="text-xl font-bold text-emerald-400 text-center">📊 Rapport</h2>
+            <details class="settings-accordion" open>
+                <summary>
+                    <span class="font-bold text-emerald-200 text-sm">Rapport</span>
+                    <span class="text-[10px] uppercase tracking-wide text-emerald-300/80">Sessies + tekst</span>
+                </summary>
+                <div class="settings-accordion-body space-y-3 text-left">
+                    <div class="space-y-2">
+                        <div class="flex items-center justify-between gap-2 text-[10px] text-gray-300">
+                            <span class="uppercase tracking-wider text-gray-400 font-bold">Sessies in rapport</span>
+                            <div class="flex gap-2">
+                                <button class="text-[10px] bg-gray-700 px-2 py-1 rounded" onclick="setAllReportSessionsIncluded(true)">Alles</button>
+                                <button class="text-[10px] bg-gray-700 px-2 py-1 rounded" onclick="setAllReportSessionsIncluded(false)">Geen</button>
+                            </div>
+                        </div>
+                        <div id="report-session-checklist-meta" class="text-[10px] text-emerald-200"></div>
+                        <div id="report-session-checklist" class="space-y-2"></div>
+                    </div>
+                    <div id="report-text" class="bg-gray-900 p-3 rounded-lg font-mono text-left text-[11px] border border-emerald-500/30 whitespace-pre-wrap leading-relaxed"></div>
+                    <div class="grid grid-cols-1 gap-3">
+                        <button onclick="copyReport()" class="w-full bg-emerald-600 py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg active:bg-emerald-700 text-xs uppercase tracking-widest">
+                            📋 Kopieer rapport
+                        </button>
+                        <button onclick="shareReport()" class="w-full bg-purple-700 py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg active:bg-purple-800 text-xs uppercase tracking-widest">
+                            📤 Deel rapport
+                        </button>
+                        <button onclick="shareReport(true)" class="w-full bg-purple-900/70 border border-purple-400/30 py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg active:bg-purple-900 text-xs uppercase tracking-widest">
+                            📸 Deel met foto's
+                        </button>
+                        <button onclick="exportReportCSV()" class="w-full bg-indigo-600 py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg active:bg-indigo-700 text-xs uppercase tracking-widest">
+                            ⬇️ Exporteer CSV van vandaag
+                        </button>
+                    </div>
                 </div>
-                <div id="report-text" class="bg-gray-900 p-3 rounded-lg font-mono text-left text-[11px] border border-emerald-500/30 whitespace-pre-wrap leading-relaxed"></div>
-                <div class="grid grid-cols-1 gap-3">
-                    <button onclick="copyReport()" class="w-full bg-emerald-600 py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg active:bg-emerald-700 text-xs uppercase tracking-widest">
-                        📋 Kopieer rapport
-                    </button>
-                    <button onclick="shareReport()" class="w-full bg-purple-700 py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg active:bg-purple-800 text-xs uppercase tracking-widest">
-                        📤 Deel rapport
-                    </button>
-                    <button onclick="shareReport(true)" class="w-full bg-purple-900/70 border border-purple-400/30 py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg active:bg-purple-900 text-xs uppercase tracking-widest">
-                        📸 Deel met foto's
-                    </button>
-                    <button onclick="exportReportCSV()" class="w-full bg-indigo-600 py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg active:bg-indigo-700 text-xs uppercase tracking-widest">
-                        ⬇️ Exporteer CSV van vandaag
-                    </button>
+            </details>
+
+            <details class="settings-accordion">
+                <summary>
+                    <span class="font-bold text-purple-200 text-sm">Determinaties</span>
+                    <span class="text-[10px] uppercase tracking-wide text-purple-300/80">Overzicht + delen</span>
+                </summary>
+                <div class="settings-accordion-body space-y-3 text-left">
+                    <div class="flex items-center justify-between">
+                        <h3 class="font-bold text-purple-200 text-sm">Determinaties</h3>
+                        <button onclick="shareDeterminaties()" class="bg-purple-700 px-3 py-2 rounded text-[11px] font-bold uppercase tracking-widest">📤 Deel</button>
+                    </div>
+                    <div id="report-dets" class="space-y-2 text-[11px] text-gray-200"></div>
                 </div>
-            </div>
-            <div id="report-trend-card" class="hidden bg-gradient-to-br from-emerald-900/40 via-cyan-900/30 to-blue-900/30 p-4 rounded-xl border border-emerald-400/30 space-y-3 text-left">
-                <div class="flex items-center justify-between gap-2">
-                    <h3 class="font-bold text-emerald-100 text-sm">🐸 Trek-trend (per dag)</h3>
-                    <span class="text-[10px] text-emerald-200 bg-emerald-500/20 border border-emerald-300/30 px-2 py-1 rounded-full">Topdagen zichtbaar</span>
+            </details>
+
+            <details id="report-trend-card" class="settings-accordion hidden">
+                <summary>
+                    <span class="font-bold text-emerald-100 text-sm">🐸 Trektrend</span>
+                    <span class="text-[10px] uppercase tracking-wide text-emerald-200/80">Per teldag</span>
+                </summary>
+                <div class="settings-accordion-body space-y-3 text-left bg-gradient-to-br from-emerald-900/30 via-cyan-900/20 to-blue-900/20">
+                    <div class="flex items-center justify-between gap-2">
+                        <h3 class="font-bold text-emerald-100 text-sm">Trek-trend (per dag)</h3>
+                        <span class="text-[10px] text-emerald-200 bg-emerald-500/20 border border-emerald-300/30 px-2 py-1 rounded-full">Topdagen zichtbaar</span>
+                    </div>
+                    <div id="report-trend-meta" class="text-[11px] text-emerald-100"></div>
+                    <div class="overflow-x-auto no-scrollbar rounded-lg border border-emerald-500/20 bg-gray-900/40 p-2">
+                        <div id="report-trend-chart" class="min-h-[220px] flex justify-center"></div>
+                    </div>
+                    <div id="report-trend-peaks" class="flex flex-wrap gap-2 text-[10px]"></div>
                 </div>
-                <div id="report-trend-meta" class="text-[11px] text-emerald-100"></div>
-                <div class="overflow-x-auto no-scrollbar rounded-lg border border-emerald-500/20 bg-gray-900/40 p-2">
-                    <div id="report-trend-chart" class="min-h-[220px] flex justify-center"></div>
-                </div>
-                <div id="report-trend-peaks" class="flex flex-wrap gap-2 text-[10px]"></div>
-            </div>
-            <div class="bg-gray-800 p-4 rounded-xl border border-purple-500/30 space-y-3 text-left">
-                <div class="flex items-center justify-between">
-                    <h3 class="font-bold text-purple-200 text-sm">Determinaties</h3>
-                    <button onclick="shareDeterminaties()" class="bg-purple-700 px-3 py-2 rounded text-[11px] font-bold uppercase tracking-widest">📤 Deel</button>
-                </div>
-                <div id="report-dets" class="space-y-2 text-[11px] text-gray-200"></div>
-            </div>
+            </details>
         </section>
 
         <!-- TAB 6: INSTELLINGEN -->
@@ -347,23 +373,12 @@
                         <span>Data:</span>
                         <select id="qr-session-select" class="bg-gray-700 border border-gray-600 rounded px-2 py-1 flex-1 text-left text-white" onchange="generateQR();updateQrSummary();"></select>
                     </div>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    <div class="grid grid-cols-1 gap-2">
                         <div class="space-y-1">
                             <label class="text-[10px] uppercase tracking-wide text-gray-400 font-bold">Jouw naam (verplicht)</label>
                             <input id="share-contributor-name" type="text" class="bg-gray-700 border border-gray-600 rounded px-2 py-2 text-white w-full text-[12px]" placeholder="Bijv. Leia" oninput="handleShareIdentityChange()">
                         </div>
                         <div class="space-y-1">
-                            <label class="text-[10px] uppercase tracking-wide text-gray-400 font-bold">Team-afbeelding</label>
-                            <select id="share-team-label" class="bg-gray-700 border border-gray-600 rounded px-2 py-2 text-white w-full text-[12px]" onchange="handleShareIdentityChange()">
-                                <option value="🐸" selected>🐸 Kikker (standaard)</option>
-                                <option value="🦎">🦎 Salamander</option>
-                                <option value="🐢">🐢 Schildpad</option>
-                                <option value="🦉">🦉 Uil</option>
-                                <option value="🦔">🦔 Egel</option>
-                                <option value="🐍">🐍 Slang</option>
-                            </select>
-                        </div>
-                        <div class="space-y-1 md:col-span-2">
                             <label class="text-[10px] uppercase tracking-wide text-gray-400 font-bold">Traject (onthouden)</label>
                             <input id="share-route-name" type="text" class="bg-gray-700 border border-gray-600 rounded px-2 py-2 text-white w-full text-[12px]" placeholder="Bijv. Kerkstraat - Brugje - Vijver" list="route-suggestions" oninput="handleShareRouteChange(false)" onchange="handleShareRouteChange(true)">
                         </div>
@@ -371,7 +386,7 @@
                     <div id="share-identity-hint" class="text-[10px] text-cyan-200 bg-cyan-900/20 border border-cyan-500/30 rounded px-2 py-2"></div>
                     <h4 class="text-cyan-200 font-bold text-sm">Deel mijn bijdrage via link</h4>
                     <div class="text-[11px] text-gray-200 mb-2">
-                        Stuur je bijdrage door via WhatsApp, mail, ... De ontvanger krijgt eerst een wizard om te controleren en te synchroniseren.
+                        Stuur je telling door via WhatsApp, mail, ... De ontvanger krijgt eerst een wizard en voegt je data toe als aparte telling.
                     </div>
                     <button onclick="generateSyncLink()" class="w-full bg-blue-600 py-3 rounded-lg font-bold uppercase text-xs">🔗 Deel mijn bijdrage via link</button>
                     <div id="sync-link-box" class="hidden space-y-2">
@@ -386,7 +401,7 @@
                         <div id="sync-incoming-meta" class="text-[11px] text-cyan-100"></div>
                         <pre id="sync-incoming-summary" class="bg-black/30 border border-cyan-900/40 rounded p-2 text-[10px] text-cyan-100 whitespace-pre-wrap"></pre>
                         <div class="flex gap-2">
-                            <button onclick="importPendingSyncLink()" class="flex-1 bg-cyan-700 py-2 rounded text-[11px] font-bold uppercase">Voeg toe aan selectie</button>
+                            <button onclick="importPendingSyncLink()" class="flex-1 bg-cyan-700 py-2 rounded text-[11px] font-bold uppercase">Voeg als telling toe</button>
                             <button onclick="dismissPendingSyncLink()" class="bg-gray-700 px-3 py-2 rounded text-[11px] font-bold uppercase">Negeer</button>
                         </div>
                     </div>
@@ -401,22 +416,20 @@
                             <div class="font-bold text-purple-200 pt-1">Hoe?</div>
                             <div>1) Kies hierboven welke data je deelt (hele dag of 1 telling).</div>
                             <div>2) Tik op Refresh QR en toon de code.</div>
-                            <div>3) Op het andere toestel: kies “Bijtellen in”, tik “Scan QR” en scan.</div>
+                            <div>3) Op het andere toestel: tik “Scan QR”, controleer de wizard en voeg toe.</div>
                             <div class="text-purple-300 pt-1">Er worden enkel aantallen gedeeld, geen foto’s.</div>
                         </div>
                     </div>
                     <button onclick="generateQR(true)" class="w-full bg-purple-600 py-3 rounded-lg font-bold uppercase text-xs">Refresh QR</button>
                     <div class="h-px bg-purple-500/30 my-2"></div>
-                    <h4 class="text-purple-200 font-bold text-sm">Synchroniseer teamtotaal via QR</h4>
+                    <h4 class="text-purple-200 font-bold text-sm">Importeer telling via QR</h4>
                     <div class="text-[11px] text-gray-200 mb-2 space-y-1">
-                        <div><strong class="text-purple-200">Gebruik:</strong> samen tellen en nadien alle aantallen optellen.</div>
+                        <div><strong class="text-purple-200">Gebruik:</strong> voeg data van andere tellers toe aan je eigen sessielijst.</div>
                         <div>1) Kies hierboven de bron (dag of telling) en toon de QR.</div>
                         <div>2) Tik “Scan QR” en richt op de code van de andere teller.</div>
-                        <div>3) Volg de wizard: controleer inhoud, kies waar je wil bijtellen, bevestig.</div>
+                        <div>3) Volg de wizard: controleer inhoud en bevestig.</div>
                         <div class="text-purple-300">Alleen aantallen gaan mee, geen foto’s.</div>
                     </div>
-                    <label class="text-[10px] text-gray-300 font-bold uppercase">Bijtellen in</label>
-                    <select id="import-target-select" class="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-white w-full text-[12px]" onchange="updateImportTargetHint()"></select>
                     <div id="import-target-hint" class="text-[11px] text-gray-400 bg-gray-900/70 border border-gray-700 rounded px-2 py-2"></div>
                     <button onclick="startSessionScanner()" class="w-full bg-purple-600 py-3 rounded-lg font-bold uppercase text-xs">Scan QR</button>
                 </div>
@@ -586,7 +599,7 @@
                     <div>2) Start een telling en tel dieren.</div>
                     <div>3) Vul traject, weer en notities aan in het logboek.</div>
                     <div>4) Controleer rapport of trendgrafiek.</div>
-                    <div>5) Deel via rapport of synchroniseer met je team.</div>
+                    <div>5) Deel via link/QR en vink in Rapport aan welke tellingen moeten meetellen.</div>
                 </div>
             </div>
             <div class="bg-gray-800 p-4 rounded-xl border border-cyan-500/30 space-y-3">
@@ -595,20 +608,20 @@
                     <div class="bg-gray-900/60 border border-cyan-500/30 rounded p-3 space-y-1">
                         <div class="font-bold text-cyan-200">Voorbeeld 1: delen via QR (Leia, Luke, Yoda)</div>
                         <div>1) Leia, Luke en Yoda tellen elk op hun eigen telefoon.</div>
-                        <div>2) Leia wordt de verzamelaar.</div>
-                        <div>3) Luke toont zijn QR op zijn scherm. Leia opent Beheer → Delen met andere teller → Scan QR en importeert in dezelfde teamsessie.</div>
-                        <div>4) Yoda doet daarna exact hetzelfde: QR tonen, Leia scant en importeert in diezelfde teamsessie.</div>
-                        <div>5) Klaar: Leia heeft het teamtotaal. Leia deelt daarna haar teamsessie terug met Luke en Yoda (via link of QR).</div>
-                        <div>6) Luke en Yoda importeren Leia’s teamsessie. De app zet hun ruwe sessie automatisch op “niet meetellen”.</div>
+                        <div>2) Luke toont zijn QR. Leia en Yoda scannen die QR en voegen toe.</div>
+                        <div>3) Daarna toont Leia haar QR. Luke en Yoda scannen ook die.</div>
+                        <div>4) Daarna toont Yoda zijn QR. Leia en Luke scannen ook die.</div>
+                        <div>5) Iedereen heeft nu dezelfde losse tellingen in de lijst.</div>
+                        <div>6) In Rapport vinkt iedereen dezelfde tellingen aan (bijv. Leia + Luke + Yoda).</div>
                     </div>
                     <div class="bg-gray-900/60 border border-cyan-500/30 rounded p-3 space-y-1">
                         <div class="font-bold text-cyan-200">Voorbeeld 2: delen via link (Rey, Finn, Poe)</div>
                         <div>1) Rey, Finn en Poe tellen elk op hun eigen telefoon.</div>
-                        <div>2) Poe wordt de verzamelaar.</div>
-                        <div>3) Rey maakt een deel-link en stuurt die naar Poe. Finn doet hetzelfde.</div>
-                        <div>4) Poe opent elke link en importeert telkens in dezelfde teamsessie.</div>
-                        <div>5) Poe deelt daarna zijn teamsessie-link terug naar Rey en Finn.</div>
-                        <div>6) Rey en Finn importeren die teamsessie. De app zet hun ruwe sessie automatisch op “niet meetellen”.</div>
+                        <div>2) Iedereen maakt een deel-link en zet die in de WhatsApp-groep.</div>
+                        <div>3) Iedereen opent daarna alle ontvangen links.</div>
+                        <div>4) Elke import wordt als aparte telling toegevoegd (nooit bijgeteld).</div>
+                        <div>5) In Rapport vink je aan welke tellingen moeten meetellen.</div>
+                        <div>6) Als iedereen dezelfde vinkjes zet, ziet iedereen hetzelfde teamrapport.</div>
                     </div>
                     <div class="text-cyan-100 text-[12px]">
                         Belangrijk: dezelfde QR of link twee keer importeren geeft geen dubbeltelling; die bijdrage wordt automatisch overgeslagen.
@@ -665,7 +678,7 @@
             <div class="flex justify-between items-start gap-3">
                 <div>
                     <div class="text-[10px] uppercase tracking-widest text-purple-300 font-bold">QR import</div>
-                    <h3 class="text-purple-100 font-bold text-lg">Wizard: synchroniseer teamtotaal</h3>
+                    <h3 class="text-purple-100 font-bold text-lg">Wizard: telling toevoegen</h3>
                 </div>
                 <button data-qr-close="1" class="bg-black/50 text-white rounded-full w-8 h-8" onclick="closeQrModal(event)">✕</button>
             </div>
@@ -675,14 +688,13 @@
             <div id="session-reader-modal" class="rounded-lg overflow-hidden bg-black aspect-square"></div>
             <pre id="qr-wizard-summary" class="bg-black/40 border border-purple-900/40 rounded p-2 text-[10px] text-purple-100 whitespace-pre-wrap">Nog geen QR gelezen.</pre>
             <div class="space-y-2">
-                <div class="text-[10px] uppercase tracking-wider text-purple-200 font-bold">Stap 3 · Waar toevoegen?</div>
+                <div class="text-[10px] uppercase tracking-wider text-purple-200 font-bold">Stap 3 · Datum van nieuwe telling</div>
                 <input type="date" id="qr-wizard-date" class="bg-gray-700 border border-gray-600 rounded px-2 py-2 text-white w-full text-[12px]" onchange="buildQrWizardTargetOptions()">
-                <select id="qr-wizard-target-select" class="bg-gray-700 border border-gray-600 rounded px-2 py-2 text-white w-full text-[12px]" onchange="updateQrWizardHint()"></select>
                 <div id="qr-wizard-hint" class="text-[11px] text-gray-300 bg-gray-900/70 border border-gray-700 rounded px-2 py-2"></div>
             </div>
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 <button id="qr-wizard-rescan-btn" class="bg-purple-700 text-white py-2 rounded text-[11px] font-bold uppercase" onclick="restartQrWizardScan()">Scan (opnieuw)</button>
-                <button id="qr-wizard-import-btn" class="bg-emerald-700 text-white py-2 rounded text-[11px] font-bold uppercase" onclick="importQrWizardPayload()" disabled>Voeg nu toe</button>
+                <button id="qr-wizard-import-btn" class="bg-emerald-700 text-white py-2 rounded text-[11px] font-bold uppercase" onclick="importQrWizardPayload()" disabled>Voeg telling toe</button>
                 <button data-qr-close="1" class="bg-gray-700 text-white py-2 rounded text-[11px] font-bold uppercase" onclick="closeQrModal(event)">Sluit</button>
             </div>
         </div>
@@ -721,20 +733,19 @@
             <div class="flex items-start justify-between gap-3">
                 <div>
                     <div class="text-cyan-300 text-[10px] uppercase tracking-widest font-bold">Deel-link</div>
-                    <h3 class="text-cyan-100 font-bold text-lg">Wizard: synchroniseer teamtotaal</h3>
+                    <h3 class="text-cyan-100 font-bold text-lg">Wizard: telling toevoegen</h3>
                 </div>
                 <button data-sync-close="1" class="text-gray-400 hover:text-white text-lg" onclick="closeSyncWizard(event)">✕</button>
             </div>
             <div id="sync-wizard-meta" class="text-[11px] text-cyan-100 whitespace-pre-line bg-cyan-900/20 border border-cyan-500/20 rounded p-3"></div>
             <pre id="sync-wizard-summary" class="bg-black/40 border border-cyan-900/40 rounded p-3 text-[10px] text-cyan-100 whitespace-pre-wrap"></pre>
             <div class="space-y-2">
-                <div class="text-[10px] uppercase tracking-wider text-cyan-200 font-bold">Stap 3 · Waar toevoegen?</div>
+                <div class="text-[10px] uppercase tracking-wider text-cyan-200 font-bold">Stap 3 · Datum van nieuwe telling</div>
                 <input type="date" id="sync-wizard-date" class="bg-gray-700 border border-gray-600 rounded px-2 py-2 text-white w-full text-[12px]" onchange="buildSyncWizardTargetOptions()">
-                <select id="sync-wizard-target-select" class="bg-gray-700 border border-gray-600 rounded px-2 py-2 text-white w-full text-[12px]" onchange="updateSyncWizardHint()"></select>
                 <div id="sync-wizard-hint" class="text-[11px] text-gray-300 bg-gray-900/70 border border-gray-700 rounded px-2 py-2"></div>
             </div>
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                <button class="bg-cyan-700 text-white py-2 rounded text-[11px] font-bold uppercase" onclick="importPendingSyncLinkWizard()">Voeg nu toe</button>
+                <button class="bg-cyan-700 text-white py-2 rounded text-[11px] font-bold uppercase" onclick="importPendingSyncLinkWizard()">Voeg telling toe</button>
                 <button data-sync-close="1" class="bg-gray-700 text-white py-2 rounded text-[11px] font-bold uppercase" onclick="closeSyncWizard(event)">Later</button>
                 <button class="bg-red-900/60 border border-red-500/40 text-red-100 py-2 rounded text-[11px] font-bold uppercase" onclick="dismissPendingSyncLink()">Negeer</button>
             </div>
