@@ -1,10 +1,18 @@
 // Centrale versiebron voor app en service worker
-const APP_VERSION = '3.0.6';
+const APP_VERSION = '3.0.7';
 
 // Changelog voor het uitklapbare "Changes"-luik in de Info-tab.
 // Voeg nieuwe releases bovenaan toe.
 // Inhoud gebaseerd op git-geschiedenis van version.js + recente lokale wijzigingen.
 const APP_CHANGELOG = [
+    {
+        version: '3.0.7',
+        title: 'Google Analytics integratie',
+        changes: [
+            'Google Analytics toegevoegd voor inzicht in gebruik (aantallen, versies, determinaties).',
+            'Privacy-vriendelijke tracking van app-gebruik en telactiviteit.'
+        ]
+    },
     {
         version: '3.0.6',
         title: 'Rapportage verbeterd + visuele updates',

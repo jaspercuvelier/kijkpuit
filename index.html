@@ -33,6 +33,14 @@
     <script>if(typeof window.QRCode==='undefined'){window.__cdnFallbackUsed=true;document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>');}</script>
     <script src="./vendor/html5-qrcode.js"></script>
     <script>if(typeof window.Html5Qrcode==='undefined'){window.__cdnFallbackUsed=true;document.write('<script src="https://unpkg.com/html5-qrcode"><\/script>');}</script>
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-9T30TN8LPC"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-9T30TN8LPC');
+    </script>
+    <script src="./analytics.js"></script>
     <script src="./version.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Orbitron:wght@600;700&display=swap');
@@ -211,7 +219,7 @@
                     <button id="record-btn" onclick="stopTelling()" class="hidden record-btn" title="Stop telling">
                         <span id="record-dot" class="w-3 h-3 rounded-full bg-red-500 shadow-[0_0_0_6px_rgba(248,113,113,0.25)] animate-rec"></span>
                     </button>
-                    <button id="new-session-btn" onclick="startTelling()" class="bg-emerald-700 px-3 py-2 rounded text-[10px] font-bold uppercase tracking-widest flex items-center gap-1">
+                    <button id="new-session-btn" onclick="startTelling(); trackEvent('count_started');" class="bg-emerald-700 px-3 py-2 rounded text-[10px] font-bold uppercase tracking-widest flex items-center gap-1">
                         <span class="text-xs">⏺</span> Nieuwe telling
                     </button>
                 </div>
@@ -249,7 +257,7 @@
             <!-- Start/Stop controls -->
             <div id="session-controls" class="text-center p-4">
                 <div id="start-telling-container">
-                    <button id="start-telling-btn" onclick="startTelling()" class="bg-emerald-600 text-white font-bold py-4 px-8 rounded-xl text-2xl shadow-lg active:bg-emerald-700">
+                    <button id="start-telling-btn" onclick="startTelling(); trackEvent('count_started');" class="bg-emerald-600 text-white font-bold py-4 px-8 rounded-xl text-2xl shadow-lg active:bg-emerald-700">
                         Start Telling
                     </button>
                 </div>
@@ -551,8 +559,8 @@
                     </div>
                     <div class="flex gap-2">
                         <button id="det-start-session-btn" onclick="startSession(true)" class="bg-emerald-700 px-3 py-2 rounded text-[10px] font-bold uppercase tracking-widest">Start telling</button>
-                        <button id="det-loose-btn" onclick="startLooseDetermination()" class="bg-amber-700 px-3 py-2 rounded text-[10px] font-bold uppercase tracking-widest hidden">Start losse determinatie</button>
-                        <button id="det-new-btn" onclick="beginDetermination()" class="bg-purple-700 px-3 py-2 rounded text-[10px] font-bold uppercase tracking-widest">Nieuwe determinatie</button>
+                        <button id="det-loose-btn" onclick="startLooseDetermination(); trackEvent('determination_started', { type: 'loose' });" class="bg-amber-700 px-3 py-2 rounded text-[10px] font-bold uppercase tracking-widest hidden">Start losse determinatie</button>
+                        <button id="det-new-btn" onclick="beginDetermination(); trackEvent('determination_started', { type: 'guided' });" class="bg-purple-700 px-3 py-2 rounded text-[10px] font-bold uppercase tracking-widest">Nieuwe determinatie</button>
                     </div>
                 </div>
 
