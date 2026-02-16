@@ -607,6 +607,17 @@
             <button class="install-app-btn hidden w-full bg-emerald-700 text-white px-3 py-2 rounded text-[11px] font-bold uppercase tracking-widest">
                 📲 Installeer app
             </button>
+            <details id="app-changes-card" class="settings-accordion">
+                <summary>
+                    <span class="font-bold text-amber-200 text-sm">🧾 Changes</span>
+                    <span class="text-[10px] uppercase tracking-wide text-amber-300/80">Versiegeschiedenis</span>
+                </summary>
+                <div class="settings-accordion-body space-y-3 text-left">
+                    <div id="app-changes-current" class="text-[11px] text-amber-100 bg-amber-900/20 border border-amber-500/25 rounded px-2 py-2"></div>
+                    <div id="app-changes-list" class="space-y-2 text-[12px]"></div>
+                    <div class="text-[10px] text-gray-400">Historiek per subversie (inclusief oudere lijnen).</div>
+                </div>
+            </details>
             <div class="bg-gray-800 p-4 rounded-xl border border-emerald-500/30 space-y-3">
                 <h3 class="font-bold text-emerald-300 text-sm">⚡ Snelle workflow (avondtelling)</h3>
                 <div class="text-gray-200 text-[13px] leading-relaxed space-y-1">

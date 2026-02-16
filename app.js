@@ -3344,9 +3344,49 @@ function openDetermination(id) {
             renderReportSessionChecklist();
             const excludedSessions = (data.sessions || []).filter(s => !sessionIncludedInReports(s));
             const targetCounts = reportMode === 'session' && session ? (session.counts || {}) : getReportCountsForDay(data);
+            const sessionsToShow = reportMode === 'session' && session ? [session] : reportSessions;
+
+            const routeSummaries = [];
+            const routeSeen = new Set();
+            const weatherSummaries = [];
+            const weatherSeen = new Set();
+
+            const addRouteSummary = value => {
+                const route = normalizeRouteName(value || '');
+                if(!route) return;
+                const key = route.toLowerCase();
+                if(routeSeen.has(key)) return;
+                routeSeen.add(key);
+                routeSummaries.push(route);
+            };
+
+            const addWeatherSummary = weather => {
+                if(!weather) return;
+                const summary = weatherSummaryText(weather, ' • ', true);
+                const key = summary.toLowerCase();
+                if(weatherSeen.has(key)) return;
+                weatherSeen.add(key);
+                weatherSummaries.push(summary);
+            };
+
+            sessionsToShow.forEach(s => {
+                addRouteSummary(s.routeName || '');
+                addWeatherSummary(s.weather);
+            });
+
+            if(!weatherSummaries.length) {
+                const fallbackWeather = (reportMode === 'session' ? session?.weather : data.weather) || session?.weather;
+                addWeatherSummary(fallbackWeather);
+            }
+
+            const showRoutePerSession = reportMode === 'session' || routeSummaries.length > 1;
+            const showWeatherPerSession = reportMode === 'session' || weatherSummaries.length > 1;
+
             let txt = `🐸 *OVERZET-UPDATE - ${d}*\n\n`;
-            const w = (reportMode === 'session' ? session?.weather : data.weather) || session?.weather;
-            if(w) txt += `*Weer:* ${weatherSummaryText(w, ', ', true)}\n\n`;
+            if(weatherSummaries.length === 1) txt += `*Weer:* ${weatherSummaries[0]}\n\n`;
+            if(weatherSummaries.length > 1) txt += `*Weer:* ${weatherSummaries.join(' | ')}\n\n`;
+            if(reportMode === 'day' && routeSummaries.length === 1) txt += `*Traject:* ${routeSummaries[0]}\n\n`;
+            if(reportMode === 'day' && routeSummaries.length > 1) txt += `*Trajecten:* ${routeSummaries.join(' | ')}\n\n`;
             const all = [...SPECIES, ...(data.custom || [])]; let h = false;
             all.forEach(s => {
                 const pl = targetCounts[`${s.id}_p_l`]||0, pd = targetCounts[`${s.id}_p_d`]||0;
@@ -3363,16 +3403,16 @@ function openDetermination(id) {
                 if(session.includeInReports === false) txt += `\n⚠️ Deze sessie staat op "niet meetellen in rapport".\n`;
             }
             if(reportMode === 'day' && data.notes) txt += `\n📝 *Nota:* ${data.notes}\n`;
-            const sessionsToShow = reportMode === 'session' && session ? [session] : reportSessions;
             if(sessionsToShow.length) {
                 txt += `\n⏱️ *Tellingen:*\n`;
                 sessionsToShow.sort((a,b)=>new Date(a.start)-new Date(b.start)).forEach(s => {
                     const total = sumCounts(s.counts);
-                    const wtxt = s.weather ? ` | ${weatherSummaryText(s.weather, ' • ', true)}` : '';
-                    const route = s.routeName ? ` | 🚶‍♂️ ${s.routeName}` : '';
+                    const weatherTxt = showWeatherPerSession && s.weather ? ` | ${weatherSummaryText(s.weather, ' • ', true)}` : '';
+                    const routeName = normalizeRouteName(s.routeName || '');
+                    const routeTxt = showRoutePerSession && routeName ? ` | 🚶‍♂️ ${routeName}` : '';
                     const contributors = sessionContributorNames(s);
                     const who = contributors ? ` | 👤 ${contributors}` : '';
-                    txt += `  - ${sessionDisplayLabel(s, data)}: ${total} stuks${route}${who}${wtxt}\n`;
+                    txt += `  - ${sessionDisplayLabel(s, data)}: ${total} stuks${routeTxt}${who}${weatherTxt}\n`;
                 });
                 if(reportMode === 'day' && excludedSessions.length) {
                     txt += `\n⚠️ ${excludedSessions.length} sessie(s) tellen niet mee in dit rapport.\n`;
@@ -5090,6 +5130,37 @@ ${lines.join('\n\n')}`;
             hint.innerText = `Data uit QR of deel-link wordt als aparte telling(en) toegevoegd op ${picker.value}.`;
         }
 
+        function renderAppChanges() {
+            const current = document.getElementById('app-changes-current');
+            const list = document.getElementById('app-changes-list');
+            if(!current || !list) return;
+
+            current.innerText = `Huidige appversie: v${APP_VERSION}`;
+
+            const changes = (typeof APP_CHANGELOG !== 'undefined' && Array.isArray(APP_CHANGELOG)) ? APP_CHANGELOG : [];
+            if(!changes.length) {
+                list.innerHTML = '<div class="text-[11px] text-gray-500">Nog geen wijzigingen geregistreerd.</div>';
+                return;
+            }
+
+            list.innerHTML = changes.map(entry => {
+                const version = typeof entry?.version === 'string' && entry.version.trim() ? entry.version.trim() : 'Onbekende versie';
+                const title = typeof entry?.title === 'string' && entry.title.trim() ? entry.title.trim() : 'Wijzigingen';
+                const items = Array.isArray(entry?.changes) ? entry.changes.filter(Boolean) : [];
+                const rows = items.map(item => `<li>${item}</li>`).join('');
+                return `
+                    <div class="bg-gray-900/60 border border-amber-500/20 rounded-lg px-3 py-2 space-y-1.5">
+                        <div class="flex items-center justify-between gap-2">
+                            <span class="text-[10px] uppercase tracking-wider text-amber-300 font-bold">v${version}</span>
+                            <span class="text-[10px] text-gray-400">release notes</span>
+                        </div>
+                        <div class="text-[12px] font-bold text-amber-100">${title}</div>
+                        ${rows ? `<ul class="list-disc ml-4 text-[11px] text-gray-200 space-y-1">${rows}</ul>` : '<div class="text-[11px] text-gray-400">Geen details.</div>'}
+                    </div>
+                `;
+            }).join('');
+        }
+
         function switchTab(t) {
             currentTab = t;
             document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
@@ -5124,6 +5195,7 @@ ${lines.join('\n\n')}`;
                 renderDeterminationUI();
                 renderDeterminationList();
             }
+            if(t==='info') renderAppChanges();
             refreshHeaderSelectorVisibility();
         }
 
@@ -5156,6 +5228,7 @@ ${lines.join('\n\n')}`;
             updateContributorInputsFromProfile();
             handleShareIdentityChange(false);
             handleIncomingSyncFromUrl();
+            renderAppChanges();
             const trendCard = document.getElementById('report-trend-card');
             if(trendCard && trendCard.dataset.headerVisibilityBound !== '1') {
                 trendCard.addEventListener('toggle', refreshHeaderSelectorVisibility);
