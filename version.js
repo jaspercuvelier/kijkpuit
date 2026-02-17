@@ -1,10 +1,21 @@
 // Centrale versiebron voor app en service worker
-const APP_VERSION = '3.0.7';
+const APP_VERSION = '3.1.0';
 
 // Changelog voor het uitklapbare "Changes"-luik in de Info-tab.
 // Voeg nieuwe releases bovenaan toe.
 // Inhoud gebaseerd op git-geschiedenis van version.js + recente lokale wijzigingen.
 const APP_CHANGELOG = [
+    {
+        version: '3.1.0',
+        title: 'Grote UX-update: Delen & instellingen',
+        changes: [
+            'Vereenvoudigde navigatie: "Geschiedenis" heet nu "Sessies".',
+            'Vernieuwde "Delen"-tab: Alles op één plek (Details wissen, Samen Tellen, Rapport delen).',
+            'Sessie-details (weer, route, notities) verplaatst naar de deel-flow voor vlotter gebruik.',
+            'Opkuis instellingen: Geavanceerde opties standaard verborgen (ontwikkelaarsmodus).',
+            'Visuele update teller: Duidelijker onderscheid tussen levend en dood.'
+        ]
+    },
     {
         version: '3.0.7',
         title: 'Google Analytics integratie',

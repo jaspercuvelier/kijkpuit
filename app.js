@@ -1,10 +1,53 @@
 document.title = `Paddentrek Teller Pro ${APP_VERSION}`;
 document.getElementById('app-version-display').innerText = APP_VERSION;
-document.getElementById('pwa-status').onclick = () => alert('Groen bolletje = app volledig beschikbaar (ook offline). Rood = service worker fout, herlaad of check verbinding. Geel/grijs = bezig met laden of update.');
+document.getElementById('pwa-status').onclick = handleVersionTap;
 let deferredInstallPrompt = null;
 const installBtns = Array.from(document.querySelectorAll('.install-app-btn'));
 const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
 const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+
+// --- DEV MODE STATE ---
+let devMode = false;
+let versionTapCount = 0;
+let versionTapTimer = null;
+
+function initDevMode() {
+    devMode = localStorage.getItem('paddentrek_dev_mode') === 'true';
+    updateDevModeUI();
+}
+
+function handleVersionTap() {
+    versionTapCount++;
+    if (versionTapTimer) clearTimeout(versionTapTimer);
+
+    versionTapTimer = setTimeout(() => {
+        versionTapCount = 0;
+    }, 2000);
+
+    if (versionTapCount === 5) {
+        toggleDevMode();
+        versionTapCount = 0;
+    }
+}
+
+function toggleDevMode() {
+    devMode = !devMode;
+    localStorage.setItem('paddentrek_dev_mode', devMode);
+    updateDevModeUI();
+    showToast(devMode ? "👨‍💻 Developer Mode: AAN" : "👨‍💻 Developer Mode: UIT");
+}
+
+function updateDevModeUI() {
+    const advancedContainer = document.getElementById('advanced-settings-details');
+    if (advancedContainer) {
+        if (devMode) {
+            advancedContainer.classList.remove('hidden');
+        } else {
+            advancedContainer.classList.add('hidden');
+            advancedContainer.removeAttribute('open');
+        }
+    }
+}
 
 // Track app open
 trackEvent('app_open', {
@@ -1591,28 +1634,71 @@ function buildUI() {
 }
 
 function renderCard(s, custom = false) {
-    const liveKeys = s.hasAmplexus ? ['p_l', 'm_l', 'v_l', 'o_l'] : ['m_l', 'v_l', 'o_l'];
+    // Determine image source
+    let imgHTML = '';
+    if (s.image) {
+        imgHTML = `<img src="${s.image}" class="w-12 h-12 rounded object-cover border border-emerald-500/30">`;
+    } else {
+        imgHTML = `<div class="text-3xl">${s.icon || '🐸'}</div>`;
+    }
+
+    const nameDisplay = custom ?
+        `<span class="font-bold text-emerald-200">${s.name}</span> <span class="text-[10px] text-emerald-400 bg-emerald-900/30 px-1.5 py-0.5 rounded border border-emerald-500/20 uppercase tracking-wider">Eigen</span>` :
+        `<span class="font-bold text-gray-100">${s.name}</span>`;
+
+    // Visual zones: Green tint for live, Red tint for dead
     return `
-                <div class="bg-gray-800 p-4 rounded-xl shadow-lg border-l-4 border-${s.color}-500 mb-6 transition-all">
-                    <h2 class="text-sm font-bold mb-3 flex justify-between items-center text-white">
-                        ${s.name} ${custom ? '<span class="text-[8px] opacity-40 italic">EXTRA</span>' : ''}
-                        <span class="text-[9px] bg-black/40 px-2 py-1 rounded">TOT: <span id="tot-${s.id}" class="text-white font-bold">0</span></span>
-                    </h2>
-                    <div class="space-y-3">
-                        <div class="grid grid-cols-2 gap-4">
-                            <div class="space-y-1">
-                                <p class="text-[8px] text-emerald-400 font-bold uppercase tracking-widest italic">Levend</p>
-                                ${liveKeys.map(k => btn(s.id, k, s.color, k === 'p_l' ? livePairLabel() : iconLabel(k, false))).join('')}
-                            </div>
-                            <div class="space-y-1">
-                                <p class="text-[8px] text-red-500 font-bold uppercase tracking-widest italic">Dood</p>
-                                ${s.hasAmplexus ? btn(s.id, 'p_d', 'red', deadPairLabel(), true) : ''}
-                                ${['m_d', 'v_d', 'o_d'].map(k => btn(s.id, k, 'red', iconLabel(k, true), true)).join('')}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `;
+    <div class="bg-gray-800 rounded-xl p-3 shadow-lg border border-gray-700 w-full mb-4">
+        <div class="flex items-center gap-3 mb-3 border-b border-gray-700 pb-2">
+            ${imgHTML}
+            <div class="flex-1 leading-tight">
+                ${nameDisplay}
+                <div class="text-[10px] text-gray-400 uppercase tracking-widest mt-0.5">${s.latin || ''}</div>
+            </div>
+            <div class="text-[9px] bg-black/40 px-2 py-1 rounded text-gray-400">
+                TOT: <span id="tot-${s.id}" class="text-white font-bold">0</span>
+            </div>
+        </div>
+        
+        <div class="grid grid-cols-2 gap-3">
+            <!-- LEVEND ZONE -->
+            <div class="space-y-2 bg-emerald-900/10 p-2 rounded-lg border border-emerald-500/10">
+                <div class="text-[10px] text-emerald-400 font-bold text-center uppercase tracking-widest mb-1 opacity-80">Levend</div>
+                
+                ${renderCounterRow(s.id, 'pair_live', 'Paar', 'live')}
+                ${renderCounterRow(s.id, 'm_live', 'Man', 'live')}
+                ${renderCounterRow(s.id, 'f_live', 'Vrouw', 'live')}
+                ${renderCounterRow(s.id, 'u_live', 'Onb', 'live')}
+            </div>
+
+            <!-- DOOD ZONE -->
+            <div class="space-y-2 bg-red-900/10 p-2 rounded-lg border border-red-500/10">
+                <div class="text-[10px] text-red-400 font-bold text-center uppercase tracking-widest mb-1 opacity-80">Dood</div>
+                
+                ${renderCounterRow(s.id, 'pair_dead', 'Paar', 'dead')}
+                ${renderCounterRow(s.id, 'm_dead', 'Man', 'dead')}
+                ${renderCounterRow(s.id, 'f_dead', 'Vrouw', 'dead')}
+                ${renderCounterRow(s.id, 'u_dead', 'Onb', 'dead')}
+            </div>
+        </div>
+    </div>`;
+}
+
+function renderCounterRow(speciesId, key, label, type) {
+    const isDead = type === 'dead';
+    const btnColorDelta = isDead ? 'bg-red-900/60 hover:bg-red-700' : 'bg-emerald-600/80 hover:bg-emerald-500';
+    const id = `${speciesId}_${key}`;
+    const valId = `val_${id}`;
+
+    return `
+    <div class="flex items-center justify-between bg-gray-900/50 rounded-lg p-1">
+        <button onclick="mod('${id}', -1, event)" class="w-8 h-8 rounded bg-gray-800 text-gray-400 hover:text-white flex items-center justify-center font-bold text-lg active:scale-90 transition-transform">-</button>
+        <div class="flex flex-col items-center">
+            <span id="${valId}" class="text-xl font-bold text-white font-mono leading-none">0</span>
+            <span class="text-[9px] text-gray-500 uppercase tracking-widest">${label}</span>
+        </div>
+        <button onclick="mod('${id}', 1, event)" class="w-12 h-10 rounded ${btnColorDelta} text-white flex items-center justify-center font-bold text-xl shadow-lg active:scale-95 transition-transform counter-btn">+</button>
+    </div>`;
 }
 
 function livePairLabel() {
@@ -3345,6 +3431,60 @@ function renderReportTrend() {
     refreshHeaderSelectorVisibility();
 }
 
+function getReportTargetSession() {
+    const d = picker.value;
+    const data = ensureDay(d);
+    const sel = document.getElementById('report-session-select');
+    // Try explicit selection first
+    if (sel && sel.value) return data.sessions.find(s => s.id === sel.value);
+
+    // Then view mode
+    if (reportMode === 'session' && viewedSessionId) return data.sessions.find(s => s.id === viewedSessionId);
+
+    // In day mode, default to latest session for editing
+    return getLatestSession(data);
+}
+
+function updateReportSessionRoute(val) {
+    const s = getReportTargetSession();
+    if (!s) return;
+    updateRoute(s.id, val);
+    updateReport();
+}
+
+function updateReportSessionNotes(val) {
+    const s = getReportTargetSession();
+    if (!s) return;
+    updateSessionNotes(s.id, val);
+    updateReport();
+}
+
+function updateReportSessionInputs(session) {
+    const routeInp = document.getElementById('report-session-route');
+    const notesInp = document.getElementById('report-session-notes');
+    const weatherDiv = document.getElementById('report-session-weather');
+
+    if (session) {
+        if (routeInp) {
+            routeInp.disabled = false;
+            routeInp.value = session.routeName || '';
+        }
+        if (notesInp) {
+            notesInp.disabled = false;
+            notesInp.value = session.notes || '';
+        }
+        if (weatherDiv) {
+            weatherDiv.innerHTML = session.weather
+                ? (typeof weatherSummaryText === 'function' ? weatherSummaryText(session.weather, ' • ', true) : 'Weerdata beschikbaar')
+                : '<span class="italic opacity-50">Geen weerdata (start sessie om te laden)</span>';
+        }
+    } else {
+        if (routeInp) { routeInp.disabled = true; routeInp.value = ''; }
+        if (notesInp) { notesInp.disabled = true; notesInp.value = ''; }
+        if (weatherDiv) weatherDiv.innerText = '-';
+    }
+}
+
 function updateReport() {
     const d = picker.value; const data = ensureDay(d);
     const sel = document.getElementById('report-session-select');
@@ -3355,6 +3495,10 @@ function updateReport() {
     const excludedSessions = (data.sessions || []).filter(s => !sessionIncludedInReports(s));
     const targetCounts = reportMode === 'session' && session ? (session.counts || {}) : getReportCountsForDay(data);
     const sessionsToShow = reportMode === 'session' && session ? [session] : reportSessions;
+
+    // Update the editor UI in the Delen tab
+    const editSession = session || (reportSessions.length === 1 ? reportSessions[0] : getLatestSession(data));
+    updateReportSessionInputs(editSession);
 
     const routeSummaries = [];
     const routeSeen = new Set();

@@ -1,10 +1,13 @@
 <!DOCTYPE html>
 <html lang="nl">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="keywords" content="paddentrek, paddenoverzet, amfibieën tellen, vrijwilligers natuurpunt, paddenschermen, kikkers, salamanders, trekperiode, veldwerk, 2026">
-    <meta name="description" content="Vrijwilligersapp voor paddentrek 2026: tel en registreer amfibieën, beheer tellingen en routes, deel rapporten en QR-export met je team.">
+    <meta name="keywords"
+        content="paddentrek, paddenoverzet, amfibieën tellen, vrijwilligers natuurpunt, paddenschermen, kikkers, salamanders, trekperiode, veldwerk, 2026">
+    <meta name="description"
+        content="Vrijwilligersapp voor paddentrek 2026: tel en registreer amfibieën, beheer tellingen en routes, deel rapporten en QR-export met je team.">
     <meta name="robots" content="index,follow">
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff">
     <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0f172a">
@@ -12,96 +15,304 @@
     <meta property="og:locale" content="nl_NL">
     <meta property="og:type" content="website">
     <meta property="og:title" content="Paddentrek Teller Pro">
-    <meta property="og:description" content="Sluit aan bij de paddentrek: tel en red amfibieën, houd tellingen bij en deel rapporten.">
+    <meta property="og:description"
+        content="Sluit aan bij de paddentrek: tel en red amfibieën, houd tellingen bij en deel rapporten.">
     <meta property="og:image" content="/icons/icon-512.png">
     <meta property="og:image:alt" content="Kikkerpictogram van de Paddentrek app">
     <meta property="og:site_name" content="Paddentrek Teller Pro">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="Paddentrek Teller Pro">
-    <meta name="twitter:description" content="Vrijwilligersapp voor paddentrek en paddenoverzet: tel, registreer, deel.">
+    <meta name="twitter:description"
+        content="Vrijwilligersapp voor paddentrek en paddenoverzet: tel, registreer, deel.">
     <meta name="twitter:image" content="/icons/icon-512.png">
     <link rel="apple-touch-icon" href="/icons/icon-192.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <title>Paddentrek Teller Pro</title>
     <link rel="manifest" href="manifest.webmanifest">
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext y='50' font-size='48'%3E🐸%3C/text%3E%3C/svg%3E">
+    <link rel="icon"
+        href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext y='50' font-size='48'%3E🐸%3C/text%3E%3C/svg%3E">
     <!-- Local-first libraries; falls back to CDN if local vendor files are missing -->
     <script src="./vendor/tailwindcss.cdn.js"></script>
-    <script>if(!window.tailwind){window.__cdnFallbackUsed=true;document.write('<script src="https://cdn.tailwindcss.com"><\/script>');}</script>
+    <script>if (!window.tailwind) { window.__cdnFallbackUsed = true; document.write('<script src="https://cdn.tailwindcss.com"><\/script>'); }</script>
     <script src="./vendor/QRCode.js"></script>
-    <script>if(typeof window.QRCode==='undefined'){window.__cdnFallbackUsed=true;document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>');}</script>
+    <script>if (typeof window.QRCode === 'undefined') { window.__cdnFallbackUsed = true; document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>'); }</script>
     <script src="./vendor/html5-qrcode.js"></script>
-    <script>if(typeof window.Html5Qrcode==='undefined'){window.__cdnFallbackUsed=true;document.write('<script src="https://unpkg.com/html5-qrcode"><\/script>');}</script>
+    <script>if (typeof window.Html5Qrcode === 'undefined') { window.__cdnFallbackUsed = true; document.write('<script src="https://unpkg.com/html5-qrcode"><\/script>'); }</script>
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-9T30TN8LPC"></script>
     <script>
-      window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
-      gtag('js', new Date());
-      gtag('config', 'G-9T30TN8LPC');
+        window.dataLayer = window.dataLayer || [];
+        function gtag() { dataLayer.push(arguments); }
+        gtag('js', new Date());
+        gtag('config', 'G-9T30TN8LPC');
     </script>
     <script src="./analytics.js"></script>
     <script src="./version.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Orbitron:wght@600;700&display=swap');
-        body { font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; overflow-x: hidden; }
-        .active-tab { border-bottom: 3px solid #10b981; color: #10b981; }
-        .counter-btn { transition: transform 0.1s active; position: relative; overflow: hidden; }
-        .counter-btn:active { transform: scale(0.95); }
-        .minus-btn { font-size: 0.8rem; }
-        ::-webkit-scrollbar { display: none; }
-        .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
-        #canvas-fx { position: fixed; top: 0; left: 0; pointer-events: none; z-index: 100; }
-        .no-scrollbar::-webkit-scrollbar { display: none; }
-        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        #update-btn { z-index: 120; }
-        @keyframes recPulse { 0% { transform: scale(0.9); opacity: 0.6; } 50% { transform: scale(1.1); opacity: 1; } 100% { transform: scale(0.9); opacity: 0.6; } }
-        .animate-rec { animation: recPulse 1s infinite; }
-        .record-btn { width: 34px; height: 34px; border-radius: 9999px; border: 1px solid rgba(248,113,113,0.5); background: rgba(248,113,113,0.12); display: inline-flex; align-items: center; justify-content: center; }
-        .record-btn:active { transform: scale(0.96); }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            -webkit-tap-highlight-color: transparent;
+            overflow-x: hidden;
+        }
+
+        .active-tab {
+            border-bottom: 3px solid #10b981;
+            color: #10b981;
+        }
+
+        .counter-btn {
+            transition: transform 0.1s active;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .counter-btn:active {
+            transform: scale(0.95);
+        }
+
+        .minus-btn {
+            font-size: 0.8rem;
+        }
+
+        ::-webkit-scrollbar {
+            display: none;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        #canvas-fx {
+            position: fixed;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+            z-index: 100;
+        }
+
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        #update-btn {
+            z-index: 120;
+        }
+
+        @keyframes recPulse {
+            0% {
+                transform: scale(0.9);
+                opacity: 0.6;
+            }
+
+            50% {
+                transform: scale(1.1);
+                opacity: 1;
+            }
+
+            100% {
+                transform: scale(0.9);
+                opacity: 0.6;
+            }
+        }
+
+        .animate-rec {
+            animation: recPulse 1s infinite;
+        }
+
+        .record-btn {
+            width: 34px;
+            height: 34px;
+            border-radius: 9999px;
+            border: 1px solid rgba(248, 113, 113, 0.5);
+            background: rgba(248, 113, 113, 0.12);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .record-btn:active {
+            transform: scale(0.96);
+        }
+
         /* Emojis en letters */
-        .icon-lg { font-size: 18px; line-height: 1; display: inline-block; color: #fff; vertical-align: -3px; }
-        .icon-img { width: 24px; height: 24px; display: inline-block; vertical-align: -4px; }
-        .brand-title { font-family: 'Orbitron', 'Inter', sans-serif; letter-spacing: 0.08em; text-transform: uppercase; }
+        .icon-lg {
+            font-size: 18px;
+            line-height: 1;
+            display: inline-block;
+            color: #fff;
+            vertical-align: -3px;
+        }
+
+        .icon-img {
+            width: 24px;
+            height: 24px;
+            display: inline-block;
+            vertical-align: -4px;
+        }
+
+        .brand-title {
+            font-family: 'Orbitron', 'Inter', sans-serif;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+
         /* Determinatie checkboxes duidelijk zichtbaar, ook zonder Tailwind accent */
-        .checkbox-det { width:16px; height:16px; border:1px solid #34d399; border-radius:4px; accent-color:#10b981; background:#0f172a; }
-        .det-result-banner { background: linear-gradient(135deg,#10b981,#22d3ee); color:#0b1a13; padding:12px 14px; border-radius:12px; font-weight:800; font-size:15px; text-transform:uppercase; letter-spacing:0.02em; box-shadow:0 8px 24px rgba(16,185,129,0.25); }
-        .det-thumb img { border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,0.35); }
-        .det-question-wrap { display:flex; flex-direction:column; align-items:center; text-align:center; }
-        .det-modal-backdrop { position:fixed; inset:0; background:rgba(0,0,0,0.7); backdrop-filter:blur(4px); z-index:300; display:flex; align-items:center; justify-content:center; }
-        .det-modal-card { background:#0f172a; border:1px solid rgba(16,185,129,0.35); border-radius:20px; padding:18px; max-width:420px; width:90%; box-shadow:0 20px 60px rgba(0,0,0,0.5); text-align:center; }
-        .rarity-pill { display:inline-block; padding:4px 10px; border-radius:9999px; font-size:11px; font-weight:700; }
-        .brand-wrap { display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap; }
-        .brand-sub { white-space: nowrap; }
-        .settings-accordion { background:#1f2937; border:1px solid rgba(75,85,99,0.7); border-radius:14px; overflow:hidden; }
-        .settings-accordion > summary { list-style:none; cursor:pointer; display:flex; align-items:center; justify-content:space-between; gap:10px; padding:12px 14px; background:linear-gradient(180deg, rgba(17,24,39,0.95), rgba(31,41,55,0.95)); }
-        .settings-accordion > summary::-webkit-details-marker { display:none; }
-        .settings-accordion > summary::after { content:'▸'; color:#9ca3af; font-size:12px; transition:transform 0.18s ease; }
-        .settings-accordion[open] > summary::after { transform:rotate(90deg); }
-        .settings-accordion-body { padding:12px 14px 14px 14px; border-top:1px solid rgba(75,85,99,0.45); }
+        .checkbox-det {
+            width: 16px;
+            height: 16px;
+            border: 1px solid #34d399;
+            border-radius: 4px;
+            accent-color: #10b981;
+            background: #0f172a;
+        }
+
+        .det-result-banner {
+            background: linear-gradient(135deg, #10b981, #22d3ee);
+            color: #0b1a13;
+            padding: 12px 14px;
+            border-radius: 12px;
+            font-weight: 800;
+            font-size: 15px;
+            text-transform: uppercase;
+            letter-spacing: 0.02em;
+            box-shadow: 0 8px 24px rgba(16, 185, 129, 0.25);
+        }
+
+        .det-thumb img {
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+        }
+
+        .det-question-wrap {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+        }
+
+        .det-modal-backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(4px);
+            z-index: 300;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .det-modal-card {
+            background: #0f172a;
+            border: 1px solid rgba(16, 185, 129, 0.35);
+            border-radius: 20px;
+            padding: 18px;
+            max-width: 420px;
+            width: 90%;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+            text-align: center;
+        }
+
+        .rarity-pill {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 9999px;
+            font-size: 11px;
+            font-weight: 700;
+        }
+
+        .brand-wrap {
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+            flex-wrap: wrap;
+        }
+
+        .brand-sub {
+            white-space: nowrap;
+        }
+
+        .settings-accordion {
+            background: #1f2937;
+            border: 1px solid rgba(75, 85, 99, 0.7);
+            border-radius: 14px;
+            overflow: hidden;
+        }
+
+        .settings-accordion>summary {
+            list-style: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 12px 14px;
+            background: linear-gradient(180deg, rgba(17, 24, 39, 0.95), rgba(31, 41, 55, 0.95));
+        }
+
+        .settings-accordion>summary::-webkit-details-marker {
+            display: none;
+        }
+
+        .settings-accordion>summary::after {
+            content: '▸';
+            color: #9ca3af;
+            font-size: 12px;
+            transition: transform 0.18s ease;
+        }
+
+        .settings-accordion[open]>summary::after {
+            transform: rotate(90deg);
+        }
+
+        .settings-accordion-body {
+            padding: 12px 14px 14px 14px;
+            border-top: 1px solid rgba(75, 85, 99, 0.45);
+        }
+
         #main-nav button {
             display: inline-flex;
             align-items: center;
             justify-content: center;
             gap: 6px;
         }
-        #main-nav .tab-icon { font-size: 12px; line-height: 1; }
-        #main-nav .tab-text { line-height: 1.1; white-space: nowrap; }
+
+        #main-nav .tab-icon {
+            font-size: 12px;
+            line-height: 1;
+        }
+
+        #main-nav .tab-text {
+            line-height: 1.1;
+            white-space: nowrap;
+        }
+
         #quick-session-row {
-            background: linear-gradient(135deg, rgba(16,185,129,0.14), rgba(6,95,70,0.18));
-            border: 1px solid rgba(16,185,129,0.35);
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.14), rgba(6, 95, 70, 0.18));
+            border: 1px solid rgba(16, 185, 129, 0.35);
             border-radius: 12px;
             padding: 8px 10px;
             display: flex;
             flex-direction: column;
             gap: 6px;
         }
+
         #quick-session-row .quick-header {
             display: flex;
             align-items: center;
             justify-content: space-between;
             gap: 8px;
         }
+
         #quick-session-row .quick-label {
             font-size: 10px;
             font-weight: 800;
@@ -109,6 +320,7 @@
             text-transform: uppercase;
             color: #bbf7d0;
         }
+
         #quick-session-row .quick-meta {
             font-size: 10px;
             color: #a7f3d0;
@@ -118,21 +330,27 @@
             text-overflow: ellipsis;
             white-space: nowrap;
         }
+
         #global-session-select {
             width: 100%;
-            background: rgba(15,23,42,0.92);
-            border: 1px solid rgba(16,185,129,0.4);
+            background: rgba(15, 23, 42, 0.92);
+            border: 1px solid rgba(16, 185, 129, 0.4);
             color: #ecfdf5;
             border-radius: 10px;
             padding: 7px 10px;
             font-size: 12px;
             font-weight: 700;
         }
+
         .header-selectors-hidden {
             display: none !important;
         }
+
         @media (max-width: 900px) {
-            body { padding-bottom: calc(88px + env(safe-area-inset-bottom)) !important; }
+            body {
+                padding-bottom: calc(88px + env(safe-area-inset-bottom)) !important;
+            }
+
             #main-nav {
                 position: fixed !important;
                 left: 0;
@@ -146,8 +364,9 @@
                 white-space: normal;
                 border-top: 1px solid #374151;
                 border-bottom: none;
-                box-shadow: 0 -8px 24px rgba(0,0,0,0.4);
+                box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.4);
             }
+
             #main-nav button {
                 min-height: 58px;
                 padding: 8px 2px calc(8px + env(safe-area-inset-bottom));
@@ -160,28 +379,59 @@
                 text-transform: none;
                 letter-spacing: normal;
             }
-            #main-nav .tab-icon { font-size: 12px; }
-            #main-nav .tab-text { font-size: 9px; white-space: normal; text-align: center; }
+
+            #main-nav .tab-icon {
+                font-size: 12px;
+            }
+
+            #main-nav .tab-text {
+                font-size: 9px;
+                white-space: normal;
+                text-align: center;
+            }
+
             #main-nav .active-tab {
                 border-bottom: none;
                 box-shadow: inset 0 3px 0 #10b981;
                 background: rgba(16, 185, 129, 0.08);
             }
-            #camera-fab { bottom: calc(82px + env(safe-area-inset-bottom)); }
-            #update-btn { bottom: calc(84px + env(safe-area-inset-bottom)); }
-            #toast { bottom: calc(96px + env(safe-area-inset-bottom)); }
-            #quick-session-row .quick-meta { max-width: 64vw; }
+
+            #camera-fab {
+                bottom: calc(82px + env(safe-area-inset-bottom));
+            }
+
+            #update-btn {
+                bottom: calc(84px + env(safe-area-inset-bottom));
+            }
+
+            #toast {
+                bottom: calc(96px + env(safe-area-inset-bottom));
+            }
+
+            #quick-session-row .quick-meta {
+                max-width: 64vw;
+            }
         }
+
         @media (max-width: 480px) {
-            .brand-wrap { flex-direction: column; align-items: flex-start; }
-            .brand-sub { white-space: normal; margin-top: -4px; }
+            .brand-wrap {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .brand-sub {
+                white-space: normal;
+                margin-top: -4px;
+            }
         }
     </style>
 </head>
+
 <body class="bg-gray-900 text-gray-100 pb-24">
 
     <canvas id="canvas-fx"></canvas>
-    <input type="file" accept="image/*" capture="environment" onchange="handlePhoto(event)" id="photo-input" class="hidden">
+    <input type="file" accept="image/*" capture="environment" onchange="handlePhoto(event)" id="photo-input"
+        class="hidden">
 
     <!-- Header -->
     <header class="bg-gray-800 px-3 py-2 shadow-lg sticky top-0 z-50">
@@ -189,17 +439,22 @@
             <h1 class="text-lg font-bold text-white brand-wrap leading-tight">
                 <span class="text-base">🐸</span>
                 <span class="text-emerald-400 brand-title text-base">Paddentrek Teller Pro</span>
-                <span class="text-[10px] uppercase tracking-[0.18em] text-gray-400 brand-sub">Ultra Pro Xtreme 2026</span>
+                <span class="text-[10px] uppercase tracking-[0.18em] text-gray-400 brand-sub">Ultra Pro Xtreme
+                    2026</span>
             </h1>
             <div class="flex flex-col items-end gap-1 text-[9px]">
-                <div id="pwa-status" class="flex flex-col items-end gap-0.5 text-[9px] cursor-pointer" title="Offline gereed">
-                    <div class="flex items-center gap-1 text-gray-400 bg-gray-900/60 px-2 py-1 rounded-full border border-gray-700">
+                <div id="pwa-status" class="flex flex-col items-end gap-0.5 text-[9px] cursor-pointer"
+                    title="Offline gereed" onclick="handleVersionTap()">
+                    <div
+                        class="flex items-center gap-1 text-gray-400 bg-gray-900/60 px-2 py-1 rounded-full border border-gray-700">
                         <span id="status-icon" class="status-dot bg-gray-600"></span>
                         <span id="status-text" class="hidden"></span>
                     </div>
-                    <div class="font-bold text-gray-500 uppercase tracking-tight">v<span id="app-version-display">11</span></div>
+                    <div class="font-bold text-gray-500 uppercase tracking-tight">v<span
+                            id="app-version-display">11</span></div>
                 </div>
-                <button class="install-app-btn hidden bg-emerald-700 text-white px-3 py-1.5 rounded text-[10px] font-bold uppercase tracking-widest flex items-center gap-1">
+                <button
+                    class="install-app-btn hidden bg-emerald-700 text-white px-3 py-1.5 rounded text-[10px] font-bold uppercase tracking-widest flex items-center gap-1">
                     📲 Installeer app
                 </button>
             </div>
@@ -207,19 +462,26 @@
         <div class="mt-2 flex flex-col gap-2">
             <div class="flex gap-2 items-center">
                 <div id="header-date-controls" class="flex items-center gap-1.5 w-full">
-                    <button onclick="changePickerDay(-1)" class="bg-gray-700 hover:bg-gray-600 text-white px-3 py-1.5 rounded text-sm font-bold border border-gray-600" title="Vorige dag" aria-label="Vorige dag">
+                    <button onclick="changePickerDay(-1)"
+                        class="bg-gray-700 hover:bg-gray-600 text-white px-3 py-1.5 rounded text-sm font-bold border border-gray-600"
+                        title="Vorige dag" aria-label="Vorige dag">
                         ◀
                     </button>
-                    <input type="date" id="datePicker" class="bg-gray-700 border-none rounded px-2 py-1.5 text-sm focus:ring-2 focus:ring-emerald-500 text-white w-full shadow-inner">
-                    <button onclick="changePickerDay(1)" class="bg-gray-700 hover:bg-gray-600 text-white px-3 py-1.5 rounded text-sm font-bold border border-gray-600" title="Volgende dag" aria-label="Volgende dag">
+                    <input type="date" id="datePicker"
+                        class="bg-gray-700 border-none rounded px-2 py-1.5 text-sm focus:ring-2 focus:ring-emerald-500 text-white w-full shadow-inner">
+                    <button onclick="changePickerDay(1)"
+                        class="bg-gray-700 hover:bg-gray-600 text-white px-3 py-1.5 rounded text-sm font-bold border border-gray-600"
+                        title="Volgende dag" aria-label="Volgende dag">
                         ▶
                     </button>
                 </div>
                 <div class="flex items-center gap-1.5">
                     <button id="record-btn" onclick="stopTelling()" class="hidden record-btn" title="Stop telling">
-                        <span id="record-dot" class="w-3 h-3 rounded-full bg-red-500 shadow-[0_0_0_6px_rgba(248,113,113,0.25)] animate-rec"></span>
+                        <span id="record-dot"
+                            class="w-3 h-3 rounded-full bg-red-500 shadow-[0_0_0_6px_rgba(248,113,113,0.25)] animate-rec"></span>
                     </button>
-                    <button id="new-session-btn" onclick="startTelling(); trackEvent('count_started');" class="bg-emerald-700 px-3 py-2 rounded text-[10px] font-bold uppercase tracking-widest flex items-center gap-1">
+                    <button id="new-session-btn" onclick="startTelling(); trackEvent('count_started');"
+                        class="bg-emerald-700 px-3 py-2 rounded text-[10px] font-bold uppercase tracking-widest flex items-center gap-1">
                         <span class="text-xs">⏺</span> Nieuwe telling
                     </button>
                 </div>
@@ -232,38 +494,49 @@
                 <select id="global-session-select" onchange="setViewedSession(this.value)"></select>
             </div>
         </div>
-        
+
         <div id="undo-container" class="mt-2 hidden">
-            <button onclick="undo()" class="w-full bg-orange-600/20 border border-orange-500 text-orange-400 text-[10px] py-2 rounded uppercase tracking-widest font-bold flex items-center justify-center gap-2 shadow-lg">
+            <button onclick="undo()"
+                class="w-full bg-orange-600/20 border border-orange-500 text-orange-400 text-[10px] py-2 rounded uppercase tracking-widest font-bold flex items-center justify-center gap-2 shadow-lg">
                 ↩️ Herstel laatste tik
             </button>
         </div>
     </header>
 
     <!-- Navigatie -->
-    <nav id="main-nav" class="flex bg-gray-800 border-b border-gray-700 text-[10px] font-bold sticky top-[78px] z-40 overflow-x-auto whitespace-nowrap no-scrollbar shadow-md">
-        <button onclick="switchTab('count')" id="tab-count" class="px-5 py-3 active-tab uppercase tracking-tight"><span class="tab-icon">🧮</span><span class="tab-text">Tellen</span></button>
-        <button onclick="switchTab('sessions')" id="tab-sessions" class="px-5 py-3 uppercase tracking-tight"><span class="tab-icon">📒</span><span class="tab-text">Logboek</span></button>
-        <button onclick="switchTab('help')" id="tab-help" class="px-5 py-3 uppercase tracking-tight"><span class="tab-icon">🔎</span><span class="tab-text">Determinatie</span></button>
-        <button onclick="switchTab('report')" id="tab-report" class="px-5 py-3 uppercase tracking-tight"><span class="tab-icon">📊</span><span class="tab-text">Rapport</span></button>
-        <button onclick="switchTab('settings')" id="tab-settings" class="px-5 py-3 uppercase tracking-tight"><span class="tab-icon">⚙️</span><span class="tab-text">Beheer</span></button>
-        <button onclick="switchTab('info')" id="tab-info" class="px-5 py-3 uppercase tracking-tight"><span class="tab-icon">❓</span><span class="tab-text">Hulp</span></button>
+    <nav id="main-nav"
+        class="flex bg-gray-800 border-b border-gray-700 text-[10px] font-bold sticky top-[78px] z-40 overflow-x-auto whitespace-nowrap no-scrollbar shadow-md">
+        <button onclick="switchTab('count')" id="tab-count" class="px-5 py-3 active-tab uppercase tracking-tight"><span
+                class="tab-icon">🧮</span><span class="tab-text">Tellen</span></button>
+        <button onclick="switchTab('sessions')" id="tab-sessions" class="px-5 py-3 uppercase tracking-tight"><span
+                class="tab-icon">📒</span><span class="tab-text">Sessies</span></button>
+        <button onclick="switchTab('help')" id="tab-help" class="px-5 py-3 uppercase tracking-tight"><span
+                class="tab-icon">🔎</span><span class="tab-text">Determinatie</span></button>
+        <button onclick="switchTab('report')" id="tab-report" class="px-5 py-3 uppercase tracking-tight"><span
+                class="tab-icon">📊</span><span class="tab-text">Delen</span></button>
+        <button onclick="switchTab('settings')" id="tab-settings" class="px-5 py-3 uppercase tracking-tight"><span
+                class="tab-icon">⚙️</span><span class="tab-text">Instellingen</span></button>
+        <button onclick="switchTab('info')" id="tab-info" class="px-5 py-3 uppercase tracking-tight"><span
+                class="tab-icon">❓</span><span class="tab-text">Hulp</span></button>
     </nav>
 
     <main class="p-4">
-        <button id="camera-fab" onclick="triggerPhoto()" class="fixed right-3 bottom-24 bg-purple-700 text-white w-12 h-12 rounded-full shadow-2xl flex items-center justify-center text-2xl z-[105] border border-purple-400/60">📸</button>
+        <button id="camera-fab" onclick="triggerPhoto()"
+            class="fixed right-3 bottom-24 bg-purple-700 text-white w-12 h-12 rounded-full shadow-2xl flex items-center justify-center text-2xl z-[105] border border-purple-400/60">📸</button>
         <!-- TAB 1: TELLEN -->
         <section id="view-count" class="space-y-6">
             <!-- Start/Stop controls -->
             <div id="session-controls" class="text-center p-4">
                 <div id="start-telling-container">
-                    <button id="start-telling-btn" onclick="startTelling(); trackEvent('count_started');" class="bg-emerald-600 text-white font-bold py-4 px-8 rounded-xl text-2xl shadow-lg active:bg-emerald-700">
+                    <button id="start-telling-btn" onclick="startTelling(); trackEvent('count_started');"
+                        class="bg-emerald-600 text-white font-bold py-4 px-8 rounded-xl text-2xl shadow-lg active:bg-emerald-700">
                         Start Telling
                     </button>
                 </div>
                 <div id="stop-telling-container" class="hidden text-center">
                     <div id="session-timer" class="text-3xl font-mono text-emerald-400 mb-4 font-bold">00:00:00</div>
-                    <button id="stop-telling-btn" onclick="stopTelling()" class="bg-red-600 text-white font-bold py-4 px-8 rounded-xl text-2xl shadow-lg active:bg-red-700">
+                    <button id="stop-telling-btn" onclick="stopTelling()"
+                        class="bg-red-600 text-white font-bold py-4 px-8 rounded-xl text-2xl shadow-lg active:bg-red-700">
                         Stop Telling
                     </button>
                 </div>
@@ -277,68 +550,215 @@
                 <div class="bg-gray-800 p-6 rounded-xl border border-emerald-500/30 space-y-3">
                     <h3 class="font-bold mb-4 text-emerald-400">Nieuwe soort toevoegen</h3>
                     <div class="flex gap-2">
-                        <input type="text" id="new-species-name" placeholder="Bijv: Groene Kikker..." class="flex-grow bg-gray-700 border-none rounded px-3 py-2 text-sm text-white">
-                        <button onclick="addCustomSpecies()" class="bg-emerald-600 px-4 py-2 rounded font-bold text-sm">OK</button>
+                        <input type="text" id="new-species-name" placeholder="Bijv: Groene Kikker..."
+                            class="flex-grow bg-gray-700 border-none rounded px-3 py-2 text-sm text-white">
+                        <button onclick="addCustomSpecies()"
+                            class="bg-emerald-600 px-4 py-2 rounded font-bold text-sm">OK</button>
                     </div>
                     <div id="custom-species-list" class="space-y-2"></div>
                 </div>
             </div>
-            
-            <button onclick="resetCurrentDate()" class="w-full py-8 text-gray-600 text-[10px] uppercase tracking-widest font-bold border-2 border-dashed border-gray-800 rounded-xl mt-10">
+
+            <button onclick="resetCurrentDate()"
+                class="w-full py-8 text-gray-600 text-[10px] uppercase tracking-widest font-bold border-2 border-dashed border-gray-800 rounded-xl mt-10">
                 Alles wissen voor vandaag
             </button>
         </section>
 
         <!-- TAB 2: SESSIE LOG -->
         <section id="view-sessions" class="hidden space-y-4">
-            <div class="flex items-center gap-2 text-[11px] text-gray-300 bg-gray-800/70 border border-gray-700 px-3 py-2 rounded">
+            <div
+                class="flex items-center gap-2 text-[11px] text-gray-300 bg-gray-800/70 border border-gray-700 px-3 py-2 rounded">
                 <span class="uppercase font-bold text-gray-400 text-[10px]">Telling</span>
-                <select id="session-log-select" class="bg-gray-700 border border-gray-600 rounded px-2 py-1 flex-1 text-white text-[11px]" onchange="setViewedSession(this.value)"></select>
+                <select id="session-log-select"
+                    class="bg-gray-700 border border-gray-600 rounded px-2 py-1 flex-1 text-white text-[11px]"
+                    onchange="setViewedSession(this.value)"></select>
             </div>
             <div class="text-[11px] text-gray-400">
                 Beheer per telling: weer, trajectnaam, notities en foto's.
             </div>
-            <datalist id="route-suggestions"></datalist>
             <div id="session-log-container" class="space-y-4"></div>
             <div class="pt-1">
-                <button onclick="switchTab('report')" class="w-full bg-emerald-700 hover:bg-emerald-600 text-white py-3 rounded-xl font-bold text-xs uppercase tracking-widest shadow-lg">
-                    📊 Naar rapportage & delen
+                <button onclick="switchTab('report')"
+                    class="w-full bg-emerald-700 hover:bg-emerald-600 text-white py-3 rounded-xl font-bold text-xs uppercase tracking-widest shadow-lg">
+                    📊 Naar delen
                 </button>
             </div>
         </section>
 
         <!-- TAB 4: RAPPORT -->
         <section id="view-report" class="hidden space-y-6 text-center">
-            <h2 class="text-xl font-bold text-emerald-400 text-center">📊 Rapport</h2>
+            <h2 class="text-xl font-bold text-emerald-400 text-center">📊 Delen</h2>
+
             <details class="settings-accordion" open>
                 <summary>
-                    <span class="font-bold text-emerald-200 text-sm">Rapport</span>
-                    <span class="text-[10px] uppercase tracking-wide text-emerald-300/80">Sessies + tekst</span>
+                    <span class="font-bold text-emerald-200 text-sm">Sessie Details</span>
+                    <span class="text-[10px] uppercase tracking-wide text-emerald-300/80">Route · Weer · Notities</span>
+                </summary>
+                <div class="settings-accordion-body space-y-3 text-left">
+                    <div class="space-y-1">
+                        <label class="text-[10px] uppercase tracking-wide text-gray-400 font-bold">Trajectnaam</label>
+                        <input id="report-session-route" type="text"
+                            class="bg-gray-700 border border-gray-600 rounded px-2 py-2 text-white w-full text-[12px]"
+                            placeholder="Bijv. Kerkstraat - Brugje" list="route-suggestions"
+                            onchange="updateReportSessionRoute(this.value)">
+                    </div>
+
+                    <div class="space-y-1">
+                        <label class="text-[10px] uppercase tracking-wide text-gray-400 font-bold">Notities</label>
+                        <textarea id="report-session-notes"
+                            class="bg-gray-700 border border-gray-600 rounded px-2 py-2 text-white w-full text-[12px] h-20"
+                            placeholder="Bijzonderheden..." onchange="updateReportSessionNotes(this.value)"></textarea>
+                    </div>
+
+                    <div class="space-y-1">
+                        <label class="text-[10px] uppercase tracking-wide text-gray-400 font-bold">Weerbericht</label>
+                        <div id="report-session-weather"
+                            class="text-[11px] text-gray-300 italic bg-gray-900/40 p-2 rounded border border-gray-700">
+                            Geen weerdata gebufferd</div>
+                    </div>
+                </div>
+            </details>
+
+            <details class="settings-accordion">
+                <summary>
+                    <span class="font-bold text-blue-200 text-sm">Samen Tellen</span>
+                    <span class="text-[10px] uppercase tracking-wide text-blue-300/80">Via Link of QR</span>
+                </summary>
+                <div class="settings-accordion-body space-y-3">
+                    <div class="text-[11px] text-gray-200 mb-2">
+                        Tel je samen met iemand anders aan hetzelfde traject? Deel jouw tellingen zodat ze worden
+                        samengevoegd.
+                    </div>
+
+                    <div class="space-y-2 mb-2 bg-gray-900/40 p-2 rounded border border-gray-700">
+                        <div class="text-[10px] text-gray-300 font-bold uppercase tracking-wide">1. Wat wil je delen?
+                        </div>
+                        <div id="share-session-checklist-meta" class="text-[10px] text-cyan-100"></div>
+                        <div id="share-session-checklist" class="space-y-2"></div>
+                    </div>
+
+                    <div class="grid grid-cols-1 gap-2">
+                        <div class="space-y-1">
+                            <label class="text-[10px] uppercase tracking-wide text-gray-400 font-bold">2. Jouw
+                                naam</label>
+                            <input id="share-contributor-name" type="text"
+                                class="bg-gray-700 border border-gray-600 rounded px-2 py-2 text-white w-full text-[12px]"
+                                placeholder="Naam" oninput="handleShareIdentityChange()">
+                        </div>
+                        <div class="space-y-1">
+                            <label class="text-[10px] uppercase tracking-wide text-gray-400 font-bold">3.
+                                Traject</label>
+                            <input id="share-route-name" type="text"
+                                class="bg-gray-700 border border-gray-600 rounded px-2 py-2 text-white w-full text-[12px]"
+                                placeholder="Optioneel" list="route-suggestions" oninput="handleShareRouteChange(false)"
+                                onchange="handleShareRouteChange(true)">
+                        </div>
+                    </div>
+                    <div id="share-identity-hint" class="hidden text-[10px] text-cyan-200"></div>
+
+                    <div class="h-px bg-gray-700 my-2"></div>
+
+                    <h4 class="text-blue-200 font-bold text-sm">Versturen</h4>
+                    <div class="text-[10px] text-gray-400 mb-2">Kies hoe je jouw data wilt doorgeven:</div>
+
+                    <button onclick="generateSyncLink()"
+                        class="w-full bg-blue-600 py-3 rounded-lg font-bold uppercase text-xs shadow-lg">
+                        🔗 Maak Deel-Link <span class="block text-[9px] font-normal normal-case opacity-80">(voor
+                            WhatsApp/Signal)</span>
+                    </button>
+
+                    <div id="sync-link-box" class="hidden space-y-2">
+                        <textarea id="sync-link-output" readonly
+                            class="w-full bg-gray-900/70 border border-blue-500/30 rounded p-2 text-[10px] text-blue-100 h-16"></textarea>
+                        <div class="grid grid-cols-2 gap-2">
+                            <button onclick="copySyncLink()"
+                                class="bg-blue-700 py-2 rounded text-[11px] font-bold uppercase">Kopieer</button>
+                            <button onclick="shareSyncLink()"
+                                class="bg-blue-900/70 border border-blue-400/30 py-2 rounded text-[11px] font-bold uppercase">Deel</button>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center gap-2 my-1">
+                        <div class="h-px bg-gray-700 flex-1"></div>
+                        <span class="text-[10px] text-gray-400 font-bold uppercase">OF</span>
+                        <div class="h-px bg-gray-700 flex-1"></div>
+                    </div>
+
+                    <button onclick="generateQR(true)"
+                        class="w-full bg-purple-600 py-3 rounded-lg font-bold uppercase text-xs shadow-lg">
+                        📱 Toon QR-Code <span class="block text-[9px] font-normal normal-case opacity-80">(voor wie
+                            naast je staat)</span>
+                    </button>
+
+                    <div class="flex flex-col md:flex-row gap-3 items-center" id="qrcode-area-wrapper">
+                        <div id="qrcode-area" class="bg-white p-2 rounded-lg hidden border-4 border-purple-500"></div>
+                    </div>
+
+                    <div class="h-px bg-gray-700 my-2"></div>
+
+                    <h4 class="text-blue-200 font-bold text-sm">Ontvangen</h4>
+                    <p class="text-[11px] text-gray-400">Heb je een link gekregen of wil je een QR scannen?</p>
+
+                    <button onclick="startSessionScanner()"
+                        class="w-full bg-purple-800/80 border border-purple-500/50 py-3 rounded-lg font-bold uppercase text-xs shadow-lg">📷
+                        Scan QR-Code</button>
+
+                    <div id="sync-incoming-card"
+                        class="hidden bg-cyan-900/25 border border-cyan-500/30 rounded p-3 space-y-2 mt-2">
+                        <div class="text-[10px] uppercase tracking-wider text-cyan-200 font-bold">Ontvangen gegevens
+                        </div>
+                        <div id="sync-incoming-meta" class="text-[11px] text-cyan-100"></div>
+                        <pre id="sync-incoming-summary"
+                            class="bg-black/30 border border-cyan-900/40 rounded p-2 text-[10px] text-cyan-100 whitespace-pre-wrap"></pre>
+                        <div class="flex gap-2">
+                            <button onclick="importPendingSyncLink()"
+                                class="flex-1 bg-cyan-600 hover:bg-cyan-500 text-white py-2 rounded text-[11px] font-bold uppercase shadow-lg">Toevoegen</button>
+                            <button onclick="dismissPendingSyncLink()"
+                                class="bg-gray-700 px-3 py-2 rounded text-[11px] font-bold uppercase">Negeer</button>
+                        </div>
+                    </div>
+                </div>
+            </details>
+
+
+            <details class="settings-accordion" open>
+                <summary>
+                    <span class="font-bold text-emerald-200 text-sm">Resultaat & Delen</span>
+                    <span class="text-[10px] uppercase tracking-wide text-emerald-300/80">Tekst, foto's & CSV</span>
                 </summary>
                 <div class="settings-accordion-body space-y-3 text-left">
                     <div class="space-y-2">
                         <div class="flex items-center justify-between gap-2 text-[10px] text-gray-300">
                             <span class="uppercase tracking-wider text-gray-400 font-bold">Sessies in rapport</span>
                             <div class="flex gap-2">
-                                <button class="text-[10px] bg-gray-700 px-2 py-1 rounded" onclick="setAllReportSessionsIncluded(true)">Alles</button>
-                                <button class="text-[10px] bg-gray-700 px-2 py-1 rounded" onclick="setAllReportSessionsIncluded(false)">Geen</button>
+                                <button class="text-[10px] bg-gray-700 px-2 py-1 rounded"
+                                    onclick="setAllReportSessionsIncluded(true)">Alles</button>
+                                <button class="text-[10px] bg-gray-700 px-2 py-1 rounded"
+                                    onclick="setAllReportSessionsIncluded(false)">Geen</button>
                             </div>
                         </div>
                         <div id="report-session-checklist-meta" class="text-[10px] text-emerald-200"></div>
                         <div id="report-session-checklist" class="space-y-2"></div>
                     </div>
-                    <div id="report-text" class="bg-gray-900 p-3 rounded-lg font-mono text-left text-[11px] border border-emerald-500/30 whitespace-pre-wrap leading-relaxed"></div>
+                    <div id="report-text"
+                        class="bg-gray-900 p-3 rounded-lg font-mono text-left text-[11px] border border-emerald-500/30 whitespace-pre-wrap leading-relaxed">
+                    </div>
                     <div class="grid grid-cols-1 gap-3">
-                        <button onclick="copyReport()" class="w-full bg-emerald-600 py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg active:bg-emerald-700 text-xs uppercase tracking-widest">
+                        <button onclick="copyReport()"
+                            class="w-full bg-emerald-600 py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg active:bg-emerald-700 text-xs uppercase tracking-widest">
                             📋 Kopieer rapport
                         </button>
-                        <button onclick="shareReport()" class="w-full bg-purple-700 py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg active:bg-purple-800 text-xs uppercase tracking-widest">
+                        <button onclick="shareReport()"
+                            class="w-full bg-purple-700 py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg active:bg-purple-800 text-xs uppercase tracking-widest">
                             📤 Deel rapport
                         </button>
-                        <button onclick="shareReport(true)" class="w-full bg-purple-900/70 border border-purple-400/30 py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg active:bg-purple-900 text-xs uppercase tracking-widest">
+                        <button onclick="shareReport(true)"
+                            class="w-full bg-purple-900/70 border border-purple-400/30 py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg active:bg-purple-900 text-xs uppercase tracking-widest">
                             📸 Deel met foto's
                         </button>
-                        <button onclick="exportReportCSV()" class="w-full bg-indigo-600 py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg active:bg-indigo-700 text-xs uppercase tracking-widest">
+                        <button onclick="exportReportCSV()"
+                            class="w-full bg-indigo-600 py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg active:bg-indigo-700 text-xs uppercase tracking-widest">
                             ⬇️ Exporteer CSV van vandaag
                         </button>
                     </div>
@@ -353,7 +773,8 @@
                 <div class="settings-accordion-body space-y-3 text-left">
                     <div class="flex items-center justify-between">
                         <h3 class="font-bold text-purple-200 text-sm">Determinaties</h3>
-                        <button onclick="shareDeterminaties()" class="bg-purple-700 px-3 py-2 rounded text-[11px] font-bold uppercase tracking-widest">📤 Deel</button>
+                        <button onclick="shareDeterminaties()"
+                            class="bg-purple-700 px-3 py-2 rounded text-[11px] font-bold uppercase tracking-widest">Kopieer</button>
                     </div>
                     <div id="report-dets" class="space-y-2 text-[11px] text-gray-200"></div>
                 </div>
@@ -364,99 +785,37 @@
                     <span class="font-bold text-emerald-100 text-sm">🐸 Trektrend</span>
                     <span class="text-[10px] uppercase tracking-wide text-emerald-200/80">Per teldag</span>
                 </summary>
-                <div class="settings-accordion-body space-y-3 text-left bg-gradient-to-br from-emerald-900/30 via-cyan-900/20 to-blue-900/20">
+                <div
+                    class="settings-accordion-body space-y-3 text-left bg-gradient-to-br from-emerald-900/30 via-cyan-900/20 to-blue-900/20">
                     <div class="flex items-center justify-between gap-2">
                         <h3 class="font-bold text-emerald-100 text-sm">Trek-trend (per dag)</h3>
-                        <label class="inline-flex items-center gap-2 text-[10px] text-emerald-100 bg-emerald-500/20 border border-emerald-300/30 px-2 py-1 rounded-full cursor-pointer select-none">
-                            <input id="report-trend-toggle-empty" type="checkbox" class="accent-emerald-400" checked onchange="toggleReportTrendZeroDays(this.checked)">
+                        <label
+                            class="inline-flex items-center gap-2 text-[10px] text-emerald-100 bg-emerald-500/20 border border-emerald-300/30 px-2 py-1 rounded-full cursor-pointer select-none">
+                            <input id="report-trend-toggle-empty" type="checkbox" class="accent-emerald-400" checked
+                                onchange="toggleReportTrendZeroDays(this.checked)">
                             <span>Toon lege teldagen (0)</span>
                         </label>
                     </div>
                     <div id="report-trend-meta" class="text-[11px] text-emerald-100"></div>
-                    <div class="overflow-x-auto no-scrollbar rounded-lg border border-emerald-500/20 bg-gray-900/40 p-2">
+                    <div
+                        class="overflow-x-auto no-scrollbar rounded-lg border border-emerald-500/20 bg-gray-900/40 p-2">
                         <div id="report-trend-chart" class="min-h-[220px] flex justify-center"></div>
                     </div>
                     <div id="report-trend-peaks" class="flex flex-wrap gap-2 text-[10px]"></div>
                 </div>
             </details>
+
+
+
         </section>
 
         <!-- TAB 6: INSTELLINGEN -->
         <section id="view-settings" class="hidden space-y-4">
             <h2 class="text-xl font-bold text-emerald-400 text-center">⚙️ Instellingen</h2>
 
-            <details class="settings-accordion">
-                <summary>
-                    <span class="font-bold text-purple-200 text-sm">Delen met andere teller</span>
-                    <span class="text-[10px] uppercase tracking-wide text-purple-300/80">Link + QR</span>
-                </summary>
-                <div class="settings-accordion-body space-y-3">
-                    <div class="space-y-2 mb-2">
-                        <div class="text-[10px] text-gray-300 font-bold uppercase tracking-wide">Data om te delen</div>
-                        <div id="share-session-checklist-meta" class="text-[10px] text-cyan-100"></div>
-                        <div id="share-session-checklist" class="space-y-2"></div>
-                    </div>
-                    <div class="grid grid-cols-1 gap-2">
-                        <div class="space-y-1">
-                            <label class="text-[10px] uppercase tracking-wide text-gray-400 font-bold">Jouw naam (verplicht)</label>
-                            <input id="share-contributor-name" type="text" class="bg-gray-700 border border-gray-600 rounded px-2 py-2 text-white w-full text-[12px]" placeholder="Bijv. Leia" oninput="handleShareIdentityChange()">
-                        </div>
-                        <div class="space-y-1">
-                            <label class="text-[10px] uppercase tracking-wide text-gray-400 font-bold">Traject (onthouden)</label>
-                            <input id="share-route-name" type="text" class="bg-gray-700 border border-gray-600 rounded px-2 py-2 text-white w-full text-[12px]" placeholder="Bijv. Kerkstraat - Brugje - Vijver" list="route-suggestions" oninput="handleShareRouteChange(false)" onchange="handleShareRouteChange(true)">
-                        </div>
-                    </div>
-                    <div id="share-identity-hint" class="text-[10px] text-cyan-200 bg-cyan-900/20 border border-cyan-500/30 rounded px-2 py-2"></div>
-                    <h4 class="text-cyan-200 font-bold text-sm">Deel mijn bijdrage via link</h4>
-                    <div class="text-[11px] text-gray-200 mb-2">
-                        Stuur je telling door via WhatsApp, mail, ... De ontvanger krijgt eerst een wizard en voegt je data toe als aparte telling.
-                    </div>
-                    <button onclick="generateSyncLink()" class="w-full bg-blue-600 py-3 rounded-lg font-bold uppercase text-xs">🔗 Deel mijn bijdrage via link</button>
-                    <div id="sync-link-box" class="hidden space-y-2">
-                        <textarea id="sync-link-output" readonly class="w-full bg-gray-900/70 border border-blue-500/30 rounded p-2 text-[10px] text-blue-100 h-24"></textarea>
-                        <div class="grid grid-cols-2 gap-2">
-                            <button onclick="copySyncLink()" class="bg-blue-700 py-2 rounded text-[11px] font-bold uppercase">Kopieer link</button>
-                            <button onclick="shareSyncLink()" class="bg-blue-900/70 border border-blue-400/30 py-2 rounded text-[11px] font-bold uppercase">Deel link</button>
-                        </div>
-                    </div>
-                    <div id="sync-incoming-card" class="hidden bg-cyan-900/25 border border-cyan-500/30 rounded p-3 space-y-2">
-                        <div class="text-[10px] uppercase tracking-wider text-cyan-200 font-bold">Ontvangen deel-link</div>
-                        <div id="sync-incoming-meta" class="text-[11px] text-cyan-100"></div>
-                        <pre id="sync-incoming-summary" class="bg-black/30 border border-cyan-900/40 rounded p-2 text-[10px] text-cyan-100 whitespace-pre-wrap"></pre>
-                        <div class="flex gap-2">
-                            <button onclick="importPendingSyncLink()" class="flex-1 bg-cyan-700 py-2 rounded text-[11px] font-bold uppercase">Voeg als telling toe</button>
-                            <button onclick="dismissPendingSyncLink()" class="bg-gray-700 px-3 py-2 rounded text-[11px] font-bold uppercase">Negeer</button>
-                        </div>
-                    </div>
-                    <div class="h-px bg-purple-500/30 my-2"></div>
-                    <h4 class="text-purple-200 font-bold text-sm">Delen via QR-code</h4>
-                    <div class="flex flex-col md:flex-row gap-3 items-start">
-                        <div id="qrcode-area" class="bg-white p-3 rounded-lg inline-block mx-auto md:mx-0 border-4 border-purple-500"></div>
-                        <div class="flex-1 text-[11px] text-gray-100 bg-gray-900/60 border border-gray-700 rounded p-3 space-y-1" id="qr-summary-box">
-                            <div class="font-bold text-purple-200">Delen via QR-code</div>
-                            <div>• Met twee (of meer) tellers die tegelijk op een ander stuk van het traject zitten.</div>
-                            <div>• Eén toestel maakt de QR (bron), de anderen scannen (ontvanger).</div>
-                            <div class="font-bold text-purple-200 pt-1">Hoe?</div>
-                            <div>1) Kies hierboven welke data je deelt (hele dag, 1 telling of meerdere tellingen).</div>
-                            <div>2) Tik op Refresh QR en toon de code.</div>
-                            <div>3) Op het andere toestel: tik “Scan QR”, controleer de wizard en voeg toe.</div>
-                            <div class="text-purple-300 pt-1">Er worden enkel aantallen gedeeld, geen foto’s.</div>
-                        </div>
-                    </div>
-                    <button onclick="generateQR(true)" class="w-full bg-purple-600 py-3 rounded-lg font-bold uppercase text-xs">Refresh QR</button>
-                    <div class="h-px bg-purple-500/30 my-2"></div>
-                    <h4 class="text-purple-200 font-bold text-sm">Importeer telling via QR</h4>
-                    <div class="text-[11px] text-gray-200 mb-2 space-y-1">
-                        <div><strong class="text-purple-200">Gebruik:</strong> voeg data van andere tellers toe aan je eigen sessielijst.</div>
-                        <div>1) Kies hierboven de bron (dag, 1 telling of meerdere tellingen) en toon de QR.</div>
-                        <div>2) Tik “Scan QR” en richt op de code van de andere teller.</div>
-                        <div>3) Volg de wizard: controleer inhoud en bevestig.</div>
-                        <div class="text-purple-300">Alleen aantallen gaan mee, geen foto’s.</div>
-                    </div>
-                    <div id="import-target-hint" class="text-[11px] text-gray-400 bg-gray-900/70 border border-gray-700 rounded px-2 py-2"></div>
-                    <button onclick="startSessionScanner()" class="w-full bg-purple-600 py-3 rounded-lg font-bold uppercase text-xs">Scan QR</button>
-                </div>
-            </details>
+
+
+
 
             <details class="settings-accordion">
                 <summary>
@@ -465,27 +824,33 @@
                 </summary>
                 <div class="settings-accordion-body space-y-3">
                     <div class="flex gap-2 items-center">
-                        <input type="date" id="sessionDate" class="bg-gray-700 border-none rounded px-2 py-1.5 text-sm focus:ring-2 focus:ring-emerald-500 text-white w-full shadow-inner">
-                        <button onclick="startSession(true, true)" class="bg-emerald-700 px-3 py-2 rounded text-[10px] font-bold uppercase tracking-widest">Start op datum</button>
+                        <input type="date" id="sessionDate"
+                            class="bg-gray-700 border-none rounded px-2 py-1.5 text-sm focus:ring-2 focus:ring-emerald-500 text-white w-full shadow-inner">
+                        <button onclick="startSession(true, true)"
+                            class="bg-emerald-700 px-3 py-2 rounded text-[10px] font-bold uppercase tracking-widest">Start
+                            op datum</button>
                     </div>
                     <div id="session-admin-list" class="space-y-2 text-[11px]"></div>
                 </div>
             </details>
-
-            <details class="settings-accordion" open>
+            <details class="settings-accordion hidden" id="advanced-settings-details">
                 <summary>
                     <span class="font-bold text-gray-100 text-sm">Geavanceerde instellingen</span>
                     <span class="text-[10px] uppercase tracking-wide text-gray-300/80">CSV · migratie · storage</span>
                 </summary>
                 <div class="settings-accordion-body space-y-4">
-                    <div id="legacy-migrate-card" class="bg-gray-800 p-4 rounded-xl border border-emerald-500/30 space-y-3">
+                    <div id="legacy-migrate-card"
+                        class="bg-gray-800 p-4 rounded-xl border border-emerald-500/30 space-y-3">
                         <h3 class="font-bold text-emerald-200 text-sm">Migratie oude app-data</h3>
-                        <p class="text-[11px] text-gray-300">Zet oude opslag (<code>paddentrek_*</code>) eenmalig over naar de nieuwe opslag <code>paddentrek_data</code>.</p>
-                        <button id="legacy-migrate-btn" onclick="migrateLegacyStorageManually()" class="w-full bg-emerald-700 py-2 rounded-lg font-bold uppercase text-xs">
+                        <p class="text-[11px] text-gray-300">Zet oude opslag (<code>paddentrek_*</code>) eenmalig over
+                            naar de nieuwe opslag <code>paddentrek_data</code>.</p>
+                        <button id="legacy-migrate-btn" onclick="migrateLegacyStorageManually()"
+                            class="w-full bg-emerald-700 py-2 rounded-lg font-bold uppercase text-xs">
                             ⬆️ Migreer oude data (1x)
                         </button>
                         <div id="legacy-migrate-status" class="text-[10px] text-gray-400"></div>
-                        <button id="legacy-cleanup-btn" onclick="cleanupLegacyStorageKeys()" class="hidden w-full bg-amber-700 py-2 rounded-lg font-bold uppercase text-xs">
+                        <button id="legacy-cleanup-btn" onclick="cleanupLegacyStorageKeys()"
+                            class="hidden w-full bg-amber-700 py-2 rounded-lg font-bold uppercase text-xs">
                             🧹 Verwijder oude data
                         </button>
                         <div id="legacy-cleanup-hint" class="hidden text-[10px] text-amber-200"></div>
@@ -497,49 +862,75 @@
 
                     <div class="bg-gray-800 p-4 rounded-xl border border-indigo-500/30 space-y-3">
                         <h3 class="font-bold text-indigo-300 text-sm">CSV Import</h3>
-                        <p class="text-[11px] text-gray-300">Importeer CSV’s zoals je ze exporteert (kolommen: Datum; Soort; Koppels levend; Koppels dood; M/V/Onb levend/dood).</p>
-                        <input type="file" accept=".csv,text/csv" id="csv-import-input" class="block w-full text-[11px] text-gray-300 bg-gray-700 border border-gray-600 rounded px-2 py-2">
-                        <button onclick="handleCSVImport()" class="w-full bg-indigo-600 py-3 rounded-lg font-bold uppercase text-xs">⬆️ Importeer CSV</button>
+                        <p class="text-[11px] text-gray-300">Importeer CSV’s zoals je ze exporteert (kolommen: Datum;
+                            Soort; Koppels levend; Koppels dood; M/V/Onb levend/dood).</p>
+                        <input type="file" accept=".csv,text/csv" id="csv-import-input"
+                            class="block w-full text-[11px] text-gray-300 bg-gray-700 border border-gray-600 rounded px-2 py-2">
+                        <button onclick="handleCSVImport()"
+                            class="w-full bg-indigo-600 py-3 rounded-lg font-bold uppercase text-xs">⬆️ Importeer
+                            CSV</button>
                         <div id="csv-import-result" class="text-[10px] text-gray-400"></div>
                     </div>
 
                     <div class="bg-gray-800 p-4 rounded-xl border border-indigo-400/30 space-y-3">
                         <h3 class="font-bold text-indigo-200 text-sm">CSV Export</h3>
-                        <p class="text-[11px] text-gray-300">Exporteer dag of telling van de huidige datum, of een datumrange.</p>
+                        <p class="text-[11px] text-gray-300">Exporteer dag of telling van de huidige datum, of een
+                            datumrange.</p>
                         <div class="grid grid-cols-2 gap-2 text-[11px] text-gray-200">
                             <div class="space-y-1">
                                 <label class="uppercase tracking-wide text-[9px] text-gray-400">Van</label>
-                                <input type="date" id="csv-from-settings" class="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-white w-full">
+                                <input type="date" id="csv-from-settings"
+                                    class="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-white w-full">
                             </div>
                             <div class="space-y-1">
                                 <label class="uppercase tracking-wide text-[9px] text-gray-400">Tot</label>
-                                <input type="date" id="csv-to-settings" class="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-white w-full">
+                                <input type="date" id="csv-to-settings"
+                                    class="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-white w-full">
                             </div>
                         </div>
                         <div class="grid grid-cols-1 gap-2">
-                            <button onclick="exportAllSessionsCSV()" class="w-full bg-indigo-600 py-2 rounded-lg font-bold uppercase text-xs">⬇️ Exporteer alle tellingen (vandaag)</button>
-                            <button onclick="exportRangeCSV(true)" class="w-full bg-indigo-500 py-2 rounded-lg font-bold uppercase text-xs">⬇️ Exporteer alle tellingen (range)</button>
+                            <button onclick="exportAllSessionsCSV()"
+                                class="w-full bg-indigo-600 py-2 rounded-lg font-bold uppercase text-xs">⬇️ Exporteer
+                                alle tellingen (vandaag)</button>
+                            <button onclick="exportRangeCSV(true)"
+                                class="w-full bg-indigo-500 py-2 rounded-lg font-bold uppercase text-xs">⬇️ Exporteer
+                                alle tellingen (range)</button>
                         </div>
                     </div>
 
                     <div class="bg-gray-800 p-4 rounded-xl border border-amber-500/30 space-y-3">
-                        <h3 class="font-bold text-amber-200 text-sm flex items-center gap-2">Dev: Storage inspector <span class="text-[9px] bg-amber-500/20 border border-amber-400/30 text-amber-100 px-2 py-1 rounded">Alleen lokaal</span></h3>
-                        <p class="text-[11px] text-gray-300">Bekijk wat er precies in <code>localStorage</code> staat. Handig om te controleren of foto-data er nog is na een update.</p>
+                        <h3 class="font-bold text-amber-200 text-sm flex items-center gap-2">Dev: Storage inspector
+                            <span
+                                class="text-[9px] bg-amber-500/20 border border-amber-400/30 text-amber-100 px-2 py-1 rounded">Alleen
+                                lokaal</span>
+                        </h3>
+                        <p class="text-[11px] text-gray-300">Bekijk wat er precies in <code>localStorage</code> staat.
+                            Handig om te controleren of foto-data er nog is na een update.</p>
                         <div class="flex gap-2 items-center text-[11px]">
-                            <input id="storage-search" type="text" placeholder="Zoek in keys of inhoud" class="flex-1 bg-gray-700 border border-gray-600 rounded px-2 py-2 text-white" oninput="renderStorageInspector()">
-                            <button onclick="renderStorageInspector(true)" class="bg-amber-600 px-3 py-2 rounded font-bold text-[11px] uppercase tracking-widest">Herlaad</button>
+                            <input id="storage-search" type="text" placeholder="Zoek in keys of inhoud"
+                                class="flex-1 bg-gray-700 border border-gray-600 rounded px-2 py-2 text-white"
+                                oninput="renderStorageInspector()">
+                            <button onclick="renderStorageInspector(true)"
+                                class="bg-amber-600 px-3 py-2 rounded font-bold text-[11px] uppercase tracking-widest">Herlaad</button>
                         </div>
                         <div id="storage-meta" class="text-[10px] text-gray-400"></div>
-                        <div id="storage-inspector" class="space-y-2 max-h-72 overflow-auto no-scrollbar text-[11px]"></div>
+                        <div id="storage-inspector" class="space-y-2 max-h-72 overflow-auto no-scrollbar text-[11px]">
+                        </div>
                     </div>
 
                     <div class="bg-gray-800 p-4 rounded-xl border border-red-500/30 space-y-3">
                         <h3 class="font-bold text-red-300 text-sm">Databeheer foto's</h3>
                         <div class="flex items-center gap-2">
-                            <input type="date" id="photo-clean-date" class="bg-gray-700 border-none rounded px-2 py-1.5 text-sm focus:ring-2 focus:ring-emerald-500 text-white w-full shadow-inner" value="">
-                            <button onclick="clearAllPhotos(document.getElementById('photo-clean-date').value || picker.value)" class="bg-red-800 px-3 py-2 rounded text-[10px] text-white">Wis dag</button>
+                            <input type="date" id="photo-clean-date"
+                                class="bg-gray-700 border-none rounded px-2 py-1.5 text-sm focus:ring-2 focus:ring-emerald-500 text-white w-full shadow-inner"
+                                value="">
+                            <button
+                                onclick="clearAllPhotos(document.getElementById('photo-clean-date').value || picker.value)"
+                                class="bg-red-800 px-3 py-2 rounded text-[10px] text-white">Wis dag</button>
                         </div>
-                        <button onclick="clearAllPhotos()" class="w-full bg-red-900/40 border border-red-700 text-red-200 py-2 rounded text-[11px]">Wis alle foto's</button>
+                        <button onclick="clearAllPhotos()"
+                            class="w-full bg-red-900/40 border border-red-700 text-red-200 py-2 rounded text-[11px]">Wis
+                            alle foto's</button>
                     </div>
                 </div>
             </details>
@@ -550,7 +941,8 @@
             <h2 class="text-xl font-bold text-emerald-400 text-center">🔍 Determinatiehulp</h2>
 
             <!-- Foto capture + preview -->
-            <input type="file" accept="image/*" capture="environment" id="det-photo-input" class="hidden" onchange="handleDetPhoto(event)">
+            <input type="file" accept="image/*" capture="environment" id="det-photo-input" class="hidden"
+                onchange="handleDetPhoto(event)">
             <div class="bg-gray-800 p-4 rounded-xl border border-emerald-500/30 space-y-3">
                 <div class="flex items-center justify-between gap-2">
                     <div>
@@ -558,9 +950,17 @@
                         <div id="det-session-label" class="text-sm text-white">Geen telling</div>
                     </div>
                     <div class="flex gap-2">
-                        <button id="det-start-session-btn" onclick="startSession(true)" class="bg-emerald-700 px-3 py-2 rounded text-[10px] font-bold uppercase tracking-widest">Start telling</button>
-                        <button id="det-loose-btn" onclick="startLooseDetermination(); trackEvent('determination_started', { type: 'loose' });" class="bg-amber-700 px-3 py-2 rounded text-[10px] font-bold uppercase tracking-widest hidden">Start losse determinatie</button>
-                        <button id="det-new-btn" onclick="beginDetermination(); trackEvent('determination_started', { type: 'guided' });" class="bg-purple-700 px-3 py-2 rounded text-[10px] font-bold uppercase tracking-widest">Nieuwe determinatie</button>
+                        <button id="det-start-session-btn" onclick="startSession(true)"
+                            class="bg-emerald-700 px-3 py-2 rounded text-[10px] font-bold uppercase tracking-widest">Start
+                            telling</button>
+                        <button id="det-loose-btn"
+                            onclick="startLooseDetermination(); trackEvent('determination_started', { type: 'loose' });"
+                            class="bg-amber-700 px-3 py-2 rounded text-[10px] font-bold uppercase tracking-widest hidden">Start
+                            losse determinatie</button>
+                        <button id="det-new-btn"
+                            onclick="beginDetermination(); trackEvent('determination_started', { type: 'guided' });"
+                            class="bg-purple-700 px-3 py-2 rounded text-[10px] font-bold uppercase tracking-widest">Nieuwe
+                            determinatie</button>
                     </div>
                 </div>
 
@@ -568,32 +968,47 @@
                 <div class="bg-gray-900/60 border border-gray-700 rounded-lg p-3 space-y-2">
                     <div class="flex items-center justify-between text-[10px] uppercase text-gray-400 font-bold">
                         <span>Foto's (max 3)</span>
-                        <button onclick="triggerDetPhoto()" class="bg-emerald-600 hover:bg-emerald-500 px-4 py-2 rounded-lg text-[11px] text-white font-bold shadow">📸 Voeg foto toe</button>
+                        <button onclick="triggerDetPhoto()"
+                            class="bg-emerald-600 hover:bg-emerald-500 px-4 py-2 rounded-lg text-[11px] text-white font-bold shadow">📸
+                            Voeg foto toe</button>
                     </div>
                     <div id="det-photo-strip" class="grid grid-cols-3 gap-2"></div>
-                    <div class="text-[10px] text-gray-400">📸 Voeg hier foto's toe voor betere determinatie. Tik op een foto om te vergroten.</div>
+                    <div class="text-[10px] text-gray-400">📸 Voeg hier foto's toe voor betere determinatie. Tik op een
+                        foto om te vergroten.</div>
                 </div>
 
                 <!-- Vraagkaart -->
-                <div id="det-question-card" class="bg-gray-900/60 border border-gray-700 rounded-lg p-3 space-y-3 hidden det-question-wrap">
+                <div id="det-question-card"
+                    class="bg-gray-900/60 border border-gray-700 rounded-lg p-3 space-y-3 hidden det-question-wrap">
                     <div class="text-[10px] uppercase text-gray-400 font-bold">Vraag</div>
                     <div class="flex flex-col md:flex-row gap-3 items-start">
                         <div class="flex-1 space-y-2 det-question-wrap">
-                            <div id="det-question" class="text-base font-bold text-white min-h-[48px] flex items-center justify-center text-center">Start een determinatie.</div>
+                            <div id="det-question"
+                                class="text-base font-bold text-white min-h-[48px] flex items-center justify-center text-center">
+                                Start een determinatie.</div>
                             <div id="det-answer-buttons" class="grid grid-cols-2 gap-4 px-4">
-                                <button id="det-btn-yes" onclick="answerDetermination('yes')" class="bg-emerald-700 hover:bg-emerald-600 text-white py-3 px-4 rounded-xl font-bold uppercase text-sm disabled:opacity-40">JA</button>
-                                <button id="det-btn-no" onclick="answerDetermination('no')" class="bg-red-700 hover:bg-red-600 text-white py-3 px-4 rounded-xl font-bold uppercase text-sm disabled:opacity-40">NEE</button>
+                                <button id="det-btn-yes" onclick="answerDetermination('yes')"
+                                    class="bg-emerald-700 hover:bg-emerald-600 text-white py-3 px-4 rounded-xl font-bold uppercase text-sm disabled:opacity-40">JA</button>
+                                <button id="det-btn-no" onclick="answerDetermination('no')"
+                                    class="bg-red-700 hover:bg-red-600 text-white py-3 px-4 rounded-xl font-bold uppercase text-sm disabled:opacity-40">NEE</button>
                             </div>
                             <div id="det-progress" class="text-[10px] text-gray-400"></div>
                             <div id="det-result" class="space-y-2"></div>
-                            <div id="det-next-hint" class="text-[11px] text-gray-400 text-center hidden">Klik bovenaan op Nieuwe determinatie om opnieuw te beginnen.</div>
+                            <div id="det-next-hint" class="text-[11px] text-gray-400 text-center hidden">Klik bovenaan
+                                op Nieuwe determinatie om opnieuw te beginnen.</div>
                             <div id="det-thumb-box" class="det-thumb hidden">
-                                <img id="det-thumb-img" src="" alt="Soort afbeelding" class="w-full max-w-sm mx-auto object-cover">
+                                <img id="det-thumb-img" src="" alt="Soort afbeelding"
+                                    class="w-full max-w-sm mx-auto object-cover">
                             </div>
-                        <div id="det-apply" class="hidden space-y-2">
-                            <button onclick="applyDeterminationToCounts()" class="w-full bg-emerald-600 py-3 px-8 rounded-lg font-bold uppercase text-sm">Voeg toe aan teller</button>
-                            <div id="det-warning" class="text-[10px] text-orange-300 bg-orange-900/30 border border-orange-700 rounded p-2 hidden">Let op: bij her-determinatie wordt de vorige telling niet automatisch gecorrigeerd. Pas zelf -1/+1 aan indien nodig.</div>
-                        </div>
+                            <div id="det-apply" class="hidden space-y-2">
+                                <button onclick="applyDeterminationToCounts()"
+                                    class="w-full bg-emerald-600 py-3 px-8 rounded-lg font-bold uppercase text-sm">Voeg
+                                    toe aan teller</button>
+                                <div id="det-warning"
+                                    class="text-[10px] text-orange-300 bg-orange-900/30 border border-orange-700 rounded p-2 hidden">
+                                    Let op: bij her-determinatie wordt de vorige telling niet automatisch gecorrigeerd.
+                                    Pas zelf -1/+1 aan indien nodig.</div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -603,7 +1018,9 @@
             <div class="bg-gray-800 p-4 rounded-xl border border-blue-500/30 space-y-3">
                 <div class="flex items-center justify-between">
                     <h3 class="font-bold text-blue-200 text-sm">Determinaties in deze telling</h3>
-                    <select id="det-session-select" class="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-white text-[11px]" onchange="renderDetSessionOptions(); renderDeterminationUI(); renderDeterminationList();"></select>
+                    <select id="det-session-select"
+                        class="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-white text-[11px]"
+                        onchange="renderDetSessionOptions(); renderDeterminationUI(); renderDeterminationList();"></select>
                 </div>
                 <div id="det-list" class="space-y-2 text-[11px]"></div>
             </div>
@@ -612,7 +1029,8 @@
         <!-- TAB 8: INFO -->
         <section id="view-info" class="hidden space-y-4 text-sm">
             <h2 class="text-xl font-bold text-emerald-400 text-center">❓ Hulp & Werkwijze</h2>
-            <button class="install-app-btn hidden w-full bg-emerald-700 text-white px-3 py-2 rounded text-[11px] font-bold uppercase tracking-widest">
+            <button
+                class="install-app-btn hidden w-full bg-emerald-700 text-white px-3 py-2 rounded text-[11px] font-bold uppercase tracking-widest">
                 📲 Installeer app
             </button>
             <details id="app-changes-card" class="settings-accordion">
@@ -621,7 +1039,9 @@
                     <span class="text-[10px] uppercase tracking-wide text-amber-300/80">Versiegeschiedenis</span>
                 </summary>
                 <div class="settings-accordion-body space-y-3 text-left">
-                    <div id="app-changes-current" class="text-[11px] text-amber-100 bg-amber-900/20 border border-amber-500/25 rounded px-2 py-2"></div>
+                    <div id="app-changes-current"
+                        class="text-[11px] text-amber-100 bg-amber-900/20 border border-amber-500/25 rounded px-2 py-2">
+                    </div>
                     <div id="app-changes-list" class="space-y-2 text-[12px]"></div>
                     <div class="text-[10px] text-gray-400">Historiek per subversie (inclusief oudere lijnen).</div>
                 </div>
@@ -658,7 +1078,8 @@
                         <div>6) Als iedereen dezelfde vinkjes zet, ziet iedereen hetzelfde teamrapport.</div>
                     </div>
                     <div class="text-cyan-100 text-[12px]">
-                        Belangrijk: dezelfde QR of link twee keer importeren geeft geen dubbeltelling; die bijdrage wordt automatisch overgeslagen.
+                        Belangrijk: dezelfde QR of link twee keer importeren geeft geen dubbeltelling; die bijdrage
+                        wordt automatisch overgeslagen.
                     </div>
                 </div>
             </div>
@@ -675,10 +1096,12 @@
         </section>
     </main>
 
-    <div id="toast" class="fixed bottom-10 left-1/2 transform -translate-x-1/2 bg-emerald-600 text-white px-6 py-3 rounded-full shadow-2xl hidden z-[110] transition-all opacity-0 font-bold border border-emerald-400/30">
+    <div id="toast"
+        class="fixed bottom-10 left-1/2 transform -translate-x-1/2 bg-emerald-600 text-white px-6 py-3 rounded-full shadow-2xl hidden z-[110] transition-all opacity-0 font-bold border border-emerald-400/30">
         Actie gelukt!
     </div>
-    <button id="update-btn" class="hidden fixed right-4 bottom-24 bg-emerald-600 text-white px-4 py-2 rounded-full shadow-2xl font-bold text-xs uppercase tracking-widest border border-emerald-300/40">
+    <button id="update-btn"
+        class="hidden fixed right-4 bottom-24 bg-emerald-600 text-white px-4 py-2 rounded-full shadow-2xl font-bold text-xs uppercase tracking-widest border border-emerald-300/40">
         UPDATE
     </button>
     <!-- Determinatie modal -->
@@ -688,73 +1111,113 @@
             <div id="det-modal-title" class="text-2xl font-extrabold text-white">Determinatie</div>
             <div id="det-modal-rarity" class="rarity-pill bg-emerald-900 text-emerald-200"></div>
             <div id="det-modal-links" class="space-y-2">
-                <button id="det-modal-link" onclick="openDetLink('wiki')" class="w-full bg-emerald-900/40 text-emerald-100 border border-emerald-600/50 py-2 rounded text-sm hidden">Wikipedia zoekopdracht</button>
-                <button id="det-modal-link-np" onclick="openDetLink('np')" class="w-full bg-blue-900/40 text-blue-100 border border-blue-600/50 py-2 rounded text-sm hidden">Natuurpunt soortfiche</button>
+                <button id="det-modal-link" onclick="openDetLink('wiki')"
+                    class="w-full bg-emerald-900/40 text-emerald-100 border border-emerald-600/50 py-2 rounded text-sm hidden">Wikipedia
+                    zoekopdracht</button>
+                <button id="det-modal-link-np" onclick="openDetLink('np')"
+                    class="w-full bg-blue-900/40 text-blue-100 border border-blue-600/50 py-2 rounded text-sm hidden">Natuurpunt
+                    soortfiche</button>
             </div>
             <div class="space-y-2 pt-2">
-                <button id="det-modal-add" class="bg-emerald-600 text-white py-2 rounded-lg font-bold uppercase text-xs w-full" onclick="applyDeterminationToCounts(); closeDetModal();">Voeg toe aan teller</button>
-                <button class="bg-gray-700 text-white py-2 rounded-lg font-bold uppercase text-xs w-full" onclick="closeDetModal()">Ok</button>
+                <button id="det-modal-add"
+                    class="bg-emerald-600 text-white py-2 rounded-lg font-bold uppercase text-xs w-full"
+                    onclick="applyDeterminationToCounts(); closeDetModal();">Voeg toe aan teller</button>
+                <button class="bg-gray-700 text-white py-2 rounded-lg font-bold uppercase text-xs w-full"
+                    onclick="closeDetModal()">Ok</button>
             </div>
         </div>
     </div>
 
     <!-- Photo lightbox -->
-    <div id="photo-lightbox" class="fixed inset-0 bg-black/80 backdrop-blur-sm hidden z-[200] flex items-center justify-center p-4" onclick="closePhoto(event)">
+    <div id="photo-lightbox"
+        class="fixed inset-0 bg-black/80 backdrop-blur-sm hidden z-[200] flex items-center justify-center p-4"
+        onclick="closePhoto(event)">
         <div class="relative max-w-4xl max-h-[90vh] w-full flex justify-center">
-            <img id="photo-lightbox-img" src="" class="rounded-xl shadow-2xl max-h-[90vh] object-contain bg-black" alt="Foto">
-            <button class="absolute top-2 right-2 bg-black/60 text-white rounded-full w-10 h-10 font-bold text-lg" onclick="closePhoto(event)">✕</button>
+            <img id="photo-lightbox-img" src="" class="rounded-xl shadow-2xl max-h-[90vh] object-contain bg-black"
+                alt="Foto">
+            <button class="absolute top-2 right-2 bg-black/60 text-white rounded-full w-10 h-10 font-bold text-lg"
+                onclick="closePhoto(event)">✕</button>
         </div>
     </div>
 
     <!-- QR import wizard modal -->
-    <div id="qr-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm hidden z-[210] flex items-center justify-center p-4" onclick="closeQrModal(event)">
-        <div class="bg-gradient-to-br from-gray-900 via-gray-900 to-gray-800 rounded-2xl border border-purple-500/40 w-full max-w-lg p-4 relative space-y-3" onclick="event.stopPropagation();">
+    <div id="qr-modal"
+        class="fixed inset-0 bg-black/70 backdrop-blur-sm hidden z-[210] flex items-center justify-center p-4"
+        onclick="closeQrModal(event)">
+        <div class="bg-gradient-to-br from-gray-900 via-gray-900 to-gray-800 rounded-2xl border border-purple-500/40 w-full max-w-lg p-4 relative space-y-3"
+            onclick="event.stopPropagation();">
             <div class="flex justify-between items-start gap-3">
                 <div>
                     <div class="text-[10px] uppercase tracking-widest text-purple-300 font-bold">QR import</div>
                     <h3 class="text-purple-100 font-bold text-lg">Wizard: telling toevoegen</h3>
                 </div>
-                <button data-qr-close="1" class="bg-black/50 text-white rounded-full w-8 h-8" onclick="closeQrModal(event)">✕</button>
+                <button data-qr-close="1" class="bg-black/50 text-white rounded-full w-8 h-8"
+                    onclick="closeQrModal(event)">✕</button>
             </div>
-            <div class="text-[11px] text-purple-100 bg-purple-900/25 border border-purple-500/20 rounded p-2 whitespace-pre-line" id="qr-wizard-meta">
+            <div class="text-[11px] text-purple-100 bg-purple-900/25 border border-purple-500/20 rounded p-2 whitespace-pre-line"
+                id="qr-wizard-meta">
                 Stap 1: scan de QR-code van je partner.
             </div>
             <div id="session-reader-modal" class="rounded-lg overflow-hidden bg-black aspect-square"></div>
-            <pre id="qr-wizard-summary" class="bg-black/40 border border-purple-900/40 rounded p-2 text-[10px] text-purple-100 whitespace-pre-wrap">Nog geen QR gelezen.</pre>
+            <pre id="qr-wizard-summary"
+                class="bg-black/40 border border-purple-900/40 rounded p-2 text-[10px] text-purple-100 whitespace-pre-wrap">Nog geen QR gelezen.</pre>
             <div class="space-y-2">
-                <div class="text-[10px] uppercase tracking-wider text-purple-200 font-bold">Stap 3 · Datum van nieuwe telling</div>
-                <input type="date" id="qr-wizard-date" class="bg-gray-700 border border-gray-600 rounded px-2 py-2 text-white w-full text-[12px]" onchange="buildQrWizardTargetOptions()">
-                <div id="qr-wizard-hint" class="text-[11px] text-gray-300 bg-gray-900/70 border border-gray-700 rounded px-2 py-2"></div>
+                <div class="text-[10px] uppercase tracking-wider text-purple-200 font-bold">Stap 3 · Datum van nieuwe
+                    telling</div>
+                <input type="date" id="qr-wizard-date"
+                    class="bg-gray-700 border border-gray-600 rounded px-2 py-2 text-white w-full text-[12px]"
+                    onchange="buildQrWizardTargetOptions()">
+                <div id="qr-wizard-hint"
+                    class="text-[11px] text-gray-300 bg-gray-900/70 border border-gray-700 rounded px-2 py-2"></div>
             </div>
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                <button id="qr-wizard-rescan-btn" class="bg-purple-700 text-white py-2 rounded text-[11px] font-bold uppercase" onclick="restartQrWizardScan()">Scan (opnieuw)</button>
-                <button id="qr-wizard-import-btn" class="bg-emerald-700 text-white py-2 rounded text-[11px] font-bold uppercase" onclick="importQrWizardPayload()" disabled>Voeg telling toe</button>
-                <button data-qr-close="1" class="bg-gray-700 text-white py-2 rounded text-[11px] font-bold uppercase" onclick="closeQrModal(event)">Sluit</button>
+                <button id="qr-wizard-rescan-btn"
+                    class="bg-purple-700 text-white py-2 rounded text-[11px] font-bold uppercase"
+                    onclick="restartQrWizardScan()">Scan (opnieuw)</button>
+                <button id="qr-wizard-import-btn"
+                    class="bg-emerald-700 text-white py-2 rounded text-[11px] font-bold uppercase"
+                    onclick="importQrWizardPayload()" disabled>Voeg telling toe</button>
+                <button data-qr-close="1" class="bg-gray-700 text-white py-2 rounded text-[11px] font-bold uppercase"
+                    onclick="closeQrModal(event)">Sluit</button>
             </div>
         </div>
     </div>
 
     <!-- Session info modal -->
-    <div id="session-info-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm hidden z-[220] flex items-center justify-center p-4" onclick="event.target.id==='session-info-modal' && closeSessionInfoModal()">
-        <div class="bg-gradient-to-br from-gray-900 via-gray-850 to-gray-800 border border-emerald-500/40 shadow-2xl rounded-2xl max-w-md w-full p-5 space-y-4 relative">
+    <div id="session-info-modal"
+        class="fixed inset-0 bg-black/70 backdrop-blur-sm hidden z-[220] flex items-center justify-center p-4"
+        onclick="event.target.id==='session-info-modal' && closeSessionInfoModal()">
+        <div
+            class="bg-gradient-to-br from-gray-900 via-gray-850 to-gray-800 border border-emerald-500/40 shadow-2xl rounded-2xl max-w-md w-full p-5 space-y-4 relative">
             <div class="flex items-start gap-3">
-                <div class="w-10 h-10 rounded-full bg-emerald-600/20 border border-emerald-400/40 flex items-center justify-center text-xl">📝</div>
+                <div
+                    class="w-10 h-10 rounded-full bg-emerald-600/20 border border-emerald-400/40 flex items-center justify-center text-xl">
+                    📝</div>
                 <div class="space-y-1">
                     <h3 class="text-emerald-200 font-bold text-lg">Telling afronden</h3>
                     <div class="text-gray-200 text-sm leading-relaxed space-y-1.5">
-                        <div><span class="text-emerald-300 font-semibold">1.</span> Vul het traject dat je zojuist liep in.</div>
-                        <div><span class="text-emerald-300 font-semibold">2.</span> Controleer het weerbericht (aangepast mag, we vullen alvast je locatie in).</div>
-                        <div><span class="text-emerald-300 font-semibold">3.</span> Notities: vermeld bijv. of het wegdek nat of droog was (natte weg = vaak meer trek), plus eventuele bijzonderheden.</div>
-                        <div class="text-gray-400 text-[13px] pt-1">Deze info gaat mee in het rapport en helpt bij latere tellingen.</div>
+                        <div><span class="text-emerald-300 font-semibold">1.</span> Vul het traject dat je zojuist liep
+                            in.</div>
+                        <div><span class="text-emerald-300 font-semibold">2.</span> Controleer het weerbericht
+                            (aangepast mag, we vullen alvast je locatie in).</div>
+                        <div><span class="text-emerald-300 font-semibold">3.</span> Notities: vermeld bijv. of het
+                            wegdek nat of droog was (natte weg = vaak meer trek), plus eventuele bijzonderheden.</div>
+                        <div class="text-gray-400 text-[13px] pt-1">Deze info gaat mee in het rapport en helpt bij
+                            latere tellingen.</div>
                     </div>
                 </div>
-                <button class="absolute top-3 right-3 text-gray-400 hover:text-white" onclick="closeSessionInfoModal()">✕</button>
+                <button class="absolute top-3 right-3 text-gray-400 hover:text-white"
+                    onclick="closeSessionInfoModal()">✕</button>
             </div>
             <div class="flex gap-3 flex-wrap">
-                <button class="flex-1 min-w-[120px] bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg py-2.5 font-bold text-sm shadow-lg active:scale-[0.98]" onclick="switchTab('sessions'); closeSessionInfoModal();">
+                <button
+                    class="flex-1 min-w-[120px] bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg py-2.5 font-bold text-sm shadow-lg active:scale-[0.98]"
+                    onclick="switchTab('sessions'); closeSessionInfoModal();">
                     Naar logboek
                 </button>
-                <button class="flex-1 min-w-[120px] bg-gray-800 border border-gray-700 text-gray-200 rounded-lg py-2.5 font-bold text-sm active:scale-[0.98]" onclick="closeSessionInfoModal()">
+                <button
+                    class="flex-1 min-w-[120px] bg-gray-800 border border-gray-700 text-gray-200 rounded-lg py-2.5 font-bold text-sm active:scale-[0.98]"
+                    onclick="closeSessionInfoModal()">
                     Later
                 </button>
             </div>
@@ -762,30 +1225,46 @@
     </div>
 
     <!-- Sync link wizard modal -->
-    <div id="sync-wizard-modal" class="fixed inset-0 bg-black/75 backdrop-blur-sm hidden z-[230] flex items-center justify-center p-4" onclick="closeSyncWizard(event)">
-        <div class="bg-gradient-to-br from-gray-900 via-gray-900 to-gray-800 border border-cyan-500/40 shadow-2xl rounded-2xl max-w-lg w-full p-5 space-y-4" onclick="event.stopPropagation();">
+    <div id="sync-wizard-modal"
+        class="fixed inset-0 bg-black/75 backdrop-blur-sm hidden z-[230] flex items-center justify-center p-4"
+        onclick="closeSyncWizard(event)">
+        <div class="bg-gradient-to-br from-gray-900 via-gray-900 to-gray-800 border border-cyan-500/40 shadow-2xl rounded-2xl max-w-lg w-full p-5 space-y-4"
+            onclick="event.stopPropagation();">
             <div class="flex items-start justify-between gap-3">
                 <div>
                     <div class="text-cyan-300 text-[10px] uppercase tracking-widest font-bold">Deel-link</div>
                     <h3 class="text-cyan-100 font-bold text-lg">Wizard: telling toevoegen</h3>
                 </div>
-                <button data-sync-close="1" class="text-gray-400 hover:text-white text-lg" onclick="closeSyncWizard(event)">✕</button>
+                <button data-sync-close="1" class="text-gray-400 hover:text-white text-lg"
+                    onclick="closeSyncWizard(event)">✕</button>
             </div>
-            <div id="sync-wizard-meta" class="text-[11px] text-cyan-100 whitespace-pre-line bg-cyan-900/20 border border-cyan-500/20 rounded p-3"></div>
-            <pre id="sync-wizard-summary" class="bg-black/40 border border-cyan-900/40 rounded p-3 text-[10px] text-cyan-100 whitespace-pre-wrap"></pre>
+            <div id="sync-wizard-meta"
+                class="text-[11px] text-cyan-100 whitespace-pre-line bg-cyan-900/20 border border-cyan-500/20 rounded p-3">
+            </div>
+            <pre id="sync-wizard-summary"
+                class="bg-black/40 border border-cyan-900/40 rounded p-3 text-[10px] text-cyan-100 whitespace-pre-wrap"></pre>
             <div class="space-y-2">
-                <div class="text-[10px] uppercase tracking-wider text-cyan-200 font-bold">Stap 3 · Datum van nieuwe telling</div>
-                <input type="date" id="sync-wizard-date" class="bg-gray-700 border border-gray-600 rounded px-2 py-2 text-white w-full text-[12px]" onchange="buildSyncWizardTargetOptions()">
-                <div id="sync-wizard-hint" class="text-[11px] text-gray-300 bg-gray-900/70 border border-gray-700 rounded px-2 py-2"></div>
+                <div class="text-[10px] uppercase tracking-wider text-cyan-200 font-bold">Stap 3 · Datum van nieuwe
+                    telling</div>
+                <input type="date" id="sync-wizard-date"
+                    class="bg-gray-700 border border-gray-600 rounded px-2 py-2 text-white w-full text-[12px]"
+                    onchange="buildSyncWizardTargetOptions()">
+                <div id="sync-wizard-hint"
+                    class="text-[11px] text-gray-300 bg-gray-900/70 border border-gray-700 rounded px-2 py-2"></div>
             </div>
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                <button class="bg-cyan-700 text-white py-2 rounded text-[11px] font-bold uppercase" onclick="importPendingSyncLinkWizard()">Voeg telling toe</button>
-                <button data-sync-close="1" class="bg-gray-700 text-white py-2 rounded text-[11px] font-bold uppercase" onclick="closeSyncWizard(event)">Later</button>
-                <button class="bg-red-900/60 border border-red-500/40 text-red-100 py-2 rounded text-[11px] font-bold uppercase" onclick="dismissPendingSyncLink()">Negeer</button>
+                <button class="bg-cyan-700 text-white py-2 rounded text-[11px] font-bold uppercase"
+                    onclick="importPendingSyncLinkWizard()">Voeg telling toe</button>
+                <button data-sync-close="1" class="bg-gray-700 text-white py-2 rounded text-[11px] font-bold uppercase"
+                    onclick="closeSyncWizard(event)">Later</button>
+                <button
+                    class="bg-red-900/60 border border-red-500/40 text-red-100 py-2 rounded text-[11px] font-bold uppercase"
+                    onclick="dismissPendingSyncLink()">Negeer</button>
             </div>
         </div>
     </div>
 
     <script src="./app.js"></script>
 </body>
+
 </html>
