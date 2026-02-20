@@ -235,6 +235,45 @@ const SPECIES = [
     { id: 'kam', name: 'Kamsalamander', color: 'yellow', hasAmplexus: false }
 ];
 
+const COUNT_KEY_MIGRATION_SUFFIX_MAP = Object.freeze({
+    pair_live: 'p_l',
+    pair_dead: 'p_d',
+    m_live: 'm_l',
+    f_live: 'v_l',
+    u_live: 'o_l',
+    m_dead: 'm_d',
+    f_dead: 'v_d',
+    u_dead: 'o_d'
+});
+
+function toLegacyCountKey(key) {
+    if (typeof key !== 'string' || !key) return key;
+    for (const modernSuffix in COUNT_KEY_MIGRATION_SUFFIX_MAP) {
+        const marker = `_${modernSuffix}`;
+        if (!key.endsWith(marker)) continue;
+        return `${key.slice(0, -marker.length)}_${COUNT_KEY_MIGRATION_SUFFIX_MAP[modernSuffix]}`;
+    }
+    return key;
+}
+
+function normalizeCountKeySchema(counts) {
+    if (!counts || typeof counts !== 'object') return false;
+    let changed = false;
+    const entries = Object.entries(counts);
+    entries.forEach(([key, raw]) => {
+        const legacyKey = toLegacyCountKey(key);
+        if (legacyKey === key) return;
+        const n = Number(raw || 0);
+        const safe = Number.isFinite(n) ? n : 0;
+        const current = Number(counts[legacyKey] || 0);
+        const currentSafe = Number.isFinite(current) ? current : 0;
+        if (safe !== 0) counts[legacyKey] = currentSafe + safe;
+        delete counts[key];
+        changed = true;
+    });
+    return changed;
+}
+
 let detEditing = false;
 
 function rarityFor(speciesId) {
@@ -1337,6 +1376,7 @@ function ensureDay(d = picker.value) {
     const day = storage[d];
     stripLegacyTeamFields(day);
     if (!day.counts) day.counts = {};
+    normalizeCountKeySchema(day.counts);
     if (!day.custom) day.custom = [];
     if (!day.photos) day.photos = [];
     if (typeof day.notes !== 'string') day.notes = "";
@@ -1345,6 +1385,7 @@ function ensureDay(d = picker.value) {
     day.sessions.forEach(s => {
         stripLegacyTeamFields(s);
         if (!s.counts) s.counts = {};
+        normalizeCountKeySchema(s.counts);
         if (!s.photos) s.photos = [];
         if (!s.determinations) s.determinations = [];
         if (!s.routeName) s.routeName = "";
@@ -1352,7 +1393,10 @@ function ensureDay(d = picker.value) {
         if (!s.weather) s.weather = null;
         if (typeof s.includeInReports !== 'boolean') s.includeInReports = true;
         if (!Array.isArray(s.contributions)) s.contributions = [];
-        s.contributions.forEach(c => stripLegacyTeamFields(c));
+        s.contributions.forEach(c => {
+            stripLegacyTeamFields(c);
+            normalizeCountKeySchema(c?.counts);
+        });
         if (!Array.isArray(s.contributorRoster)) s.contributorRoster = [];
         if (typeof s.autoContributorNote !== 'string') s.autoContributorNote = '';
         ensureLocalSessionContributorDefaults(s);
@@ -1437,6 +1481,24 @@ function migrateOldSchema() {
     save();
 }
 
+function migrateCounterKeySchema() {
+    let changed = false;
+    for (const d in storage) {
+        const day = storage[d];
+        if (!day || typeof day !== 'object') continue;
+        if (normalizeCountKeySchema(day.counts)) changed = true;
+        (Array.isArray(day.sessions) ? day.sessions : []).forEach(s => {
+            if (normalizeCountKeySchema(s.counts)) changed = true;
+            if (Array.isArray(s.contributions)) {
+                s.contributions.forEach(c => {
+                    if (normalizeCountKeySchema(c?.counts)) changed = true;
+                });
+            }
+        });
+    }
+    if (changed) save();
+}
+
 function migrateLegacyContributions() {
     let changed = false;
     for (const d in storage) {
@@ -1470,6 +1532,7 @@ function migrateLegacyContributions() {
 function runCoreSchemaMigrations() {
     migrateLegacyDays();
     migrateOldSchema();
+    migrateCounterKeySchema();
     migrateLegacyContributions();
 }
 
@@ -1665,20 +1728,20 @@ function renderCard(s, custom = false) {
             <div class="space-y-2 bg-emerald-900/10 p-2 rounded-lg border border-emerald-500/10">
                 <div class="text-[10px] text-emerald-400 font-bold text-center uppercase tracking-widest mb-1 opacity-80">Levend</div>
                 
-                ${renderCounterRow(s.id, 'pair_live', 'Paar', 'live')}
-                ${renderCounterRow(s.id, 'm_live', 'Man', 'live')}
-                ${renderCounterRow(s.id, 'f_live', 'Vrouw', 'live')}
-                ${renderCounterRow(s.id, 'u_live', 'Onb', 'live')}
+                ${renderCounterRow(s.id, 'p_l', 'Paar', 'live')}
+                ${renderCounterRow(s.id, 'm_l', 'Man', 'live')}
+                ${renderCounterRow(s.id, 'v_l', 'Vrouw', 'live')}
+                ${renderCounterRow(s.id, 'o_l', 'Onb', 'live')}
             </div>
 
             <!-- DOOD ZONE -->
             <div class="space-y-2 bg-red-900/10 p-2 rounded-lg border border-red-500/10">
                 <div class="text-[10px] text-red-400 font-bold text-center uppercase tracking-widest mb-1 opacity-80">Dood</div>
                 
-                ${renderCounterRow(s.id, 'pair_dead', 'Paar', 'dead')}
-                ${renderCounterRow(s.id, 'm_dead', 'Man', 'dead')}
-                ${renderCounterRow(s.id, 'f_dead', 'Vrouw', 'dead')}
-                ${renderCounterRow(s.id, 'u_dead', 'Onb', 'dead')}
+                ${renderCounterRow(s.id, 'p_d', 'Paar', 'dead')}
+                ${renderCounterRow(s.id, 'm_d', 'Man', 'dead')}
+                ${renderCounterRow(s.id, 'v_d', 'Vrouw', 'dead')}
+                ${renderCounterRow(s.id, 'o_d', 'Onb', 'dead')}
             </div>
         </div>
     </div>`;
@@ -1835,7 +1898,10 @@ function render() {
         let t = 0;
         ['p_l', 'p_d', 'm_l', 'v_l', 'o_l', 'm_d', 'v_d', 'o_d'].forEach(k => {
             const v = countsSource[`${s.id}_${k}`] || 0;
-            if (document.getElementById(`${s.id}_${k}`)) document.getElementById(`${s.id}_${k}`).innerText = v;
+            const legacyEl = document.getElementById(`${s.id}_${k}`);
+            if (legacyEl) legacyEl.innerText = v;
+            const modernEl = document.getElementById(`val_${s.id}_${k}`);
+            if (modernEl) modernEl.innerText = v;
             t += (k === 'p_l' || k === 'p_d') ? v * 2 : v;
         });
         if (document.getElementById(`tot-${s.id}`)) document.getElementById(`tot-${s.id}`).innerText = t;
@@ -4334,7 +4400,8 @@ function sanitizeIncomingSyncPayload(payload) {
     for (const k in rawCounts) {
         const n = Number(rawCounts[k]);
         if (!isFinite(n) || n === 0) continue;
-        counts[k] = n;
+        const legacyKey = toLegacyCountKey(k);
+        counts[legacyKey] = (counts[legacyKey] || 0) + n;
     }
     const custom = normalizeCustomSpeciesList(payload.s || []);
     const sourceDate = typeof payload.sourceDate === 'string' ? payload.sourceDate : (typeof payload.d === 'string' ? payload.d : '');

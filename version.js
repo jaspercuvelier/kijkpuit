@@ -1,10 +1,19 @@
 // Centrale versiebron voor app en service worker
-const APP_VERSION = '3.1.0';
+const APP_VERSION = '3.1.1';
 
 // Changelog voor het uitklapbare "Changes"-luik in de Info-tab.
 // Voeg nieuwe releases bovenaan toe.
 // Inhoud gebaseerd op git-geschiedenis van version.js + recente lokale wijzigingen.
 const APP_CHANGELOG = [
+    {
+        version: '3.1.1',
+        title: 'Hotfix teller + sleutelmigratie',
+        changes: [
+            'Bug opgelost waarbij +1/-1 geen zichtbare tellerupdate meer gaf na de nieuwe tellerlayout.',
+            'Telsleutels weer gestandaardiseerd op het bestaande schema (`p_l`, `m_l`, ...), zodat rapporten en totalen opnieuw kloppen.',
+            'Automatische migratie toegevoegd voor sessies met tijdelijke sleutels zoals `pair_live`/`f_dead`.'
+        ]
+    },
     {
         version: '3.1.0',
         title: 'Grote UX-update: Delen & instellingen',
