@@ -1,10 +1,18 @@
 // Centrale versiebron voor app en service worker
-const APP_VERSION = '3.1.1';
+const APP_VERSION = '3.1.2';
 
 // Changelog voor het uitklapbare "Changes"-luik in de Info-tab.
 // Voeg nieuwe releases bovenaan toe.
 // Inhoud gebaseerd op git-geschiedenis van version.js + recente lokale wijzigingen.
 const APP_CHANGELOG = [
+    {
+        version: '3.1.2',
+        title: 'UI hotfix: uniforme tellerknoppen',
+        changes: [
+            'De + en - knoppen in de teller zijn nu exact even groot op alle schermformaten.',
+            'Layout van de teller-rij gestabiliseerd zodat labels zoals "Paar", "Man" en "Vrouw" knopgroottes niet meer visueel beïnvloeden.'
+        ]
+    },
     {
         version: '3.1.1',
         title: 'Hotfix teller + sleutelmigratie',

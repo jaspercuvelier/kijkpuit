@@ -1752,15 +1752,16 @@ function renderCounterRow(speciesId, key, label, type) {
     const btnColorDelta = isDead ? 'bg-red-900/60 hover:bg-red-700' : 'bg-emerald-600/80 hover:bg-emerald-500';
     const id = `${speciesId}_${key}`;
     const valId = `val_${id}`;
+    const stepBtnBase = 'w-10 h-10 min-w-[2.5rem] rounded flex items-center justify-center font-bold text-xl leading-none shrink-0 transition-transform active:scale-95';
 
     return `
     <div class="flex items-center justify-between bg-gray-900/50 rounded-lg p-1">
-        <button onclick="mod('${id}', -1, event)" class="w-8 h-8 rounded bg-gray-800 text-gray-400 hover:text-white flex items-center justify-center font-bold text-lg active:scale-90 transition-transform">-</button>
-        <div class="flex flex-col items-center">
+        <button onclick="mod('${id}', -1, event)" class="${stepBtnBase} bg-gray-800 text-gray-300 hover:text-white border border-gray-700">-</button>
+        <div class="flex flex-col items-center justify-center flex-1">
             <span id="${valId}" class="text-xl font-bold text-white font-mono leading-none">0</span>
             <span class="text-[9px] text-gray-500 uppercase tracking-widest">${label}</span>
         </div>
-        <button onclick="mod('${id}', 1, event)" class="w-12 h-10 rounded ${btnColorDelta} text-white flex items-center justify-center font-bold text-xl shadow-lg active:scale-95 transition-transform counter-btn">+</button>
+        <button onclick="mod('${id}', 1, event)" class="${stepBtnBase} ${btnColorDelta} text-white shadow-lg border border-white/10 counter-btn">+</button>
     </div>`;
 }
 
