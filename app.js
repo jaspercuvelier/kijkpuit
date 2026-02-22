@@ -47,6 +47,9 @@ function updateDevModeUI() {
             advancedContainer.removeAttribute('open');
         }
     }
+    document.querySelectorAll('[data-dev-only="1"]').forEach(el => {
+        el.classList.toggle('hidden', !devMode);
+    });
 }
 
 // Track app open
@@ -220,6 +223,98 @@ function vibe(ms = 15, force = false) {
     navigator.vibrate(ms);
     lastVibeTs = now;
 }
+
+// --- AUDIO FEEDBACK ---
+let counterAudioCtx = null;
+
+function getCounterAudioContext() {
+    if (counterAudioCtx) return counterAudioCtx;
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return null;
+    try {
+        counterAudioCtx = new AudioCtx();
+    } catch (_) {
+        counterAudioCtx = null;
+    }
+    return counterAudioCtx;
+}
+
+function scheduleCounterTone(ctx, {
+    start,
+    freq = 660,
+    endFreq = freq,
+    duration = 0.08,
+    volume = 0.05,
+    wave = 'sine'
+} = {}) {
+    if (!ctx) return start || 0;
+    const t0 = Math.max(ctx.currentTime, Number(start || 0));
+    const dur = Math.max(0.03, Number(duration || 0.08));
+    const vol = Math.max(0.0001, Number(volume || 0.05));
+    const f0 = Math.max(50, Number(freq || 660));
+    const f1 = Math.max(50, Number(endFreq || f0));
+
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = wave;
+    osc.frequency.setValueAtTime(f0, t0);
+    if (Math.abs(f1 - f0) > 0.1) {
+        osc.frequency.exponentialRampToValueAtTime(f1, t0 + dur);
+    }
+
+    gain.gain.setValueAtTime(0.0001, t0);
+    gain.gain.exponentialRampToValueAtTime(vol, t0 + Math.min(0.02, dur * 0.35));
+    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(t0);
+    osc.stop(t0 + dur + 0.02);
+    return t0 + dur;
+}
+
+function playCounterSignal(kind = 'live') {
+    const ctx = getCounterAudioContext();
+    if (!ctx) return;
+    if (ctx.state === 'suspended') ctx.resume().catch(() => { });
+
+    let t = ctx.currentTime + 0.005;
+    if (kind === 'minus') {
+        scheduleCounterTone(ctx, { start: t, freq: 520, endFreq: 470, duration: 0.05, volume: 0.026, wave: 'triangle' });
+        return;
+    }
+    if (kind === 'pair_dead') {
+        t = scheduleCounterTone(ctx, { start: t, freq: 740, endFreq: 620, duration: 0.07, volume: 0.048, wave: 'sine' });
+        t = scheduleCounterTone(ctx, { start: t + 0.012, freq: 620, endFreq: 490, duration: 0.08, volume: 0.05, wave: 'sine' });
+        scheduleCounterTone(ctx, { start: t + 0.012, freq: 490, endFreq: 370, duration: 0.1, volume: 0.052, wave: 'sine' });
+        return;
+    }
+    if (kind === 'dead') {
+        t = scheduleCounterTone(ctx, { start: t, freq: 700, endFreq: 590, duration: 0.07, volume: 0.044, wave: 'sine' });
+        scheduleCounterTone(ctx, { start: t + 0.02, freq: 520, endFreq: 410, duration: 0.095, volume: 0.048, wave: 'sine' });
+        return;
+    }
+    if (kind === 'pair_live') {
+        // Vrolijke 4 noten: do-mi-sol-do
+        const notes = [523.25, 659.25, 783.99, 1046.5];
+        notes.forEach((freq, idx) => {
+            const start = t + idx * 0.052;
+            scheduleCounterTone(ctx, {
+                start,
+                freq,
+                endFreq: freq * 1.01,
+                duration: 0.055,
+                volume: idx === notes.length - 1 ? 0.08 : 0.068,
+                wave: idx < 3 ? 'triangle' : 'sine'
+            });
+        });
+        return;
+    }
+    t = scheduleCounterTone(ctx, { start: t, freq: 880, endFreq: 980, duration: 0.06, volume: 0.058, wave: 'triangle' });
+    scheduleCounterTone(ctx, { start: t + 0.016, freq: 1174.66, endFreq: 1318.5, duration: 0.074, volume: 0.064, wave: 'sine' });
+}
+
 document.addEventListener('pointerdown', ev => {
     const btn = ev.target.closest('button');
     if (btn && !btn.disabled) vibe();
@@ -1088,6 +1183,8 @@ reportTrendShowEmptyDays = getReportTrendShowEmptySetting();
 runCoreSchemaMigrations();
 let activeSessionId = null;
 let sessionWizardContext = null;
+let sessionWizardGoal = '';
+let sessionWizardShareChoice = '';
 // Schema v2: per day stores counts, custom, photos, notes, weather, sessions
 // session object: { id, start, end?, counts: {}, notes: '' }
 let lastAction = null;
@@ -1095,6 +1192,8 @@ let tellingTimer = null;
 let tellingStartTs = null;
 let inactivityPromptTimer = null;
 let inactivityAutoTimer = null;
+let lastCountToastTimer = null;
+let lastCountToastState = null;
 const INACTIVITY_MS = 60 * 60 * 1000; // 1 uur
 const INACTIVITY_AUTO_MS = 10 * 60 * 1000; // 10 minuten extra
 const picker = document.getElementById('datePicker');
@@ -1748,20 +1847,20 @@ function renderCard(s, custom = false) {
             <div class="space-y-2 bg-emerald-900/10 p-2 rounded-lg border border-emerald-500/10">
                 <div class="text-[10px] text-emerald-400 font-bold text-center uppercase tracking-widest mb-1 opacity-80">Levend</div>
                 
-                ${renderCounterRow(s.id, 'p_l', 'Paar', 'live')}
-                ${renderCounterRow(s.id, 'm_l', 'Man', 'live')}
-                ${renderCounterRow(s.id, 'v_l', 'Vrouw', 'live')}
-                ${renderCounterRow(s.id, 'o_l', 'Onb', 'live')}
+                ${renderCounterRow(s.id, 'p_l', 'M+V', 'live')}
+                ${renderCounterRow(s.id, 'm_l', 'M', 'live')}
+                ${renderCounterRow(s.id, 'v_l', 'V', 'live')}
+                ${renderCounterRow(s.id, 'o_l', '?', 'live')}
             </div>
 
             <!-- DOOD ZONE -->
             <div class="space-y-2 bg-red-900/10 p-2 rounded-lg border border-red-500/10">
                 <div class="text-[10px] text-red-400 font-bold text-center uppercase tracking-widest mb-1 opacity-80">Dood</div>
                 
-                ${renderCounterRow(s.id, 'p_d', 'Paar', 'dead')}
-                ${renderCounterRow(s.id, 'm_d', 'Man', 'dead')}
-                ${renderCounterRow(s.id, 'v_d', 'Vrouw', 'dead')}
-                ${renderCounterRow(s.id, 'o_d', 'Onb', 'dead')}
+                ${renderCounterRow(s.id, 'p_d', 'M+V', 'dead')}
+                ${renderCounterRow(s.id, 'm_d', 'M', 'dead')}
+                ${renderCounterRow(s.id, 'v_d', 'V', 'dead')}
+                ${renderCounterRow(s.id, 'o_d', '?', 'dead')}
             </div>
         </div>
     </div>`;
@@ -1832,6 +1931,86 @@ function btn(sid, type, color, label, dood = false) {
             `;
 }
 
+function parseCounterKey(key = '') {
+    const m = String(key || '').match(/^(.*)_(p_l|p_d|m_l|v_l|o_l|m_d|v_d|o_d)$/);
+    if (!m) return null;
+    return { speciesId: m[1], suffix: m[2] };
+}
+
+function countBucketLabel(suffix = '') {
+    switch (suffix) {
+        case 'p_l': return 'M+V levend';
+        case 'p_d': return 'M+V dood';
+        case 'm_l': return 'M levend';
+        case 'v_l': return 'V levend';
+        case 'o_l': return '? levend';
+        case 'm_d': return 'M dood';
+        case 'v_d': return 'V dood';
+        case 'o_d': return '? dood';
+        default: return suffix || 'onbekend';
+    }
+}
+
+function counterSignalKindForAction(key = '', delta = 1) {
+    if (Number(delta || 0) < 0) return 'minus';
+    const parsed = parseCounterKey(key);
+    const suffix = parsed?.suffix || '';
+    if (suffix === 'p_l') return 'pair_live';
+    if (suffix === 'p_d') return 'pair_dead';
+    if (suffix.endsWith('_d')) return 'dead';
+    return 'live';
+}
+
+function findSpeciesNameById(speciesId = '', day = null) {
+    if (!speciesId) return '';
+    const base = SPECIES.find(s => s.id === speciesId);
+    if (base?.name) return base.name;
+    const dayCustom = Array.isArray(day?.custom) ? day.custom : [];
+    const custom = dayCustom.find(s => s?.id === speciesId);
+    return custom?.name || speciesId;
+}
+
+function ensureLastCountToastTimer() {
+    if (lastCountToastTimer) return;
+    lastCountToastTimer = setInterval(renderLastCountToast, 1000);
+}
+
+function registerLastCountToast(key, delta = 1, day = null) {
+    const parsed = parseCounterKey(key);
+    if (!parsed || Number(delta) === 0) return;
+    const contextDay = day && typeof day === 'object' ? day : ensureDay();
+    lastCountToastState = {
+        ts: Date.now(),
+        delta: Number(delta) > 0 ? 1 : -1,
+        speciesId: parsed.speciesId,
+        speciesName: findSpeciesNameById(parsed.speciesId, contextDay),
+        bucket: parsed.suffix
+    };
+    renderLastCountToast();
+    ensureLastCountToastTimer();
+}
+
+function renderLastCountToast() {
+    const box = document.getElementById('last-count-toast');
+    if (!box) return;
+    if (!lastCountToastState) {
+        box.classList.add('hidden');
+        return;
+    }
+    const agoSec = Math.max(0, Math.floor((Date.now() - Number(lastCountToastState.ts || 0)) / 1000));
+    const species = lastCountToastState.speciesName || lastCountToastState.speciesId || 'Onbekende soort';
+    const bucket = countBucketLabel(lastCountToastState.bucket || '');
+    const action = Number(lastCountToastState.delta || 1) > 0 ? '+1' : '-1';
+    box.innerText = `Laatste ${action}: ${species} (${bucket}) · ${agoSec}s geleden`;
+    box.classList.remove('hidden');
+}
+
+function clearLastCountToast() {
+    lastCountToastState = null;
+    const box = document.getElementById('last-count-toast');
+    if (box) box.classList.add('hidden');
+}
+
 function mod(key, val, e) {
     splitSessionOverMidnightIfNeeded();
     const d = picker.value;
@@ -1848,9 +2027,11 @@ function mod(key, val, e) {
         active.counts[key] = (active.counts[key] || 0) + val;
         if (active.counts[key] < 0) active.counts[key] = 0;
     }
+    playCounterSignal(counterSignalKindForAction(key, val));
     save(); render();
     recordUserAction();
     if (val > 0) {
+        registerLastCountToast(key, val, day);
         vibe(22, true);
         if (key.includes('_p_l')) celebrate(e, true);
         else if (key.includes('_l')) celebrate(e);
@@ -1934,6 +2115,7 @@ function render() {
     buildReportSessionOptions();
     updateReport(); updateWeather();
     renderDetSessionOptions(); renderDeterminationUI(); renderDeterminationList();
+    renderLastCountToast();
 }
 
 function renderSessionLog() {
@@ -2031,6 +2213,13 @@ function getDetSession() {
             return sessByDet;
         }
     }
+    if (viewedSessionId) {
+        const viewed = day.sessions.find(s => s.id === viewedSessionId);
+        if (viewed) {
+            activeDeterminationSessionId = viewed.id;
+            return viewed;
+        }
+    }
     return getActiveSession(day) || getLatestSession(day) || null;
 }
 
@@ -2041,20 +2230,21 @@ function renderDetSessionOptions() {
     const btnLoose = document.getElementById('det-loose-btn');
     const btnNew = document.getElementById('det-new-btn');
     const day = ensureDay();
-    if (!sel) return;
     const sessions = day.sessions.slice().sort((a, b) => new Date(a.start) - new Date(b.start));
-    sel.innerHTML = sessions.map(s => {
-        const l = sessionDisplayLabel(s, day);
-        const route = normalizeRouteName(s.routeName || '');
-        return `<option value="${s.id}">${l}${route ? ` · ${route}` : ''}</option>`;
-    }).join('') || '<option value=\"\">Geen sessies</option>';
+    if (sel) {
+        sel.innerHTML = sessions.map(s => {
+            const l = sessionDisplayLabel(s, day);
+            const route = normalizeRouteName(s.routeName || '');
+            return `<option value="${s.id}">${l}${route ? ` · ${route}` : ''}</option>`;
+        }).join('') || '<option value=\"\">Geen sessies</option>';
+    }
     const sess = getDetSession();
     if (sess && !sess.determinations) sess.determinations = [];
     if (!sess) {
         activeDeterminationId = null;
         activeDeterminationSessionId = null;
     }
-    if (sess) sel.value = sess.id;
+    if (sel && sess) sel.value = sess.id;
     if (label) {
         const route = normalizeRouteName(sess?.routeName || '');
         label.innerText = sess ? `${sessionDisplayLabel(sess, day)}${route ? ` · ${route}` : ''}` : 'Geen telling';
@@ -2470,9 +2660,20 @@ function setViewedSession(id) {
     }
     const exists = sessions.some(s => s.id === id);
     viewedSessionId = exists ? id : sessions[sessions.length - 1].id;
+    activeDeterminationSessionId = viewedSessionId || null;
+    if (activeDeterminationId) {
+        const selected = sessions.find(s => s.id === viewedSessionId);
+        const activeStillExists = !!selected?.determinations?.some(d => d.id === activeDeterminationId);
+        if (!activeStillExists) activeDeterminationId = null;
+    }
     buildViewedSessionOptions();
     renderSessionLog();
     updateReport();
+    if (currentTab === 'help') {
+        renderDetSessionOptions();
+        renderDeterminationUI();
+        renderDeterminationList();
+    }
 }
 
 function selectReportSession(id) {
@@ -2723,6 +2924,52 @@ function sessionContributorNames(session) {
     return names.join(', ');
 }
 
+function isLikelyImportedSessionId(sessionId = '') {
+    const id = String(sessionId || '');
+    return id.startsWith('syncsess_') || id.startsWith('import_');
+}
+
+function isCollectorOwnedSession(session, profile = getContributorProfile()) {
+    if (!session || typeof session !== 'object') return false;
+    if (session.detTemp) return false;
+    const profileId = typeof profile?.id === 'string' ? profile.id.trim() : '';
+    const localProfileId = profileId ? `local_user_${profileId}` : '';
+    const matchesCollectorId = (rawId = '') => {
+        const id = String(rawId || '').trim();
+        if (!id) return false;
+        if (profileId && id === profileId) return true;
+        if (localProfileId && id === localProfileId) return true;
+        if (id.startsWith('legacy_user_')) return true;
+        return false;
+    };
+
+    const roster = Array.isArray(session.contributorRoster) ? session.contributorRoster : [];
+    if (roster.some(r => matchesCollectorId(r?.id || ''))) return true;
+
+    const contributions = Array.isArray(session.contributions) ? session.contributions : [];
+    if (contributions.some(c => matchesCollectorId(c?.contributorId || ''))) return true;
+
+    if (!contributions.length && !isLikelyImportedSessionId(session.id || '')) return true;
+    return false;
+}
+
+function pickPreferredReportSession(sessions = [], field = 'route') {
+    const ordered = (Array.isArray(sessions) ? sessions : [])
+        .filter(Boolean)
+        .slice()
+        .sort((a, b) => new Date(b.end || b.start || 0) - new Date(a.end || a.start || 0));
+    if (!ordered.length) return null;
+
+    const hasField = s => {
+        if (field === 'weather') return !!s?.weather;
+        return !!normalizeRouteName(s?.routeName || '');
+    };
+
+    const profile = getContributorProfile();
+    const owned = ordered.filter(s => isCollectorOwnedSession(s, profile));
+    return owned.find(hasField) || ordered.find(hasField) || owned[0] || ordered[0] || null;
+}
+
 function getActiveSession(day) {
     const running = (day.sessions || [])
         .filter(s => !s.end)
@@ -2806,7 +3053,7 @@ function startSession(force = false, fromSessionPage = false, dayKeyOverride = n
     viewedSessionId = session.id;
     save(); render(); renderSessionAdmin(); renderDetSessionOptions(); renderDeterminationUI(); renderDeterminationList(); showToast('Telling gestart');
     void showInfo;
-    if (redirect) switchTab('sessions');
+    if (redirect) openSessionManagement(dayKey, { scroll: false });
     fetchWeather(dayKey, session.id); // capture weather at start
 }
 
@@ -2830,6 +3077,84 @@ function resetSessionWizardShareOutputs() {
     if (linkOut) linkOut.value = '';
     if (qrBox) qrBox.classList.add('hidden');
     if (qrPreview) qrPreview.innerHTML = '';
+}
+
+function sessionWizardSetChoiceStyle(button, active = false, type = 'goal') {
+    if (!button) return;
+    const activeSet = type === 'share'
+        ? ['bg-blue-700', 'border-blue-300/60', 'text-white']
+        : ['bg-emerald-700', 'border-emerald-300/60', 'text-white'];
+    const inactiveSet = ['bg-gray-800', 'border-gray-600', 'text-gray-200'];
+    activeSet.forEach(cls => button.classList.toggle(cls, active));
+    inactiveSet.forEach(cls => button.classList.toggle(cls, !active));
+}
+
+function renderSessionWizardStepper() {
+    const stepShare = document.getElementById('session-wizard-step-share');
+    const stepCollector = document.getElementById('session-wizard-step-collector');
+    const shareActionBox = document.getElementById('session-wizard-step-share-action');
+    const shareHint = document.getElementById('session-wizard-step-share-hint');
+    const shareBtn = document.getElementById('session-wizard-step-share-button');
+
+    document.querySelectorAll('[data-session-wizard-goal]').forEach(btn => {
+        const goal = btn.getAttribute('data-session-wizard-goal') || '';
+        sessionWizardSetChoiceStyle(btn, goal === sessionWizardGoal, 'goal');
+    });
+    document.querySelectorAll('[data-session-wizard-share]').forEach(btn => {
+        const mode = btn.getAttribute('data-session-wizard-share') || '';
+        sessionWizardSetChoiceStyle(btn, mode === sessionWizardShareChoice, 'share');
+    });
+
+    if (stepShare) stepShare.classList.toggle('hidden', sessionWizardGoal !== 'share');
+    if (stepCollector) stepCollector.classList.toggle('hidden', sessionWizardGoal !== 'collector');
+
+    if (!shareActionBox || !shareHint || !shareBtn) return;
+    if (sessionWizardGoal !== 'share' || !sessionWizardShareChoice) {
+        shareActionBox.classList.add('hidden');
+        return;
+    }
+    if (sessionWizardShareChoice === 'report') {
+        shareHint.innerText = 'Je deelt meteen een leesbare tekst die je in WhatsApp/Signal kan plakken.';
+        shareBtn.innerText = '📤 Deel tekst voor WhatsApp';
+    } else {
+        shareHint.innerText = 'Je maakt een deel-link zodat de ontvanger jouw volledige sessie kan importeren als aparte telling om ze nadien bij zijn telsessie samen te tellen.';
+        shareBtn.innerText = '🔗 Maak importeerbare deel-link';
+    }
+    shareActionBox.classList.remove('hidden');
+}
+
+function resetSessionWizardStepper() {
+    sessionWizardGoal = '';
+    sessionWizardShareChoice = '';
+    renderSessionWizardStepper();
+}
+
+function sessionWizardSetGoal(goal = '') {
+    const nextGoal = ['save', 'share', 'collector'].includes(goal) ? goal : '';
+    const changed = nextGoal !== sessionWizardGoal;
+    sessionWizardGoal = nextGoal;
+    if (nextGoal !== 'share') sessionWizardShareChoice = '';
+    if (changed) resetSessionWizardShareOutputs();
+    renderSessionWizardStepper();
+}
+
+function sessionWizardSetShareChoice(mode = '') {
+    if (sessionWizardGoal !== 'share') sessionWizardGoal = 'share';
+    const nextMode = ['report', 'link'].includes(mode) ? mode : '';
+    const changed = nextMode !== sessionWizardShareChoice;
+    sessionWizardShareChoice = nextMode;
+    if (changed) resetSessionWizardShareOutputs();
+    renderSessionWizardStepper();
+}
+
+function sessionWizardRunShareChoice() {
+    if (sessionWizardShareChoice === 'report') {
+        sessionWizardShareReport();
+        return;
+    }
+    if (sessionWizardShareChoice === 'link') {
+        sessionWizardGenerateShareLink();
+    }
 }
 
 function renderSessionWizardWeather(session) {
@@ -2924,6 +3249,7 @@ function showSessionInfoModal(dayKey = picker.value, sessionId = viewedSessionId
         return;
     }
     fillSessionWizardFromContext();
+    resetSessionWizardStepper();
     modal.classList.remove('hidden');
 }
 
@@ -2934,6 +3260,7 @@ function closeSessionInfoModal(persist = false) {
     modal.classList.add('hidden');
     sessionWizardContext = null;
     resetSessionWizardShareOutputs();
+    resetSessionWizardStepper();
 }
 
 function handleSessionWizardNameInput() {
@@ -3032,10 +3359,72 @@ async function copyTextWithFallback(text = '', fallbackInput = null) {
     if (fallbackInput && typeof fallbackInput.select === 'function') {
         fallbackInput.focus();
         fallbackInput.select();
-        document.execCommand('copy');
-        return true;
+        return !!document.execCommand('copy');
     }
-    return false;
+    const ta = document.createElement('textarea');
+    ta.value = value;
+    ta.setAttribute('readonly', 'readonly');
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = !!document.execCommand('copy');
+    document.body.removeChild(ta);
+    return ok;
+}
+
+function escapeHtmlForClipboard(text = '') {
+    return String(text || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+async function fileToDataUrl(file) {
+    if (!file || typeof FileReader === 'undefined') return '';
+    return new Promise(resolve => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '');
+        reader.onerror = () => resolve('');
+        try {
+            reader.readAsDataURL(file);
+        } catch (_) {
+            resolve('');
+        }
+    });
+}
+
+async function copyReportTextAndPhotosToClipboard(text = '', files = []) {
+    const plain = String(text || '').trim();
+    if (!plain) return 'none';
+    const canWriteRichClipboard = !!(navigator.clipboard?.write && typeof window.ClipboardItem !== 'undefined');
+    if (canWriteRichClipboard && Array.isArray(files) && files.length) {
+        try {
+            const dataUrls = [];
+            for (let i = 0; i < files.length; i++) {
+                const url = await fileToDataUrl(files[i]);
+                if (url) dataUrls.push(url);
+            }
+            const introHtml = `<p>${escapeHtmlForClipboard(plain).replace(/\n/g, '<br>')}</p>`;
+            const imageHtml = dataUrls.map((src, idx) =>
+                `<p><strong>Foto ${idx + 1}</strong><br><img src="${src}" alt="Foto ${idx + 1}" style="max-width:100%;height:auto;"></p>`
+            ).join('');
+            const html = `<div>${introHtml}${imageHtml}</div>`;
+            await navigator.clipboard.write([
+                new window.ClipboardItem({
+                    'text/plain': new Blob([plain], { type: 'text/plain' }),
+                    'text/html': new Blob([html], { type: 'text/html' })
+                })
+            ]);
+            return dataUrls.length ? 'rich' : 'text';
+        } catch (err) {
+            console.warn('Rich clipboard copy failed, fallback to plain text.', err);
+        }
+    }
+    const ok = await copyTextWithFallback(plain);
+    return ok ? 'text' : 'none';
 }
 
 function isMobileShareContext() {
@@ -3194,11 +3583,30 @@ function downloadSessionWizardQr() {
     document.body.removeChild(a);
 }
 
-function sessionWizardSaveAndOpenSessions() {
+function sessionWizardSaveAndClose() {
     const persisted = persistSessionWizardData({ commitRouteHistory: true, requireName: false, silent: false });
     if (!persisted) return;
     closeSessionInfoModal(false);
-    switchTab('sessions');
+}
+
+function openSessionManagement(dayKey = picker.value, { scroll = true } = {}) {
+    const targetDay = /^\d{4}-\d{2}-\d{2}$/.test(dayKey || '') ? dayKey : (picker.value || todayISO());
+    if (picker && targetDay && picker.value !== targetDay) {
+        picker.value = targetDay;
+        if (typeof picker.onchange === 'function') picker.onchange();
+    }
+    if (currentTab !== 'settings') {
+        switchTab('settings');
+    } else {
+        const sd = document.getElementById('sessionDate');
+        if (sd) sd.value = picker.value;
+        renderSessionAdmin();
+        renderSessionLog();
+    }
+    const details = document.getElementById('settings-session-management-details');
+    if (details) details.open = true;
+    const block = document.getElementById('settings-session-management-block');
+    if (scroll && block) block.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function formatDuration(ms) {
@@ -3283,6 +3691,7 @@ function stopTelling(auto = false) {
     if (!active) return;
     const finishedSessionId = active.id;
     endSession(true);
+    clearLastCountToast();
     clearInterval(tellingTimer);
     tellingTimer = null;
     tellingStartTs = null;
@@ -3299,6 +3708,7 @@ function endSession(silent = false) {
     const active = day.sessions.find(s => !s.end);
     if (!active) return alert('Geen actieve sessie');
     active.end = new Date().toISOString();
+    clearLastCountToast();
     save(); render(); renderSessionAdmin();
     if (!silent) showToast('Telling gestopt');
 }
@@ -4036,10 +4446,17 @@ function updateReport() {
         weatherSummaries.push(summary);
     };
 
-    sessionsToShow.forEach(s => {
-        addRouteSummary(s.routeName || '');
-        addWeatherSummary(s.weather);
-    });
+    if (reportMode === 'day' && sessionsToShow.length > 1) {
+        const preferredRouteSession = pickPreferredReportSession(sessionsToShow, 'route');
+        const preferredWeatherSession = pickPreferredReportSession(sessionsToShow, 'weather');
+        if (preferredRouteSession) addRouteSummary(preferredRouteSession.routeName || '');
+        if (preferredWeatherSession) addWeatherSummary(preferredWeatherSession.weather);
+    } else {
+        sessionsToShow.forEach(s => {
+            addRouteSummary(s.routeName || '');
+            addWeatherSummary(s.weather);
+        });
+    }
 
     if (!weatherSummaries.length) {
         const fallbackWeather = (reportMode === 'session' ? session?.weather : data.weather) || session?.weather;
@@ -4070,18 +4487,63 @@ function updateReport() {
         if (note) txt += `\n📝 *Nota:* ${note}\n`;
         if (session.includeInReports === false) txt += `\n⚠️ Deze sessie staat op "niet meetellen in rapport".\n`;
     }
-    if (reportMode === 'day' && data.notes) txt += `\n📝 *Nota:* ${data.notes}\n`;
+    if (reportMode === 'day') {
+        const sessionNotes = [];
+        const seenSessionNotes = new Set();
+        sessionsToShow
+            .slice()
+            .sort((a, b) => new Date(a.start) - new Date(b.start))
+            .forEach(s => {
+                const note = (s?.notes || '').trim();
+                if (!note) return;
+                const who = sessionContributorNames(s) || sessionDisplayLabel(s, data);
+                const line = `${who}: ${note}`;
+                const key = line.toLowerCase();
+                if (seenSessionNotes.has(key)) return;
+                seenSessionNotes.add(key);
+                sessionNotes.push(line);
+            });
+        const dayNote = (data.notes || '').trim();
+        if (sessionNotes.length || dayNote) {
+            txt += `\n📝 *Notities:*\n`;
+            sessionNotes.forEach(line => {
+                txt += `  - ${line}\n`;
+            });
+            if (dayNote) txt += `  - Algemeen: ${dayNote}\n`;
+        }
+    }
     if (sessionsToShow.length) {
         txt += `\n⏱️ *Tellingen:*\n`;
-        sessionsToShow.sort((a, b) => new Date(a.start) - new Date(b.start)).forEach(s => {
-            const total = sumCounts(s.counts);
-            const weatherTxt = showWeatherPerSession && s.weather ? ` | ${weatherSummaryText(s.weather, ' • ', true)}` : '';
-            const routeName = normalizeRouteName(s.routeName || '');
-            const routeTxt = showRoutePerSession && routeName ? ` | 🚶‍♂️ ${routeName}` : '';
-            const contributors = sessionContributorNames(s);
-            const who = contributors ? ` | 👤 ${contributors}` : '';
-            txt += `  - ${sessionDisplayLabel(s, data)}: ${total} stuks${routeTxt}${who}${weatherTxt}\n`;
-        });
+        const orderedSessions = sessionsToShow.slice().sort((a, b) => new Date(a.start) - new Date(b.start));
+        if (reportMode === 'day' && orderedSessions.length > 1) {
+            const contributorNames = [];
+            const contributorSeen = new Set();
+            orderedSessions.forEach(s => {
+                const raw = sessionContributorNames(s);
+                raw.split(',')
+                    .map(name => name.trim())
+                    .filter(Boolean)
+                    .forEach(name => {
+                        const key = name.toLowerCase();
+                        if (contributorSeen.has(key)) return;
+                        contributorSeen.add(key);
+                        contributorNames.push(name);
+                    });
+            });
+            txt += contributorNames.length
+                ? `  - 👤 ${contributorNames.join(', ')}\n`
+                : `  - 👤 Geen tellernaam ingevuld\n`;
+        } else {
+            orderedSessions.forEach(s => {
+                const total = sumCounts(s.counts);
+                const weatherTxt = showWeatherPerSession && s.weather ? ` | ${weatherSummaryText(s.weather, ' • ', true)}` : '';
+                const routeName = normalizeRouteName(s.routeName || '');
+                const routeTxt = showRoutePerSession && routeName ? ` | 🚶‍♂️ ${routeName}` : '';
+                const contributors = sessionContributorNames(s);
+                const who = contributors ? ` | 👤 ${contributors}` : '';
+                txt += `  - ${sessionDisplayLabel(s, data)}: ${total} stuks${routeTxt}${who}${weatherTxt}\n`;
+            });
+        }
         if (reportMode === 'day' && excludedSessions.length) {
             txt += `\n⚠️ ${excludedSessions.length} sessie(s) tellen niet mee in dit rapport.\n`;
         }
@@ -4174,8 +4636,9 @@ async function shareReport(includePhotos = false) {
     }
 
     const shareData = includePhotos ? { title: 'Paddentrek Teller Pro', text, files } : { title: 'Paddentrek Teller Pro', text };
+    const mobileContext = isMobileShareContext();
     try {
-        if (navigator.share) {
+        if (mobileContext && navigator.share) {
             if (includePhotos) {
                 if (navigator.canShare && !navigator.canShare({ files })) {
                     throw new Error('FILES_NOT_SUPPORTED');
@@ -4191,10 +4654,26 @@ async function shareReport(includePhotos = false) {
             return;
         }
     }
-    // Fallback: kopieer tekst zodat gebruiker zelf kan plakken in een app naar keuze
-    const el = document.createElement('textarea'); el.value = text; document.body.appendChild(el);
-    el.select(); document.execCommand('copy'); document.body.removeChild(el);
-    alert('Rapport gekopieerd. Plak het in je favoriete app (Signal/WhatsApp/Messenger).');
+    if (!includePhotos) {
+        const copied = await copyTextWithFallback(text);
+        if (!copied) {
+            alert('Kopiëren van het rapport is mislukt. Probeer opnieuw.');
+            return;
+        }
+        alert('Gekopieerd naar het klembord. Plak nu het rapport waar je het wil delen.');
+        return;
+    }
+
+    const copyMode = await copyReportTextAndPhotosToClipboard(text, files);
+    if (copyMode === 'rich') {
+        alert('Gekopieerd naar het klembord, inclusief foto’s. Plak nu het rapport waar je het wil delen.');
+        return;
+    }
+    if (copyMode === 'text') {
+        alert('Rapporttekst gekopieerd. Foto’s konden niet mee naar het klembord in deze browser.');
+        return;
+    }
+    alert('Kopiëren van het rapport is mislukt. Probeer opnieuw.');
 }
 
 async function shareDeterminaties() {
@@ -4318,9 +4797,7 @@ function exportAllSessionsCSV() {
 }
 
 function copyReport() {
-    const t = document.getElementById('report-text').innerText;
-    const el = document.createElement('textarea'); el.value = t; document.body.appendChild(el);
-    el.select(); document.execCommand('copy'); document.body.removeChild(el); showToast("Gekopieerd!");
+    void shareReport(false);
 }
 
 // --- UPDATE BADGE ---
@@ -5332,7 +5809,7 @@ function importPendingSyncLink() {
     }
     showToast(added > 1 ? `${added} tellingen toegevoegd` : (result.status === 'updated' ? 'Bijdrage bijgewerkt' : 'Telling toegevoegd'));
     alert(result.summary);
-    switchTab('sessions');
+    openSessionManagement(dayKey);
 }
 
 function importPendingSyncLinkWizard() {
@@ -5351,7 +5828,7 @@ function importPendingSyncLinkWizard() {
     }
     showToast(added > 1 ? `${added} tellingen toegevoegd` : (result.status === 'updated' ? 'Bijdrage bijgewerkt' : 'Telling toegevoegd'));
     alert(result.summary);
-    switchTab('sessions');
+    openSessionManagement(dayKey);
 }
 
 function dismissPendingSyncLink() {
@@ -5787,7 +6264,7 @@ function importQrWizardPayload() {
     }
     showToast(added > 1 ? `${added} tellingen toegevoegd` : (result.status === 'updated' ? 'Bijdrage bijgewerkt' : 'Telling toegevoegd'));
     alert(result.summary);
-    switchTab('sessions');
+    openSessionManagement(dayKey);
 }
 
 function startSessionScanner() {
@@ -5866,6 +6343,10 @@ function renderAppChanges() {
 }
 
 function switchTab(t) {
+    if (t === 'sessions') {
+        openSessionManagement();
+        return;
+    }
     currentTab = t;
     document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
     const view = document.getElementById('view-' + t);
@@ -5878,7 +6359,6 @@ function switchTab(t) {
         buildReportSessionOptions();
         updateReport();
     }
-    if (t === 'sessions') { renderSessionLog(); }
     if (t === 'settings') {
         const sd = document.getElementById('sessionDate');
         if (sd) sd.value = picker.value;
@@ -5893,6 +6373,7 @@ function switchTab(t) {
         renderIncomingSyncCard();
         updateLegacyMigrationUI();
         renderStorageInspector(true);
+        renderSessionLog();
     }
     if (t === 'help') {
         renderDetSessionOptions();
@@ -5938,6 +6419,7 @@ function runInitialRender() {
         trendCard.addEventListener('toggle', refreshHeaderSelectorVisibility);
         trendCard.dataset.headerVisibilityBound = '1';
     }
+    renderLastCountToast();
     refreshHeaderSelectorVisibility();
 }
 

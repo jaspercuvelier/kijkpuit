@@ -1,10 +1,37 @@
 // Centrale versiebron voor app en service worker
-const APP_VERSION = '3.2.3';
+const APP_VERSION = '3.2.6';
 
 // Changelog voor het uitklapbare "Changes"-luik in de Info-tab.
 // Voeg nieuwe releases bovenaan toe.
 // Inhoud gebaseerd op git-geschiedenis van version.js + recente lokale wijzigingen.
 const APP_CHANGELOG = [
+    {
+        version: '3.2.6',
+        title: 'Delen vereenvoudigd (2 knoppen + desktop klembordflow)',
+        changes: [
+            'In Delen zijn rapportacties vereenvoudigd naar 2 knoppen: zonder foto’s en met foto’s.',
+            'Mobiel gebruikt nu expliciet het native deelmenu voor beide rapportknoppen.',
+            'Desktop kopieert naar het klembord met duidelijke melding; bij rapport met foto’s wordt rich clipboard (tekst + foto’s) geprobeerd met nette fallback.'
+        ]
+    },
+    {
+        version: '3.2.5',
+        title: 'Rapportnotities uitgebreid + hulptekst opgeschoond',
+        changes: [
+            'Dagrapport toont nu notities van alle geselecteerde sessies, met tellernaam erbij.',
+            'Algemene dagnota blijft mee opgenomen in het rapport onder hetzelfde notitieblok.',
+            'Hulptekst opgeschoond: QR-regel, oude determinatie-dropdown-vermelding en route/weer-waarschuwing verwijderd.'
+        ]
+    },
+    {
+        version: '3.2.4',
+        title: 'Navigatie/Help update + determinatie volgt headerselectie',
+        changes: [
+            'Mobiele ondernavigatie gecentreerd en gecorrigeerd naar 5 gelijke tabkolommen.',
+            'Hulp-tab herschreven naar de huidige flow (sessie-wizard, delen/import, sessiebeheer in instellingen).',
+            'In determinatie is de aparte sessie-dropdown verwijderd; de telling wordt nu gekozen via de headerselector bovenaan.'
+        ]
+    },
     {
         version: '3.2.3',
         title: 'Deellink UX verbeterd + QR tijdelijk verborgen',

@@ -355,7 +355,7 @@
                 top: auto !important;
                 z-index: 95;
                 display: grid;
-                grid-template-columns: repeat(6, minmax(0, 1fr));
+                grid-template-columns: repeat(5, minmax(0, 1fr));
                 overflow: hidden;
                 white-space: normal;
                 border-top: 1px solid #374151;
@@ -501,11 +501,9 @@
 
     <!-- Navigatie -->
     <nav id="main-nav"
-        class="flex bg-gray-800 border-b border-gray-700 text-[10px] font-bold sticky top-[78px] z-40 overflow-x-auto whitespace-nowrap no-scrollbar shadow-md">
+        class="flex justify-center bg-gray-800 border-b border-gray-700 text-[10px] font-bold sticky top-[78px] z-40 overflow-x-auto whitespace-nowrap no-scrollbar shadow-md">
         <button onclick="switchTab('count')" id="tab-count" class="px-5 py-3 active-tab uppercase tracking-tight"><span
                 class="tab-icon">🧮</span><span class="tab-text">Tellen</span></button>
-        <button onclick="switchTab('sessions')" id="tab-sessions" class="px-5 py-3 uppercase tracking-tight"><span
-                class="tab-icon">📒</span><span class="tab-text">Sessies</span></button>
         <button onclick="switchTab('help')" id="tab-help" class="px-5 py-3 uppercase tracking-tight"><span
                 class="tab-icon">🔎</span><span class="tab-text">Determinatie</span></button>
         <button onclick="switchTab('report')" id="tab-report" class="px-5 py-3 uppercase tracking-tight"><span
@@ -561,28 +559,7 @@
             </button>
         </section>
 
-        <!-- TAB 2: SESSIE LOG -->
-        <section id="view-sessions" class="hidden space-y-4">
-            <div
-                class="flex items-center gap-2 text-[11px] text-gray-300 bg-gray-800/70 border border-gray-700 px-3 py-2 rounded">
-                <span class="uppercase font-bold text-gray-400 text-[10px]">Telling</span>
-                <select id="session-log-select"
-                    class="bg-gray-700 border border-gray-600 rounded px-2 py-1 flex-1 text-white text-[11px]"
-                    onchange="setViewedSession(this.value)"></select>
-            </div>
-            <div class="text-[11px] text-gray-400">
-                Controleer of corrigeer per telling: naam, traject, weer, notities en foto's.
-            </div>
-            <div id="session-log-container" class="space-y-4"></div>
-            <div class="pt-1">
-                <button onclick="switchTab('report')"
-                    class="w-full bg-emerald-700 hover:bg-emerald-600 text-white py-3 rounded-xl font-bold text-xs uppercase tracking-widest shadow-lg">
-                    📊 Naar delen
-                </button>
-            </div>
-        </section>
-
-        <!-- TAB 4: RAPPORT -->
+        <!-- TAB 2: RAPPORT -->
         <section id="view-report" class="hidden space-y-6 text-center">
             <h2 class="text-xl font-bold text-emerald-400 text-center">📊 Delen</h2>
 
@@ -681,20 +658,16 @@
                         class="bg-gray-900 p-3 rounded-lg font-mono text-left text-[11px] border border-emerald-500/30 whitespace-pre-wrap leading-relaxed">
                     </div>
                     <div class="grid grid-cols-1 gap-3">
-                        <button onclick="copyReport()"
-                            class="w-full bg-emerald-600 py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg active:bg-emerald-700 text-xs uppercase tracking-widest">
-                            📋 Kopieer rapport
-                        </button>
-                        <button onclick="shareReport()"
+                        <button onclick="shareReport(false)"
                             class="w-full bg-purple-700 py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg active:bg-purple-800 text-xs uppercase tracking-widest">
-                            📤 Deel rapport
+                            📤 Deel rapport zonder foto's
                         </button>
                         <button onclick="shareReport(true)"
                             class="w-full bg-purple-900/70 border border-purple-400/30 py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg active:bg-purple-900 text-xs uppercase tracking-widest">
-                            📸 Deel met foto's
+                            📸 Deel rapport met foto's
                         </button>
-                        <button onclick="exportReportCSV()"
-                            class="w-full bg-indigo-600 py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg active:bg-indigo-700 text-xs uppercase tracking-widest">
+                        <button onclick="exportReportCSV()" data-dev-only="1"
+                            class="hidden w-full bg-indigo-600 py-3 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg active:bg-indigo-700 text-xs uppercase tracking-widest">
                             ⬇️ Exporteer CSV van vandaag
                         </button>
                     </div>
@@ -753,12 +726,12 @@
 
 
 
-            <details class="settings-accordion">
+            <details class="settings-accordion" id="settings-session-management-details">
                 <summary>
                     <span class="font-bold text-emerald-200 text-sm">Tellingbeheer</span>
                     <span class="text-[10px] uppercase tracking-wide text-emerald-300/80">Sessies</span>
                 </summary>
-                <div class="settings-accordion-body space-y-3">
+                <div id="settings-session-management-block" class="settings-accordion-body space-y-3">
                     <div class="flex gap-2 items-center">
                         <input type="date" id="sessionDate"
                             class="bg-gray-700 border-none rounded px-2 py-1.5 text-sm focus:ring-2 focus:ring-emerald-500 text-white w-full shadow-inner">
@@ -767,6 +740,24 @@
                             op datum</button>
                     </div>
                     <div id="session-admin-list" class="space-y-2 text-[11px]"></div>
+                    <div class="h-px bg-gray-700 my-2"></div>
+                    <div
+                        class="flex items-center gap-2 text-[11px] text-gray-300 bg-gray-800/70 border border-gray-700 px-3 py-2 rounded">
+                        <span class="uppercase font-bold text-gray-400 text-[10px]">Telling</span>
+                        <select id="session-log-select"
+                            class="bg-gray-700 border border-gray-600 rounded px-2 py-1 flex-1 text-white text-[11px]"
+                            onchange="setViewedSession(this.value)"></select>
+                    </div>
+                    <div class="text-[11px] text-gray-400">
+                        Controleer of corrigeer per telling: naam, traject, weer, notities en foto's.
+                    </div>
+                    <div id="session-log-container" class="space-y-4"></div>
+                    <div class="pt-1">
+                        <button onclick="switchTab('report')"
+                            class="w-full bg-emerald-700 hover:bg-emerald-600 text-white py-3 rounded-xl font-bold text-xs uppercase tracking-widest shadow-lg">
+                            📊 Naar delen
+                        </button>
+                    </div>
                 </div>
             </details>
             <details class="settings-accordion hidden" id="advanced-settings-details">
@@ -954,9 +945,7 @@
             <div class="bg-gray-800 p-4 rounded-xl border border-blue-500/30 space-y-3">
                 <div class="flex items-center justify-between">
                     <h3 class="font-bold text-blue-200 text-sm">Determinaties in deze telling</h3>
-                    <select id="det-session-select"
-                        class="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-white text-[11px]"
-                        onchange="renderDetSessionOptions(); renderDeterminationUI(); renderDeterminationList();"></select>
+                    <div class="text-[10px] text-gray-400">Kies de telling bovenaan in de header</div>
                 </div>
                 <div id="det-list" class="space-y-2 text-[11px]"></div>
             </div>
@@ -985,32 +974,40 @@
             <div class="bg-gray-800 p-4 rounded-xl border border-emerald-500/30 space-y-3">
                 <h3 class="font-bold text-emerald-300 text-sm">⚡ Snelle workflow (avondtelling)</h3>
                 <div class="text-gray-200 text-[13px] leading-relaxed space-y-1">
-                    <div>1) Kies datum bovenaan.</div>
-                    <div>2) Start een telling en tel dieren.</div>
-                    <div>3) Rond je sessie af in de wizard (naam, traject, weer, notities).</div>
-                    <div>4) Controleer rapport of trendgrafiek.</div>
-                    <div>5) Deel via link en vink in Rapport aan welke tellingen moeten meetellen.</div>
+                    <div>1) Kies de datum en (optioneel) de actieve telling bovenaan in de header.</div>
+                    <div>2) Start een telling en tel met de +1/-1 knoppen.</div>
+                    <div>3) Stop de telling: de sessie-wizard opent automatisch.</div>
+                    <div>4) Sla op of kies meteen hoe je wil delen (WhatsApp-tekst of deel-link).</div>
+                    <div>5) Gebruik tab "Delen" om sessies aan/uit te zetten voor het dagrapport.</div>
                 </div>
             </div>
             <div class="bg-gray-800 p-4 rounded-xl border border-cyan-500/30 space-y-3">
-                <h3 class="font-bold text-cyan-300 text-sm">👥 Teamtelling zonder dubbels</h3>
-                <div class="text-gray-200 text-[13px] leading-relaxed space-y-3">
-                    <div class="bg-gray-900/60 border border-cyan-500/30 rounded p-3 space-y-1">
-                        <div class="font-bold text-cyan-200">Voorbeeld: delen via link (Rey, Finn, Poe)</div>
-                        <div>1) Rey, Finn en Poe tellen elk op hun eigen telefoon.</div>
-                        <div>2) Iedereen maakt een deel-link en zet die in de WhatsApp-groep.</div>
-                        <div>3) Iedereen opent daarna alle ontvangen links.</div>
-                        <div>4) Elke import wordt als aparte telling toegevoegd (nooit bijgeteld).</div>
-                        <div>5) In Rapport vink je aan welke tellingen moeten meetellen.</div>
-                        <div>6) Als iedereen dezelfde vinkjes zet, ziet iedereen hetzelfde teamrapport.</div>
-                    </div>
-                    <div class="text-cyan-100 text-[12px]">
-                        Belangrijk: dezelfde link twee keer importeren geeft geen dubbeltelling; die bijdrage
-                        wordt automatisch overgeslagen.
-                    </div>
+                <h3 class="font-bold text-cyan-300 text-sm">🧭 Sessie-wizard na stoppen</h3>
+                <div class="text-gray-200 text-[13px] leading-relaxed space-y-2">
+                    <div>Na elke gestopte telling vul je in:</div>
+                    <div>• Naam (wordt onthouden voor volgende sessies).</div>
+                    <div>• Traject (wordt onthouden en als suggestie hergebruikt).</div>
+                    <div>• Weer bij start (automatisch opgehaald bij sessiestart).</div>
+                    <div>• Notities per sessie.</div>
                     <div class="text-cyan-100 text-[12px] bg-cyan-900/20 border border-cyan-500/20 rounded px-2 py-2">
-                        Delen gebeurt voorlopig enkel via deel-link.
+                        Sessie samenvoegen, corrigeren of verwijderen kan via Instellingen > Sessiebeheer.
                     </div>
+                </div>
+            </div>
+            <div class="bg-gray-800 p-4 rounded-xl border border-indigo-500/30 space-y-3">
+                <h3 class="font-bold text-indigo-300 text-sm">📤 Delen & importeren</h3>
+                <div class="text-gray-200 text-[13px] leading-relaxed space-y-1">
+                    <div>• Tekstrapport: ideaal om direct in WhatsApp/Signal te plakken.</div>
+                    <div>• Bij meerdere geselecteerde sessies toont "Tellingen" enkel de tellernamen.</div>
+                    <div>• Deel-link: ontvanger importeert jouw sessie als aparte telling.</div>
+                    <div>• Dezelfde link 2x importeren geeft geen dubbeltelling (wordt overgeslagen).</div>
+                </div>
+            </div>
+            <div class="bg-gray-800 p-4 rounded-xl border border-blue-500/30 space-y-3">
+                <h3 class="font-bold text-blue-300 text-sm">🔎 Determinatie</h3>
+                <div class="text-gray-200 text-[13px] leading-relaxed space-y-1">
+                    <div>• De actieve telling voor determinaties kies je bovenaan in de header.</div>
+                    <div>• "Voeg toe aan teller" schrijft naar de geselecteerde telling.</div>
                 </div>
             </div>
             <div class="bg-gray-800 p-4 rounded-xl border border-red-500/30 space-y-3">
@@ -1029,6 +1026,10 @@
     <div id="toast"
         class="fixed bottom-10 left-1/2 transform -translate-x-1/2 bg-emerald-600 text-white px-6 py-3 rounded-full shadow-2xl hidden z-[110] transition-all opacity-0 font-bold border border-emerald-400/30">
         Actie gelukt!
+    </div>
+    <div id="last-count-toast"
+        class="fixed bottom-24 left-1/2 transform -translate-x-1/2 max-w-[92vw] bg-gray-900/95 text-cyan-100 px-3 py-2 rounded-lg shadow-xl hidden z-[109] border border-cyan-500/30 text-[11px] font-semibold text-center backdrop-blur-sm">
+        Laatste +1: ...
     </div>
     <button id="update-btn"
         class="hidden fixed right-4 bottom-24 bg-emerald-600 text-white px-4 py-2 rounded-full shadow-2xl font-bold text-xs uppercase tracking-widest border border-emerald-300/40">
@@ -1144,17 +1145,60 @@
                 </div>
             </div>
 
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <button
-                    class="bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg py-2.5 font-bold text-[11px] uppercase tracking-wide shadow-lg active:scale-[0.98]"
-                    onclick="sessionWizardShareReport()">
-                    📤 Deel rapporttekst
-                </button>
-                <button
-                    class="bg-blue-700 hover:bg-blue-600 text-white rounded-lg py-2.5 font-bold text-[11px] uppercase tracking-wide shadow-lg active:scale-[0.98]"
-                    onclick="sessionWizardGenerateShareLink()">
-                    🔗 Deel via link
-                </button>
+            <div class="space-y-3 text-left bg-gray-900/40 border border-gray-700 rounded-lg p-3">
+                <div class="text-[10px] uppercase tracking-wide text-emerald-200 font-bold">Stap 1 · Wat wil je nu doen?
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <button onclick="sessionWizardSaveAndClose()"
+                        class="bg-emerald-700 border border-emerald-400/40 text-white rounded-lg py-2.5 font-bold text-[11px] uppercase tracking-wide active:scale-[0.98]">
+                        💾 Opslaan & afsluiten
+                    </button>
+                    <button data-session-wizard-goal="share" onclick="sessionWizardSetGoal('share')"
+                        class="bg-gray-800 border border-gray-600 text-gray-200 rounded-lg py-2.5 font-bold text-[11px] uppercase tracking-wide active:scale-[0.98]">
+                        📤 Nu delen (tekst of link)
+                    </button>
+                    <button data-session-wizard-goal="collector" onclick="sessionWizardSetGoal('collector')"
+                        class="bg-gray-800 border border-gray-600 text-gray-200 rounded-lg py-2.5 font-bold text-[11px] uppercase tracking-wide active:scale-[0.98]">
+                        👥 Naar verzamelaar
+                    </button>
+                </div>
+
+                <div id="session-wizard-step-share"
+                    class="hidden space-y-2 bg-blue-900/20 border border-blue-500/30 rounded-lg px-3 py-3">
+                    <div class="text-[10px] uppercase tracking-wide text-blue-200 font-bold">Stap 2 · Hoe wil je delen?
+                    </div>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <button data-session-wizard-share="report" onclick="sessionWizardSetShareChoice('report')"
+                            class="bg-gray-800 border border-gray-600 text-gray-200 rounded-lg py-2.5 font-bold text-[11px] uppercase tracking-wide active:scale-[0.98]">
+                            Tekstrapport (WhatsApp)
+                        </button>
+                        <button data-session-wizard-share="link" onclick="sessionWizardSetShareChoice('link')"
+                            class="bg-gray-800 border border-gray-600 text-gray-200 rounded-lg py-2.5 font-bold text-[11px] uppercase tracking-wide active:scale-[0.98]">
+                            Deel-link (importeerbare sessie)
+                        </button>
+                    </div>
+                    <div id="session-wizard-step-share-action"
+                        class="hidden space-y-2 bg-blue-950/40 border border-blue-500/20 rounded px-2 py-2">
+                        <div id="session-wizard-step-share-hint" class="text-[11px] text-blue-100"></div>
+                        <button id="session-wizard-step-share-button" onclick="sessionWizardRunShareChoice()"
+                            class="w-full bg-blue-700 hover:bg-blue-600 text-white rounded-lg py-2.5 font-bold text-[11px] uppercase tracking-wide active:scale-[0.98]"></button>
+                    </div>
+                </div>
+
+                <div id="session-wizard-step-collector"
+                    class="hidden space-y-2 bg-cyan-900/20 border border-cyan-500/30 rounded-lg px-3 py-3">
+                    <div class="text-[10px] uppercase tracking-wide text-cyan-200 font-bold">Stap 2 · Doorsturen naar
+                        verzamelaar</div>
+                    <div class="text-[11px] text-gray-200">Verstuur je volledige telsessie naar iemand die alle
+                        telsessies zal samentellen en om er daarna een verzamelrapport van te maken.</div>
+                    <button onclick="sessionWizardGenerateShareLink()"
+                        class="w-full bg-cyan-700 hover:bg-cyan-600 text-white rounded-lg py-2.5 font-bold text-[11px] uppercase tracking-wide active:scale-[0.98]">
+                        🔗 Verstuur volledige sessie via deel-link
+                    </button>
+                </div>
+                <div class="text-[11px] text-gray-300 bg-gray-900/50 border border-gray-700 rounded px-2 py-2">
+                    Sessies samenvoegen kan via Instellingen &gt; Tellingbeheer.
+                </div>
             </div>
 
             <div id="session-wizard-link-box"
@@ -1174,18 +1218,6 @@
                 </div>
             </div>
 
-            <div class="flex gap-3 flex-wrap">
-                <button
-                    class="flex-1 min-w-[120px] bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg py-2.5 font-bold text-sm shadow-lg active:scale-[0.98]"
-                    onclick="sessionWizardSaveAndOpenSessions()">
-                    Opslaan & naar Sessies
-                </button>
-                <button
-                    class="flex-1 min-w-[120px] bg-gray-800 border border-gray-700 text-gray-200 rounded-lg py-2.5 font-bold text-sm active:scale-[0.98]"
-                    onclick="closeSessionInfoModal(true)">
-                    Sluiten
-                </button>
-            </div>
         </div>
     </div>
 
