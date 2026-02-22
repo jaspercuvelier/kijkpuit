@@ -893,12 +893,26 @@ function rememberRoutePreference(routeName = '') {
     return !!next.lastRouteName;
 }
 
-function localContributorRosterEntry(routeName = '') {
+function localContributorDisplayName(preferred = '') {
+    const explicit = (preferred || '').trim();
+    if (explicit) return explicit;
+    const profile = getContributorProfile();
+    const fromProfile = (profile?.name || '').trim();
+    return fromProfile || 'mezelf';
+}
+
+function localContributorNote(name = '', routeName = '') {
+    const who = localContributorDisplayName(name);
+    const route = normalizeRouteName(routeName || '');
+    return route ? `Data van ${who} (${route})` : `Data van ${who}`;
+}
+
+function localContributorRosterEntry(routeName = '', name = '') {
     const profile = getContributorProfile();
     const contributorId = profile?.id ? `local_user_${profile.id}` : `local_user_${simpleHash('local')}`;
     return {
         id: contributorId,
-        name: 'mezelf',
+        name: localContributorDisplayName(name),
         route: normalizeRouteName(routeName || '')
     };
 }
@@ -916,7 +930,8 @@ function ensureLocalSessionContributorDefaults(session) {
         changed = true;
     }
     if (typeof session.autoContributorNote !== 'string' || !session.autoContributorNote.trim()) {
-        session.autoContributorNote = 'Data van mezelf';
+        const first = session.contributorRoster[0] || {};
+        session.autoContributorNote = localContributorNote(first.name || '', first.route || session.routeName || '');
         changed = true;
     }
     return changed;
@@ -930,8 +945,12 @@ function updateContributorInputsFromProfile() {
     const profile = getContributorProfile();
     const nameInput = document.getElementById('share-contributor-name');
     const routeInput = document.getElementById('share-route-name');
+    const wizardNameInput = document.getElementById('session-wizard-name');
+    const wizardRouteInput = document.getElementById('session-wizard-route');
     if (nameInput && !nameInput.value.trim() && profile.name) nameInput.value = profile.name;
     if (routeInput && !routeInput.value.trim() && profile.lastRouteName) routeInput.value = profile.lastRouteName;
+    if (wizardNameInput && !wizardNameInput.value.trim() && profile.name) wizardNameInput.value = profile.name;
+    if (wizardRouteInput && !wizardRouteInput.value.trim() && profile.lastRouteName) wizardRouteInput.value = profile.lastRouteName;
 }
 
 function handleShareRouteChange(commitHistory = false) {
@@ -959,7 +978,7 @@ function handleShareIdentityChange(refreshQr = true) {
     const nameInput = document.getElementById('share-contributor-name');
     const routeInput = document.getElementById('share-route-name');
     const hint = document.getElementById('share-identity-hint');
-    const name = (nameInput?.value || '').trim();
+    const name = (nameInput?.value || '').trim() || profile.name || '';
     const route = normalizeRouteName(routeInput?.value || profile.lastRouteName || '');
     saveContributorProfile({
         ...profile,
@@ -969,7 +988,7 @@ function handleShareIdentityChange(refreshQr = true) {
     if (hint) {
         hint.innerText = name
             ? `Je deelt als ${name}${route ? ` · Traject ${route}` : ''}`
-            : `Vul je naam in voor je deelt.${route ? ` Traject: ${route}` : ''}`;
+            : `Vul eerst je naam in via de sessie-wizard.${route ? ` Traject: ${route}` : ''}`;
     }
     if (refreshQr) generateQR(false);
 }
@@ -980,12 +999,12 @@ function ensureContributorIdentity() {
     const fromInput = (nameInput?.value || '').trim();
     const contributorName = (fromInput || profile.name || '').trim();
     if (nameInput && !fromInput) {
-        alert('Vul eerst je naam in bij "Jouw naam".');
+        alert('Vul eerst je naam in voor je deelt.');
         nameInput.focus();
         return null;
     }
     if (!contributorName || contributorName.toLowerCase() === 'onbekende teller') {
-        alert('Vul eerst je naam in bij "Jouw naam".');
+        alert('Vul eerst je naam in via de sessie-wizard voor je deelt.');
         if (nameInput) nameInput.focus();
         return null;
     }
@@ -1068,6 +1087,7 @@ if (!storage) {
 reportTrendShowEmptyDays = getReportTrendShowEmptySetting();
 runCoreSchemaMigrations();
 let activeSessionId = null;
+let sessionWizardContext = null;
 // Schema v2: per day stores counts, custom, photos, notes, weather, sessions
 // session object: { id, start, end?, counts: {}, notes: '' }
 let lastAction = null;
@@ -1928,6 +1948,10 @@ function renderSessionLog() {
         .map(s => {
             const total = sumCounts(s.counts);
             const weather = weatherSummaryText(s.weather, ' • ', true);
+            const primaryContributor = (Array.isArray(s.contributorRoster) && s.contributorRoster[0]?.name) ? s.contributorRoster[0].name : '';
+            const contributorName = localContributorDisplayName(
+                (typeof primaryContributor === 'string' && primaryContributor.toLowerCase() === 'mezelf') ? '' : primaryContributor
+            );
             const weatherPolicy = getSessionWeatherFetchPolicy(s);
             const weatherDisabled = weatherPolicy.allowed ? '' : 'disabled';
             const weatherButtonClass = weatherPolicy.allowed
@@ -1954,6 +1978,8 @@ function renderSessionLog() {
                                 Meetellen in rapport en trendgrafiek
                             </label>
                             <div class="space-y-2 text-left">
+                                <label class="text-[10px] uppercase text-gray-400 font-bold">Teller</label>
+                                <input value="${contributorName}" oninput="updateSessionContributorName('${s.id}', this.value)" onchange="commitSessionContributorName('${s.id}', this.value)" class="w-full bg-gray-700 rounded px-2 py-2 text-sm text-white border border-gray-600" placeholder="Jouw naam">
                                 <label class="text-[10px] uppercase text-gray-400 font-bold">Traject</label>
                                 <input value="${s.routeName || ''}" oninput="updateRoute('${s.id}', this.value)" onchange="commitRoutePreference('${s.id}', this.value)" class="w-full bg-gray-700 rounded px-2 py-2 text-sm text-white border border-gray-600" placeholder="Sint-Amandsstraat, Pittem" list="route-suggestions">
                             <div class="flex items-center justify-between">
@@ -2468,6 +2494,35 @@ function updateSessionNotes(id, val) {
     save();
 }
 
+function updateSessionContributorName(id, val) {
+    const day = ensureDay();
+    const s = day.sessions.find(x => x.id === id);
+    if (!s) return;
+    const name = (val || '').trim();
+    if (!Array.isArray(s.contributorRoster)) s.contributorRoster = [];
+    const existing = s.contributorRoster[0] || localContributorRosterEntry(s.routeName || '', name);
+    s.contributorRoster[0] = {
+        ...existing,
+        name: localContributorDisplayName(name),
+        route: normalizeRouteName(existing.route || s.routeName || '')
+    };
+    s.autoContributorNote = localContributorNote(s.contributorRoster[0].name || '', s.contributorRoster[0].route || s.routeName || '');
+    save();
+}
+
+function commitSessionContributorName(id, val) {
+    updateSessionContributorName(id, val);
+    const name = (val || '').trim();
+    if (!name) return;
+    const profile = getContributorProfile();
+    saveContributorProfile({
+        ...profile,
+        name
+    });
+    updateContributorInputsFromProfile();
+    handleShareIdentityChange(false);
+}
+
 function toggleSessionInclude(id, dayKey = picker.value, include = true) {
     const day = ensureDay(dayKey);
     const s = day.sessions.find(x => x.id === id);
@@ -2483,13 +2538,20 @@ function updateRoute(id, val) {
     const day = ensureDay();
     const s = day.sessions.find(x => x.id === id);
     if (!s) return;
-    s.routeName = val;
+    const route = normalizeRouteName(val);
+    s.routeName = route;
+    if (Array.isArray(s.contributorRoster) && s.contributorRoster.length) {
+        const first = s.contributorRoster[0] || {};
+        s.contributorRoster[0] = { ...first, route };
+        s.autoContributorNote = localContributorNote(first.name || '', route);
+    }
     save();
 }
 
 function commitRoutePreference(id, val) {
     updateRoute(id, val);
     if (rememberRoutePreference(val)) buildRouteSuggestions();
+    handleShareIdentityChange(false);
 }
 
 function removeSessionPhoto(id, idx) {
@@ -2743,21 +2805,400 @@ function startSession(force = false, fromSessionPage = false, dayKeyOverride = n
     activeSessionId = session.id;
     viewedSessionId = session.id;
     save(); render(); renderSessionAdmin(); renderDetSessionOptions(); renderDeterminationUI(); renderDeterminationList(); showToast('Telling gestart');
-    if (!tempDet && showInfo) showSessionInfoModal();
+    void showInfo;
     if (redirect) switchTab('sessions');
     fetchWeather(dayKey, session.id); // capture weather at start
 }
 
-function showSessionInfoModal() {
+function getSessionWizardSession() {
+    if (!sessionWizardContext || typeof sessionWizardContext !== 'object') return null;
+    const dayKey = typeof sessionWizardContext.dayKey === 'string' && sessionWizardContext.dayKey
+        ? sessionWizardContext.dayKey
+        : picker.value;
+    const day = ensureDay(dayKey);
+    const session = (day.sessions || []).find(s => s.id === sessionWizardContext.sessionId) || null;
+    if (!session) return null;
+    return { dayKey, day, session };
+}
+
+function resetSessionWizardShareOutputs() {
+    const linkBox = document.getElementById('session-wizard-link-box');
+    const linkOut = document.getElementById('session-wizard-link-output');
+    const qrBox = document.getElementById('session-wizard-qr-box');
+    const qrPreview = document.getElementById('session-wizard-qr-preview');
+    if (linkBox) linkBox.classList.add('hidden');
+    if (linkOut) linkOut.value = '';
+    if (qrBox) qrBox.classList.add('hidden');
+    if (qrPreview) qrPreview.innerHTML = '';
+}
+
+function renderSessionWizardWeather(session) {
+    const weatherEl = document.getElementById('session-wizard-weather');
+    if (!weatherEl) return;
+    if (!session?.weather) {
+        weatherEl.innerHTML = '<span class="italic opacity-70">Nog geen weerdata. De app probeert dit bij de start van je sessie op te halen.</span>';
+        return;
+    }
+    weatherEl.innerText = weatherSummaryText(session.weather, ' • ', true);
+}
+
+function fillSessionWizardFromContext() {
+    const ctx = getSessionWizardSession();
+    if (!ctx) return;
+    const { day, session } = ctx;
+    const profile = getContributorProfile();
+    const meta = document.getElementById('session-wizard-meta');
+    const nameInput = document.getElementById('session-wizard-name');
+    const routeInput = document.getElementById('session-wizard-route');
+    const notesInput = document.getElementById('session-wizard-notes');
+    const rosterName = (Array.isArray(session.contributorRoster) && session.contributorRoster[0]?.name) ? session.contributorRoster[0].name : '';
+    const candidateName = (rosterName && rosterName.toLowerCase() !== 'mezelf') ? rosterName : '';
+    const displayName = candidateName || profile.name || '';
+    const route = normalizeRouteName(session.routeName || profile.lastRouteName || '');
+
+    if (meta) {
+        const total = sumCounts(session.counts || {});
+        meta.innerText = `${sessionDisplayLabel(session, day)} · ${total} dieren`;
+    }
+    if (nameInput) nameInput.value = displayName;
+    if (routeInput) routeInput.value = route;
+    if (notesInput) notesInput.value = session.notes || '';
+    renderSessionWizardWeather(session);
+    resetSessionWizardShareOutputs();
+}
+
+function persistSessionWizardData({ commitRouteHistory = true, requireName = false, silent = true } = {}) {
+    const ctx = getSessionWizardSession();
+    if (!ctx) return null;
+    const { session } = ctx;
+    const nameInput = document.getElementById('session-wizard-name');
+    const routeInput = document.getElementById('session-wizard-route');
+    const notesInput = document.getElementById('session-wizard-notes');
+
+    const rawName = (nameInput?.value || '').trim();
+    const rawRoute = normalizeRouteName(routeInput?.value || '');
+    const notes = typeof notesInput?.value === 'string' ? notesInput.value : '';
+
+    if (routeInput && routeInput.value !== rawRoute) routeInput.value = rawRoute;
+    if (nameInput) nameInput.value = rawName;
+
+    if (requireName && !rawName) {
+        alert('Vul je naam in om deze sessie te delen.');
+        if (nameInput) nameInput.focus();
+        return null;
+    }
+
+    const profile = getContributorProfile();
+    const nextProfile = saveContributorProfile({
+        ...profile,
+        name: rawName || profile.name || '',
+        lastRouteName: rawRoute || profile.lastRouteName || '',
+        routeHistory: commitRouteHistory && rawRoute
+            ? [rawRoute, ...(profile.routeHistory || [])]
+            : (profile.routeHistory || [])
+    });
+    const displayName = localContributorDisplayName(rawName || nextProfile.name || '');
+
+    session.routeName = rawRoute;
+    session.notes = notes;
+    session.contributorRoster = [localContributorRosterEntry(rawRoute, displayName)];
+    session.autoContributorNote = localContributorNote(displayName, rawRoute);
+
+    save();
+    render();
+    renderSessionAdmin();
+    updateReport();
+    updateContributorInputsFromProfile();
+    handleShareIdentityChange(false);
+    buildRouteSuggestions();
+    if (!silent) showToast('Sessie-informatie opgeslagen');
+    return { ...ctx, profile: nextProfile };
+}
+
+function showSessionInfoModal(dayKey = picker.value, sessionId = viewedSessionId) {
     const modal = document.getElementById('session-info-modal');
     if (!modal) return;
+    sessionWizardContext = { dayKey, sessionId };
+    if (!getSessionWizardSession()) {
+        sessionWizardContext = null;
+        return;
+    }
+    fillSessionWizardFromContext();
     modal.classList.remove('hidden');
 }
 
-function closeSessionInfoModal() {
+function closeSessionInfoModal(persist = false) {
+    if (persist) persistSessionWizardData({ commitRouteHistory: true, requireName: false, silent: true });
     const modal = document.getElementById('session-info-modal');
     if (!modal) return;
     modal.classList.add('hidden');
+    sessionWizardContext = null;
+    resetSessionWizardShareOutputs();
+}
+
+function handleSessionWizardNameInput() {
+    resetSessionWizardShareOutputs();
+}
+
+function handleSessionWizardRouteInput(commitHistory = false) {
+    const routeInput = document.getElementById('session-wizard-route');
+    if (!routeInput) return;
+    const route = normalizeRouteName(routeInput.value || '');
+    if (routeInput.value !== route) routeInput.value = route;
+    if (commitHistory && route) {
+        const profile = getContributorProfile();
+        saveContributorProfile({
+            ...profile,
+            lastRouteName: route,
+            routeHistory: [route, ...(profile.routeHistory || [])]
+        });
+        buildRouteSuggestions();
+    }
+    resetSessionWizardShareOutputs();
+}
+
+function handleSessionWizardNotesInput() {
+    resetSessionWizardShareOutputs();
+}
+
+function buildSyncLinkFromTransfer(transfer) {
+    const encoded = encodeBase64Url(JSON.stringify(transfer));
+    return `${window.location.origin}${window.location.pathname}?${SYNC_QUERY_PARAM}=${encoded}`;
+}
+
+const QR_MAX_PAYLOAD_BYTES = 2920;
+const QR_FEATURES_ENABLED = false;
+
+function qrPayloadByteLength(raw = '') {
+    const text = String(raw || '');
+    if (typeof TextEncoder !== 'undefined') {
+        try { return new TextEncoder().encode(text).length; } catch (_) { /* fallback below */ }
+    }
+    try {
+        return unescape(encodeURIComponent(text)).length;
+    } catch (_) {
+        return text.length;
+    }
+}
+
+function renderQrCodeSafe(container, text, width = 160, height = 160) {
+    if (!container) return false;
+    container.innerHTML = '';
+    try {
+        new QRCode(container, { text, width, height, correctLevel: QRCode.CorrectLevel.L });
+        return true;
+    } catch (err) {
+        console.warn('QR generation failed', err);
+        return false;
+    }
+}
+
+function sessionWizardSetShareLink(link = '') {
+    const box = document.getElementById('session-wizard-link-box');
+    const out = document.getElementById('session-wizard-link-output');
+    const help = document.getElementById('session-wizard-link-help');
+    if (out) out.value = link;
+    if (help) {
+        help.innerText = isMobileShareContext()
+            ? 'Tik op "Deel" om het deelmenu van je telefoon te openen.'
+            : 'Klik op "Kopieer". Daarna: open je app van keuze en plak de link.';
+    }
+    if (box) box.classList.remove('hidden');
+}
+
+function buildSessionWizardTransfer(requireIdentity = true) {
+    const persisted = persistSessionWizardData({ commitRouteHistory: true, requireName: requireIdentity, silent: true });
+    if (!persisted) return null;
+    const { dayKey, day, session } = persisted;
+    const identity = ensureShareIdentity(requireIdentity);
+    if (!identity) return null;
+    const payload = buildSyncPayloadForSource(dayKey, day, session, identity);
+    if (sumCounts(payload.c || {}) <= 0) {
+        alert('Deze sessie bevat geen aantallen om te delen.');
+        return null;
+    }
+    return { transfer: payload, payload, dayKey, session };
+}
+
+async function copyTextWithFallback(text = '', fallbackInput = null) {
+    const value = String(text || '').trim();
+    if (!value) return false;
+    if (navigator.clipboard?.writeText) {
+        try {
+            await navigator.clipboard.writeText(value);
+            return true;
+        } catch (_) { /* fallback below */ }
+    }
+    if (fallbackInput && typeof fallbackInput.select === 'function') {
+        fallbackInput.focus();
+        fallbackInput.select();
+        document.execCommand('copy');
+        return true;
+    }
+    return false;
+}
+
+function isMobileShareContext() {
+    if (navigator.userAgentData && navigator.userAgentData.mobile === true) return true;
+    const ua = (navigator.userAgent || '').toLowerCase();
+    const mobileUa = /android|iphone|ipad|ipod|mobile/.test(ua);
+    if (mobileUa) return true;
+    const coarse = typeof window.matchMedia === 'function' ? window.matchMedia('(pointer: coarse)').matches : false;
+    const minViewportEdge = Math.min(window.innerWidth || 0, window.innerHeight || 0);
+    return coarse && minViewportEdge > 0 && minViewportEdge <= 900;
+}
+
+function openLinkShareHelpModal(link = '') {
+    const modal = document.getElementById('link-share-help-modal');
+    const message = document.getElementById('link-share-help-message');
+    const out = document.getElementById('link-share-help-link');
+    if (!modal) {
+        alert('Link gekopieerd.\nGa nu naar de app van je keuze en plak daar deze link.');
+        return;
+    }
+    if (message) {
+        message.innerText = 'Link gekopieerd. Ga nu naar de app van je keuze en plak daar deze link.';
+    }
+    if (out) out.value = link || '';
+    modal.classList.remove('hidden');
+}
+
+function closeLinkShareHelpModal(ev = null) {
+    const modal = document.getElementById('link-share-help-modal');
+    if (!modal) return;
+    if (ev && ev.target && ev.target.id !== 'link-share-help-modal' && !ev.target.closest('[data-link-help-close="1"]')) return;
+    modal.classList.add('hidden');
+}
+
+async function copyLinkShareHelpLink() {
+    const out = document.getElementById('link-share-help-link');
+    const link = out?.value?.trim() || '';
+    if (!link) return;
+    const ok = await copyTextWithFallback(link, out);
+    if (ok) showToast('Link gekopieerd');
+}
+
+async function copyLinkWithInstructions(link = '', fallbackInput = null) {
+    const ok = await copyTextWithFallback(link, fallbackInput);
+    if (!ok) {
+        alert('Kopiëren van de link is mislukt. Probeer opnieuw.');
+        return false;
+    }
+    if (isMobileShareContext()) {
+        showToast('Link gekopieerd. Open je app en plak daar de link.');
+    } else {
+        openLinkShareHelpModal(link);
+    }
+    return true;
+}
+
+function sessionWizardShareReport() {
+    const persisted = persistSessionWizardData({ commitRouteHistory: true, requireName: true, silent: true });
+    if (!persisted) return;
+    reportMode = 'session';
+    viewedSessionId = persisted.session.id;
+    buildViewedSessionOptions();
+    buildReportSessionOptions();
+    updateReport();
+    shareReport();
+}
+
+function sessionWizardGenerateShareLink() {
+    const built = buildSessionWizardTransfer(true);
+    if (!built) return;
+    const link = buildSyncLinkFromTransfer(built.transfer);
+    sessionWizardSetShareLink(link);
+    showToast('Deel-link klaar. Gebruik "Deel" op mobiel of "Kopieer" op desktop.');
+}
+
+async function copySessionWizardLink() {
+    const out = document.getElementById('session-wizard-link-output');
+    const link = out?.value || '';
+    if (!link.trim()) {
+        alert('Maak eerst een deel-link.');
+        return;
+    }
+    await copyLinkWithInstructions(link, out);
+}
+
+async function shareSessionWizardLink() {
+    const out = document.getElementById('session-wizard-link-output');
+    const link = out?.value?.trim();
+    if (!link) {
+        sessionWizardGenerateShareLink();
+    }
+    const resolved = (document.getElementById('session-wizard-link-output')?.value || '').trim();
+    if (!resolved) return;
+    try {
+        if (navigator.share && isMobileShareContext()) {
+            await navigator.share({
+                title: 'Paddentrek deel-link',
+                text: 'Open deze link en voeg deze sessie toe in je app.',
+                url: resolved
+            });
+            return;
+        }
+    } catch (err) {
+        if (err?.name === 'AbortError') return;
+    }
+    await copyLinkWithInstructions(resolved, out);
+}
+
+function sessionWizardGenerateQr() {
+    if (!QR_FEATURES_ENABLED) {
+        showToast('QR is tijdelijk verborgen');
+        return;
+    }
+    const built = buildSessionWizardTransfer(true);
+    if (!built) return;
+    const raw = JSON.stringify(built.transfer);
+    const bytes = qrPayloadByteLength(raw);
+    if (bytes > QR_MAX_PAYLOAD_BYTES) {
+        const link = buildSyncLinkFromTransfer(built.transfer);
+        sessionWizardSetShareLink(link);
+        alert(`Deze sessie is te groot voor een stabiele QR-code (${bytes} bytes). Gebruik de deel-link.`);
+        return;
+    }
+    const box = document.getElementById('session-wizard-qr-box');
+    const preview = document.getElementById('session-wizard-qr-preview');
+    if (!preview) return;
+    if (!renderQrCodeSafe(preview, raw, 180, 180)) {
+        const link = buildSyncLinkFromTransfer(built.transfer);
+        sessionWizardSetShareLink(link);
+        alert('QR-code kon niet aangemaakt worden. Gebruik de deel-link.');
+        return;
+    }
+    preview.dataset.sessionQrRaw = raw;
+    if (box) box.classList.remove('hidden');
+    showToast('QR klaar');
+}
+
+function downloadSessionWizardQr() {
+    const preview = document.getElementById('session-wizard-qr-preview');
+    if (!preview) return;
+    const canvas = preview.querySelector('canvas');
+    const img = preview.querySelector('img');
+    const href = canvas?.toDataURL('image/png') || img?.src || '';
+    if (!href) {
+        alert('Maak eerst een QR-code.');
+        return;
+    }
+    const ctx = getSessionWizardSession();
+    const dayKey = ctx?.dayKey || picker.value || todayISO();
+    const sessionId = (ctx?.session?.id || 'sessie').replace(/[^a-zA-Z0-9_-]/g, '');
+    const a = document.createElement('a');
+    a.href = href;
+    a.download = `paddentrek-${dayKey}-${sessionId}-qr.png`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+}
+
+function sessionWizardSaveAndOpenSessions() {
+    const persisted = persistSessionWizardData({ commitRouteHistory: true, requireName: false, silent: false });
+    if (!persisted) return;
+    closeSessionInfoModal(false);
+    switchTab('sessions');
 }
 
 function formatDuration(ms) {
@@ -2836,9 +3277,11 @@ function startTelling() {
 }
 
 function stopTelling(auto = false) {
+    const dayKey = picker.value;
     const day = ensureDay();
     const active = getActiveSession(day);
     if (!active) return;
+    const finishedSessionId = active.id;
     endSession(true);
     clearInterval(tellingTimer);
     tellingTimer = null;
@@ -2847,8 +3290,7 @@ function stopTelling(auto = false) {
     clearTimeout(inactivityAutoTimer);
     syncTellingUI();
     updateReport();
-    if (!auto) showSessionInfoModal();
-    switchTab('report');
+    if (!auto) showSessionInfoModal(dayKey, finishedSessionId);
     showToast(auto ? 'Telling automatisch gestopt' : 'Telling gestopt');
 }
 
@@ -3022,6 +3464,10 @@ async function fetchWeather(dayOverride, sessionId) {
                 if (active) active.weather = active.weather || w;
             }
             save(); render(); showToast("Weer OK");
+            const ctx = getSessionWizardSession();
+            if (ctx && ctx.dayKey === dayKey && (!sessionId || ctx.session.id === sessionId)) {
+                renderSessionWizardWeather(ctx.session);
+            }
         } catch (e) { alert("API Fout"); console.log(e) }
     });
 }
@@ -4237,12 +4683,33 @@ function ensureShareIdentity(requireInput = false) {
     return { contributorId: nextProfile.id, contributorName };
 }
 
+const COUNT_KEY_SUFFIX_REGEX = /^(.*)_(p_l|p_d|m_l|v_l|o_l|m_d|v_d|o_d)$/;
+
+function compactCountsForShare(counts = {}) {
+    const out = {};
+    for (const k in counts || {}) {
+        const n = Number(counts[k] || 0);
+        if (!isFinite(n) || n === 0) continue;
+        out[k] = n;
+    }
+    return out;
+}
+
+function collectCustomSpeciesForCounts(dayCustom = [], counts = {}) {
+    const usedIds = new Set();
+    Object.keys(counts || {}).forEach(k => {
+        const m = String(k).match(COUNT_KEY_SUFFIX_REGEX);
+        if (m && m[1]) usedIds.add(m[1]);
+    });
+    return normalizeCustomSpeciesList(cloneJSON(dayCustom || [])).filter(s => usedIds.has(s.id));
+}
+
 function buildSyncPayloadForSource(dayKey, day, session, identity) {
     const sessionId = session?.id || '';
-    const counts = cloneJSON(session ? (session.counts || {}) : (day.counts || {}));
-    const custom = normalizeCustomSpeciesList(cloneJSON(day.custom || []));
+    const counts = compactCountsForShare(cloneJSON(session ? (session.counts || {}) : (day.counts || {})));
+    const custom = collectCustomSpeciesForCounts(day.custom || [], counts);
     const sourceLabel = session ? sessionDisplayLabel(session, day) : 'Volledige dag';
-    const sourceRoute = normalizeRouteName(session?.routeName || document.getElementById('share-route-name')?.value || '');
+    const sourceRoute = normalizeRouteName(session?.routeName || getContributorProfile().lastRouteName || '');
     const contributionId = buildContributionId(identity.contributorId, dayKey, sessionId || '');
     const payload = {
         v: SYNC_PAYLOAD_VERSION,
@@ -4304,17 +4771,24 @@ function buildSyncTransferFromSelection(requireIdentity = false) {
 }
 
 function generateQR(requireIdentity = false) {
+    if (!QR_FEATURES_ENABLED) return;
     const container = document.getElementById("qrcode-area");
+    if (!container) return;
     if (container) container.innerHTML = "";
     const transfer = buildSyncTransferFromSelection(requireIdentity);
-    if (!transfer || !container) return;
+    if (!transfer) return;
     const raw = JSON.stringify(transfer);
-    if (raw.length > 3000) {
-        alert('Deze selectie is te groot voor een stabiele QR-code. Kies minder sessies of gebruik de deel-link.');
+    const bytes = qrPayloadByteLength(raw);
+    if (bytes > QR_MAX_PAYLOAD_BYTES) {
+        alert(`Deze selectie is te groot voor een stabiele QR-code (${bytes} bytes). Kies minder sessies of gebruik de deel-link.`);
         updateQrSummary(transfer);
         return;
     }
-    new QRCode(container, { text: raw, width: 160, height: 160, correctLevel: QRCode.CorrectLevel.L });
+    if (!renderQrCodeSafe(container, raw, 160, 160)) {
+        alert('QR-code kon niet aangemaakt worden. Gebruik de deel-link.');
+        updateQrSummary(transfer);
+        return;
+    }
     updateQrSummary(transfer);
     save();
 }
@@ -4805,31 +5279,26 @@ function generateSyncLink() {
     const payloads = listSyncPayloadsFromTransfer(transfer);
     const total = payloads.reduce((acc, payload) => acc + sumCounts(payload.c || {}), 0);
     if (total <= 0) { alert('Geen aantallen om te delen in deze selectie.'); return; }
-    const encoded = encodeBase64Url(JSON.stringify(transfer));
-    const link = `${window.location.origin}${window.location.pathname}?${SYNC_QUERY_PARAM}=${encoded}`;
+    const link = buildSyncLinkFromTransfer(transfer);
     const box = document.getElementById('sync-link-box');
     const out = document.getElementById('sync-link-output');
     if (box) box.classList.remove('hidden');
     if (out) out.value = link;
     if (link.length > 3500) showToast('Let op: erg lange deel-link');
     else showToast(payloads.length > 1 ? `Deel-link klaar (${payloads.length} sessies)` : 'Deel-link klaar');
+    const help = document.getElementById('sync-link-help');
+    if (help) {
+        help.innerText = isMobileShareContext()
+            ? 'Tip: tik op "Deel" om het deelmenu van je telefoon te openen.'
+            : 'Tip: klik op "Kopieer" en plak de link in WhatsApp, mail of een andere app.';
+    }
 }
 
-function copySyncLink() {
+async function copySyncLink() {
     const out = document.getElementById('sync-link-output');
     const link = out?.value?.trim();
     if (!link) { alert('Maak eerst een deel-link.'); return; }
-    if (navigator.clipboard?.writeText) {
-        navigator.clipboard.writeText(link).then(() => showToast('Link gekopieerd')).catch(() => {
-            out.select();
-            document.execCommand('copy');
-            showToast('Link gekopieerd');
-        });
-        return;
-    }
-    out.select();
-    document.execCommand('copy');
-    showToast('Link gekopieerd');
+    await copyLinkWithInstructions(link, out);
 }
 
 async function shareSyncLink() {
@@ -4837,14 +5306,14 @@ async function shareSyncLink() {
     const link = out?.value?.trim();
     if (!link) { alert('Maak eerst een deel-link.'); return; }
     try {
-        if (navigator.share) {
+        if (navigator.share && isMobileShareContext()) {
             await navigator.share({ title: 'Paddentrek deel-link', text: 'Open deze link en synchroniseer deze telling(en) in je app.', url: link });
             return;
         }
     } catch (err) {
         if (err?.name === 'AbortError') return;
     }
-    copySyncLink();
+    await copyLinkWithInstructions(link, out);
 }
 
 function importPendingSyncLink() {
@@ -5171,6 +5640,10 @@ function describeSync(incoming, targetDay = null) {
 }
 
 function startScanner() {
+    if (!QR_FEATURES_ENABLED) {
+        showToast('QR is tijdelijk verborgen');
+        return;
+    }
     const sc = new Html5Qrcode("reader");
     sc.start({ facingMode: "environment" }, { fps: 10, qrbox: 200 }, t => {
         try {
@@ -5262,6 +5735,10 @@ function renderQrWizardPreview(payload) {
 }
 
 function startQrCameraScan() {
+    if (!QR_FEATURES_ENABLED) {
+        showToast('QR is tijdelijk verborgen');
+        return;
+    }
     const targetId = 'session-reader-modal';
     const host = document.getElementById(targetId);
     if (host) host.innerHTML = '';
@@ -5314,6 +5791,10 @@ function importQrWizardPayload() {
 }
 
 function startSessionScanner() {
+    if (!QR_FEATURES_ENABLED) {
+        showToast('QR is tijdelijk verborgen');
+        return;
+    }
     const modal = document.getElementById('qr-modal');
     const dateInput = document.getElementById('qr-wizard-date');
     if (!modal) return;
@@ -5350,7 +5831,7 @@ function buildImportTargetOptions() {
 function updateImportTargetHint() {
     const hint = document.getElementById('import-target-hint');
     if (!hint) return;
-    hint.innerText = `Data uit QR of deel-link wordt als aparte telling(en) toegevoegd op ${picker.value}.`;
+    hint.innerText = `Data uit een deel-link wordt als aparte telling(en) toegevoegd op ${picker.value}.`;
 }
 
 function renderAppChanges() {

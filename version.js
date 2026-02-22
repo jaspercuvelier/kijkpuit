@@ -1,10 +1,48 @@
 // Centrale versiebron voor app en service worker
-const APP_VERSION = '3.1.2';
+const APP_VERSION = '3.2.3';
 
 // Changelog voor het uitklapbare "Changes"-luik in de Info-tab.
 // Voeg nieuwe releases bovenaan toe.
 // Inhoud gebaseerd op git-geschiedenis van version.js + recente lokale wijzigingen.
 const APP_CHANGELOG = [
+    {
+        version: '3.2.3',
+        title: 'Deellink UX verbeterd + QR tijdelijk verborgen',
+        changes: [
+            'Duidelijkere instructies toegevoegd bij kopiëren/delen van deellinks.',
+            'Deelknop opent op smartphones het native deelmenu; op desktop wordt de link gekopieerd met duidelijke plak-instructie in modal.',
+            'QR-functionaliteit tijdelijk verborgen in de UI (delen en wizard) in afwachting van URL-shortener aanpak.'
+        ]
+    },
+    {
+        version: '3.2.2',
+        title: 'QR payload compacter gemaakt',
+        changes: [
+            'QR payload voor sessie/dagdeling geoptimaliseerd: nulwaarden worden niet meer meegestuurd.',
+            'Alleen custom soorten die effectief in de gedeelde telling zitten worden nog opgenomen.',
+            'QR byte-limiet iets verhoogd voor betere slaagkans, met behoud van veilige fallback naar deel-link.'
+        ]
+    },
+    {
+        version: '3.2.1',
+        title: 'QR stabiliteitsfix (payload grootte)',
+        changes: [
+            'QR-generatie gebruikt nu byte-grootte i.p.v. tekenlengte voor limietcontrole.',
+            'Overflow bij grote payloads wordt netjes afgehandeld zonder uncaught error.',
+            'Bij te grote payload schakelt de wizard automatisch over naar deel-link als fallback.'
+        ]
+    },
+    {
+        version: '3.2.0',
+        title: 'Sessie-afrond wizard + delenflow vereenvoudigd',
+        changes: [
+            'Na het stoppen van een sessie opent nu een wizard met naam, traject, weer en notities.',
+            'Naam en traject worden automatisch onthouden en voorgesteld bij de volgende sessie.',
+            'In de wizard kan je meteen kiezen: rapporttekst delen, sessie delen via link, of QR maken en downloaden.',
+            'Tab "Delen" opgeschoond: route/weer/notities en handmatige naam/traject-invoer zijn verplaatst naar de sessie-wizard.',
+            'Tab "Sessies" dient als nazichtscherm om wizardgegevens per sessie te controleren en te corrigeren.'
+        ]
+    },
     {
         version: '3.1.2',
         title: 'UI hotfix: uniforme tellerknoppen',

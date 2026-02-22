@@ -7,7 +7,7 @@
     <meta name="keywords"
         content="paddentrek, paddenoverzet, amfibieën tellen, vrijwilligers natuurpunt, paddenschermen, kikkers, salamanders, trekperiode, veldwerk, 2026">
     <meta name="description"
-        content="Vrijwilligersapp voor paddentrek 2026: tel en registreer amfibieën, beheer tellingen en routes, deel rapporten en QR-export met je team.">
+        content="Vrijwilligersapp voor paddentrek 2026: tel en registreer amfibieën, beheer tellingen en routes, deel rapporten en deel-links met je team.">
     <meta name="robots" content="index,follow">
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff">
     <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0f172a">
@@ -35,10 +35,6 @@
     <!-- Local-first libraries; falls back to CDN if local vendor files are missing -->
     <script src="./vendor/tailwindcss.cdn.js"></script>
     <script>if (!window.tailwind) { window.__cdnFallbackUsed = true; document.write('<script src="https://cdn.tailwindcss.com"><\/script>'); }</script>
-    <script src="./vendor/QRCode.js"></script>
-    <script>if (typeof window.QRCode === 'undefined') { window.__cdnFallbackUsed = true; document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>'); }</script>
-    <script src="./vendor/html5-qrcode.js"></script>
-    <script>if (typeof window.Html5Qrcode === 'undefined') { window.__cdnFallbackUsed = true; document.write('<script src="https://unpkg.com/html5-qrcode"><\/script>'); }</script>
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-9T30TN8LPC"></script>
     <script>
         window.dataLayer = window.dataLayer || [];
@@ -575,7 +571,7 @@
                     onchange="setViewedSession(this.value)"></select>
             </div>
             <div class="text-[11px] text-gray-400">
-                Beheer per telling: weer, trajectnaam, notities en foto's.
+                Controleer of corrigeer per telling: naam, traject, weer, notities en foto's.
             </div>
             <div id="session-log-container" class="space-y-4"></div>
             <div class="pt-1">
@@ -590,40 +586,10 @@
         <section id="view-report" class="hidden space-y-6 text-center">
             <h2 class="text-xl font-bold text-emerald-400 text-center">📊 Delen</h2>
 
-            <details class="settings-accordion" open>
-                <summary>
-                    <span class="font-bold text-emerald-200 text-sm">Sessie Details</span>
-                    <span class="text-[10px] uppercase tracking-wide text-emerald-300/80">Route · Weer · Notities</span>
-                </summary>
-                <div class="settings-accordion-body space-y-3 text-left">
-                    <div class="space-y-1">
-                        <label class="text-[10px] uppercase tracking-wide text-gray-400 font-bold">Trajectnaam</label>
-                        <input id="report-session-route" type="text"
-                            class="bg-gray-700 border border-gray-600 rounded px-2 py-2 text-white w-full text-[12px]"
-                            placeholder="Bijv. Kerkstraat - Brugje" list="route-suggestions"
-                            onchange="updateReportSessionRoute(this.value)">
-                    </div>
-
-                    <div class="space-y-1">
-                        <label class="text-[10px] uppercase tracking-wide text-gray-400 font-bold">Notities</label>
-                        <textarea id="report-session-notes"
-                            class="bg-gray-700 border border-gray-600 rounded px-2 py-2 text-white w-full text-[12px] h-20"
-                            placeholder="Bijzonderheden..." onchange="updateReportSessionNotes(this.value)"></textarea>
-                    </div>
-
-                    <div class="space-y-1">
-                        <label class="text-[10px] uppercase tracking-wide text-gray-400 font-bold">Weerbericht</label>
-                        <div id="report-session-weather"
-                            class="text-[11px] text-gray-300 italic bg-gray-900/40 p-2 rounded border border-gray-700">
-                            Geen weerdata gebufferd</div>
-                    </div>
-                </div>
-            </details>
-
             <details class="settings-accordion">
                 <summary>
                     <span class="font-bold text-blue-200 text-sm">Samen Tellen</span>
-                    <span class="text-[10px] uppercase tracking-wide text-blue-300/80">Via Link of QR</span>
+                    <span class="text-[10px] uppercase tracking-wide text-blue-300/80">Via Deel-link</span>
                 </summary>
                 <div class="settings-accordion-body space-y-3">
                     <div class="text-[11px] text-gray-200 mb-2">
@@ -637,25 +603,10 @@
                         <div id="share-session-checklist-meta" class="text-[10px] text-cyan-100"></div>
                         <div id="share-session-checklist" class="space-y-2"></div>
                     </div>
-
-                    <div class="grid grid-cols-1 gap-2">
-                        <div class="space-y-1">
-                            <label class="text-[10px] uppercase tracking-wide text-gray-400 font-bold">2. Jouw
-                                naam</label>
-                            <input id="share-contributor-name" type="text"
-                                class="bg-gray-700 border border-gray-600 rounded px-2 py-2 text-white w-full text-[12px]"
-                                placeholder="Naam" oninput="handleShareIdentityChange()">
-                        </div>
-                        <div class="space-y-1">
-                            <label class="text-[10px] uppercase tracking-wide text-gray-400 font-bold">3.
-                                Traject</label>
-                            <input id="share-route-name" type="text"
-                                class="bg-gray-700 border border-gray-600 rounded px-2 py-2 text-white w-full text-[12px]"
-                                placeholder="Optioneel" list="route-suggestions" oninput="handleShareRouteChange(false)"
-                                onchange="handleShareRouteChange(true)">
-                        </div>
+                    <div id="share-identity-hint"
+                        class="text-[10px] text-cyan-200 bg-cyan-900/20 border border-cyan-500/20 rounded px-2 py-2">
+                        Naam en traject komen uit je laatste afgeronde sessie.
                     </div>
-                    <div id="share-identity-hint" class="hidden text-[10px] text-cyan-200"></div>
 
                     <div class="h-px bg-gray-700 my-2"></div>
 
@@ -665,10 +616,14 @@
                     <button onclick="generateSyncLink()"
                         class="w-full bg-blue-600 py-3 rounded-lg font-bold uppercase text-xs shadow-lg">
                         🔗 Maak Deel-Link <span class="block text-[9px] font-normal normal-case opacity-80">(voor
-                            WhatsApp/Signal)</span>
+                            WhatsApp/Signal/Mail)</span>
                     </button>
 
                     <div id="sync-link-box" class="hidden space-y-2">
+                        <div id="sync-link-help"
+                            class="text-[10px] text-blue-100 bg-blue-900/20 border border-blue-500/20 rounded px-2 py-2">
+                            Gebruik "Deel" op smartphone of "Kopieer" op desktop.
+                        </div>
                         <textarea id="sync-link-output" readonly
                             class="w-full bg-gray-900/70 border border-blue-500/30 rounded p-2 text-[10px] text-blue-100 h-16"></textarea>
                         <div class="grid grid-cols-2 gap-2">
@@ -679,30 +634,11 @@
                         </div>
                     </div>
 
-                    <div class="flex items-center gap-2 my-1">
-                        <div class="h-px bg-gray-700 flex-1"></div>
-                        <span class="text-[10px] text-gray-400 font-bold uppercase">OF</span>
-                        <div class="h-px bg-gray-700 flex-1"></div>
-                    </div>
-
-                    <button onclick="generateQR(true)"
-                        class="w-full bg-purple-600 py-3 rounded-lg font-bold uppercase text-xs shadow-lg">
-                        📱 Toon QR-Code <span class="block text-[9px] font-normal normal-case opacity-80">(voor wie
-                            naast je staat)</span>
-                    </button>
-
-                    <div class="flex flex-col md:flex-row gap-3 items-center" id="qrcode-area-wrapper">
-                        <div id="qrcode-area" class="bg-white p-2 rounded-lg hidden border-4 border-purple-500"></div>
-                    </div>
-
                     <div class="h-px bg-gray-700 my-2"></div>
 
                     <h4 class="text-blue-200 font-bold text-sm">Ontvangen</h4>
-                    <p class="text-[11px] text-gray-400">Heb je een link gekregen of wil je een QR scannen?</p>
-
-                    <button onclick="startSessionScanner()"
-                        class="w-full bg-purple-800/80 border border-purple-500/50 py-3 rounded-lg font-bold uppercase text-xs shadow-lg">📷
-                        Scan QR-Code</button>
+                    <p class="text-[11px] text-gray-400">Heb je een link gekregen? Open die op je toestel en voeg toe.
+                    </p>
 
                     <div id="sync-incoming-card"
                         class="hidden bg-cyan-900/25 border border-cyan-500/30 rounded p-3 space-y-2 mt-2">
@@ -1051,25 +987,16 @@
                 <div class="text-gray-200 text-[13px] leading-relaxed space-y-1">
                     <div>1) Kies datum bovenaan.</div>
                     <div>2) Start een telling en tel dieren.</div>
-                    <div>3) Vul traject, weer en notities aan in het logboek.</div>
+                    <div>3) Rond je sessie af in de wizard (naam, traject, weer, notities).</div>
                     <div>4) Controleer rapport of trendgrafiek.</div>
-                    <div>5) Deel via link/QR en vink in Rapport aan welke tellingen moeten meetellen.</div>
+                    <div>5) Deel via link en vink in Rapport aan welke tellingen moeten meetellen.</div>
                 </div>
             </div>
             <div class="bg-gray-800 p-4 rounded-xl border border-cyan-500/30 space-y-3">
                 <h3 class="font-bold text-cyan-300 text-sm">👥 Teamtelling zonder dubbels</h3>
                 <div class="text-gray-200 text-[13px] leading-relaxed space-y-3">
                     <div class="bg-gray-900/60 border border-cyan-500/30 rounded p-3 space-y-1">
-                        <div class="font-bold text-cyan-200">Voorbeeld 1: delen via QR (Leia, Luke, Yoda)</div>
-                        <div>1) Leia, Luke en Yoda tellen elk op hun eigen telefoon.</div>
-                        <div>2) Luke toont zijn QR. Leia en Yoda scannen die QR en voegen toe.</div>
-                        <div>3) Daarna toont Leia haar QR. Luke en Yoda scannen ook die.</div>
-                        <div>4) Daarna toont Yoda zijn QR. Leia en Luke scannen ook die.</div>
-                        <div>5) Iedereen heeft nu dezelfde losse tellingen in de lijst.</div>
-                        <div>6) In Rapport vinkt iedereen dezelfde tellingen aan (bijv. Leia + Luke + Yoda).</div>
-                    </div>
-                    <div class="bg-gray-900/60 border border-cyan-500/30 rounded p-3 space-y-1">
-                        <div class="font-bold text-cyan-200">Voorbeeld 2: delen via link (Rey, Finn, Poe)</div>
+                        <div class="font-bold text-cyan-200">Voorbeeld: delen via link (Rey, Finn, Poe)</div>
                         <div>1) Rey, Finn en Poe tellen elk op hun eigen telefoon.</div>
                         <div>2) Iedereen maakt een deel-link en zet die in de WhatsApp-groep.</div>
                         <div>3) Iedereen opent daarna alle ontvangen links.</div>
@@ -1078,8 +1005,11 @@
                         <div>6) Als iedereen dezelfde vinkjes zet, ziet iedereen hetzelfde teamrapport.</div>
                     </div>
                     <div class="text-cyan-100 text-[12px]">
-                        Belangrijk: dezelfde QR of link twee keer importeren geeft geen dubbeltelling; die bijdrage
+                        Belangrijk: dezelfde link twee keer importeren geeft geen dubbeltelling; die bijdrage
                         wordt automatisch overgeslagen.
+                    </div>
+                    <div class="text-cyan-100 text-[12px] bg-cyan-900/20 border border-cyan-500/20 rounded px-2 py-2">
+                        Delen gebeurt voorlopig enkel via deel-link.
                     </div>
                 </div>
             </div>
@@ -1104,6 +1034,31 @@
         class="hidden fixed right-4 bottom-24 bg-emerald-600 text-white px-4 py-2 rounded-full shadow-2xl font-bold text-xs uppercase tracking-widest border border-emerald-300/40">
         UPDATE
     </button>
+
+    <div id="link-share-help-modal"
+        class="fixed inset-0 bg-black/70 backdrop-blur-sm hidden z-[240] flex items-center justify-center p-4"
+        onclick="closeLinkShareHelpModal(event)">
+        <div class="bg-gray-900 border border-blue-500/40 shadow-2xl rounded-2xl max-w-lg w-full p-5 space-y-3"
+            onclick="event.stopPropagation();">
+            <div class="flex items-start justify-between gap-3">
+                <h3 class="text-blue-100 font-bold text-lg">Deellink gekopieerd</h3>
+                <button data-link-help-close="1" class="text-gray-400 hover:text-white text-lg"
+                    onclick="closeLinkShareHelpModal(event)">✕</button>
+            </div>
+            <div id="link-share-help-message"
+                class="text-[13px] text-blue-100 bg-blue-900/20 border border-blue-500/20 rounded px-3 py-2">
+                Link gekopieerd. Ga nu naar de app van je keuze en plak daar deze link.
+            </div>
+            <textarea id="link-share-help-link" readonly
+                class="w-full bg-gray-950 border border-blue-500/30 rounded p-2 text-[10px] text-blue-100 h-20"></textarea>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <button onclick="copyLinkShareHelpLink()"
+                    class="bg-blue-700 py-2 rounded text-[11px] font-bold uppercase">Kopieer opnieuw</button>
+                <button data-link-help-close="1" onclick="closeLinkShareHelpModal(event)"
+                    class="bg-gray-700 py-2 rounded text-[11px] font-bold uppercase">Sluit</button>
+            </div>
+        </div>
+    </div>
     <!-- Determinatie modal -->
     <div id="det-modal" class="det-modal-backdrop hidden" onclick="closeDetModal(event)">
         <div class="det-modal-card relative space-y-3" onclick="event.stopPropagation();">
@@ -1140,85 +1095,95 @@
         </div>
     </div>
 
-    <!-- QR import wizard modal -->
-    <div id="qr-modal"
-        class="fixed inset-0 bg-black/70 backdrop-blur-sm hidden z-[210] flex items-center justify-center p-4"
-        onclick="closeQrModal(event)">
-        <div class="bg-gradient-to-br from-gray-900 via-gray-900 to-gray-800 rounded-2xl border border-purple-500/40 w-full max-w-lg p-4 relative space-y-3"
-            onclick="event.stopPropagation();">
-            <div class="flex justify-between items-start gap-3">
-                <div>
-                    <div class="text-[10px] uppercase tracking-widest text-purple-300 font-bold">QR import</div>
-                    <h3 class="text-purple-100 font-bold text-lg">Wizard: telling toevoegen</h3>
-                </div>
-                <button data-qr-close="1" class="bg-black/50 text-white rounded-full w-8 h-8"
-                    onclick="closeQrModal(event)">✕</button>
-            </div>
-            <div class="text-[11px] text-purple-100 bg-purple-900/25 border border-purple-500/20 rounded p-2 whitespace-pre-line"
-                id="qr-wizard-meta">
-                Stap 1: scan de QR-code van je partner.
-            </div>
-            <div id="session-reader-modal" class="rounded-lg overflow-hidden bg-black aspect-square"></div>
-            <pre id="qr-wizard-summary"
-                class="bg-black/40 border border-purple-900/40 rounded p-2 text-[10px] text-purple-100 whitespace-pre-wrap">Nog geen QR gelezen.</pre>
-            <div class="space-y-2">
-                <div class="text-[10px] uppercase tracking-wider text-purple-200 font-bold">Stap 3 · Datum van nieuwe
-                    telling</div>
-                <input type="date" id="qr-wizard-date"
-                    class="bg-gray-700 border border-gray-600 rounded px-2 py-2 text-white w-full text-[12px]"
-                    onchange="buildQrWizardTargetOptions()">
-                <div id="qr-wizard-hint"
-                    class="text-[11px] text-gray-300 bg-gray-900/70 border border-gray-700 rounded px-2 py-2"></div>
-            </div>
-            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                <button id="qr-wizard-rescan-btn"
-                    class="bg-purple-700 text-white py-2 rounded text-[11px] font-bold uppercase"
-                    onclick="restartQrWizardScan()">Scan (opnieuw)</button>
-                <button id="qr-wizard-import-btn"
-                    class="bg-emerald-700 text-white py-2 rounded text-[11px] font-bold uppercase"
-                    onclick="importQrWizardPayload()" disabled>Voeg telling toe</button>
-                <button data-qr-close="1" class="bg-gray-700 text-white py-2 rounded text-[11px] font-bold uppercase"
-                    onclick="closeQrModal(event)">Sluit</button>
-            </div>
-        </div>
-    </div>
+    <datalist id="route-suggestions"></datalist>
 
     <!-- Session info modal -->
     <div id="session-info-modal"
         class="fixed inset-0 bg-black/70 backdrop-blur-sm hidden z-[220] flex items-center justify-center p-4"
-        onclick="event.target.id==='session-info-modal' && closeSessionInfoModal()">
+        onclick="event.target.id==='session-info-modal' && closeSessionInfoModal(true)">
         <div
-            class="bg-gradient-to-br from-gray-900 via-gray-850 to-gray-800 border border-emerald-500/40 shadow-2xl rounded-2xl max-w-md w-full p-5 space-y-4 relative">
+            class="bg-gradient-to-br from-gray-900 via-gray-850 to-gray-800 border border-emerald-500/40 shadow-2xl rounded-2xl max-w-xl w-full p-5 space-y-4 relative max-h-[90vh] overflow-auto no-scrollbar">
             <div class="flex items-start gap-3">
                 <div
                     class="w-10 h-10 rounded-full bg-emerald-600/20 border border-emerald-400/40 flex items-center justify-center text-xl">
                     📝</div>
                 <div class="space-y-1">
-                    <h3 class="text-emerald-200 font-bold text-lg">Telling afronden</h3>
-                    <div class="text-gray-200 text-sm leading-relaxed space-y-1.5">
-                        <div><span class="text-emerald-300 font-semibold">1.</span> Vul het traject dat je zojuist liep
-                            in.</div>
-                        <div><span class="text-emerald-300 font-semibold">2.</span> Controleer het weerbericht
-                            (aangepast mag, we vullen alvast je locatie in).</div>
-                        <div><span class="text-emerald-300 font-semibold">3.</span> Notities: vermeld bijv. of het
-                            wegdek nat of droog was (natte weg = vaak meer trek), plus eventuele bijzonderheden.</div>
-                        <div class="text-gray-400 text-[13px] pt-1">Deze info gaat mee in het rapport en helpt bij
-                            latere tellingen.</div>
-                    </div>
+                    <h3 class="text-emerald-200 font-bold text-lg">Sessie afgerond</h3>
+                    <div id="session-wizard-meta" class="text-[12px] text-emerald-100"></div>
                 </div>
                 <button class="absolute top-3 right-3 text-gray-400 hover:text-white"
-                    onclick="closeSessionInfoModal()">✕</button>
+                    onclick="closeSessionInfoModal(true)">✕</button>
             </div>
+
+            <div class="space-y-3 text-left">
+                <div class="space-y-1">
+                    <label class="text-[10px] uppercase tracking-wide text-gray-400 font-bold">Jouw naam</label>
+                    <input id="session-wizard-name" type="text"
+                        class="bg-gray-700 border border-gray-600 rounded px-2 py-2 text-white w-full text-[12px]"
+                        placeholder="Bevestig jouw naam" oninput="handleSessionWizardNameInput()">
+                </div>
+                <div class="space-y-1">
+                    <label class="text-[10px] uppercase tracking-wide text-gray-400 font-bold">Traject</label>
+                    <input id="session-wizard-route" type="text"
+                        class="bg-gray-700 border border-gray-600 rounded px-2 py-2 text-white w-full text-[12px]"
+                        placeholder="Bijv. Kerkstraat - Brugje" list="route-suggestions"
+                        oninput="handleSessionWizardRouteInput(false)" onchange="handleSessionWizardRouteInput(true)">
+                </div>
+                <div class="space-y-1">
+                    <label class="text-[10px] uppercase tracking-wide text-gray-400 font-bold">Weer bij start</label>
+                    <div id="session-wizard-weather"
+                        class="text-[11px] text-gray-200 bg-gray-900/50 border border-gray-700 rounded px-2 py-2">
+                        Geen weerdata gevonden.
+                    </div>
+                </div>
+                <div class="space-y-1">
+                    <label class="text-[10px] uppercase tracking-wide text-gray-400 font-bold">Notities</label>
+                    <textarea id="session-wizard-notes"
+                        class="bg-gray-700 border border-gray-600 rounded px-2 py-2 text-white w-full text-[12px] h-20"
+                        placeholder="Bijzonderheden, wegdek, ..." oninput="handleSessionWizardNotesInput()"></textarea>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <button
+                    class="bg-emerald-700 hover:bg-emerald-600 text-white rounded-lg py-2.5 font-bold text-[11px] uppercase tracking-wide shadow-lg active:scale-[0.98]"
+                    onclick="sessionWizardShareReport()">
+                    📤 Deel rapporttekst
+                </button>
+                <button
+                    class="bg-blue-700 hover:bg-blue-600 text-white rounded-lg py-2.5 font-bold text-[11px] uppercase tracking-wide shadow-lg active:scale-[0.98]"
+                    onclick="sessionWizardGenerateShareLink()">
+                    🔗 Deel via link
+                </button>
+            </div>
+
+            <div id="session-wizard-link-box"
+                class="hidden space-y-2 bg-blue-900/20 border border-blue-500/30 rounded-lg px-3 py-3 text-left">
+                <div class="text-[10px] text-blue-200 uppercase tracking-wider font-bold">Deel-link</div>
+                <div id="session-wizard-link-help"
+                    class="text-[10px] text-blue-100 bg-blue-900/20 border border-blue-500/20 rounded px-2 py-2">
+                    Gebruik "Deel" op smartphone of "Kopieer" op desktop.
+                </div>
+                <textarea id="session-wizard-link-output" readonly
+                    class="w-full bg-gray-900/70 border border-blue-500/30 rounded p-2 text-[10px] text-blue-100 h-16"></textarea>
+                <div class="grid grid-cols-2 gap-2">
+                    <button onclick="copySessionWizardLink()"
+                        class="bg-blue-700 py-2 rounded text-[11px] font-bold uppercase">Kopieer</button>
+                    <button onclick="shareSessionWizardLink()"
+                        class="bg-blue-900/70 border border-blue-400/30 py-2 rounded text-[11px] font-bold uppercase">Deel</button>
+                </div>
+            </div>
+
             <div class="flex gap-3 flex-wrap">
                 <button
                     class="flex-1 min-w-[120px] bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg py-2.5 font-bold text-sm shadow-lg active:scale-[0.98]"
-                    onclick="switchTab('sessions'); closeSessionInfoModal();">
-                    Naar logboek
+                    onclick="sessionWizardSaveAndOpenSessions()">
+                    Opslaan & naar Sessies
                 </button>
                 <button
                     class="flex-1 min-w-[120px] bg-gray-800 border border-gray-700 text-gray-200 rounded-lg py-2.5 font-bold text-sm active:scale-[0.98]"
-                    onclick="closeSessionInfoModal()">
-                    Later
+                    onclick="closeSessionInfoModal(true)">
+                    Sluiten
                 </button>
             </div>
         </div>
