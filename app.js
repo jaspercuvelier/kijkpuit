@@ -1194,6 +1194,7 @@ let inactivityPromptTimer = null;
 let inactivityAutoTimer = null;
 let lastCountToastTimer = null;
 let lastCountToastState = null;
+let lastRenderedReportText = '';
 const INACTIVITY_MS = 60 * 60 * 1000; // 1 uur
 const INACTIVITY_AUTO_MS = 10 * 60 * 1000; // 10 minuten extra
 const picker = document.getElementById('datePicker');
@@ -4564,7 +4565,9 @@ function updateReport() {
         txt += `\n⚠️ Geen tellingen geselecteerd. Zet minstens 1 sessie aan bovenaan.\n`;
     }
     txt += `\n#Paddentrek #Telling`;
-    document.getElementById('report-text').innerText = h || data.notes || reportSessions.length || (data.sessions || []).length ? txt : "Nog geen data ingevoerd.";
+    const reportOutput = h || data.notes || reportSessions.length || (data.sessions || []).length ? txt : "Nog geen data ingevoerd.";
+    lastRenderedReportText = reportOutput;
+    document.getElementById('report-text').innerText = reportOutput;
     renderReportTrend();
 
     // determinaties blok
@@ -4630,12 +4633,13 @@ function setReportMode(m) {
 }
 
 function getReportTextForSharing() {
+    const cached = String(lastRenderedReportText || '').replace(/\r\n/g, '\n').trim();
+    if (cached) return cached;
     const box = document.getElementById('report-text');
     if (!box) return 'Geen data';
-    const rawText = typeof box.textContent === 'string' ? box.textContent.replace(/\r\n/g, '\n') : '';
-    const normalized = rawText.trim();
-    if (normalized) return normalized;
-    const fallback = typeof box.innerText === 'string' ? box.innerText.trim() : '';
+    const visibleText = typeof box.innerText === 'string' ? box.innerText.replace(/\r\n/g, '\n').trim() : '';
+    if (visibleText) return visibleText;
+    const fallback = typeof box.textContent === 'string' ? box.textContent.replace(/\r\n/g, '\n').trim() : '';
     return fallback || 'Geen data';
 }
 

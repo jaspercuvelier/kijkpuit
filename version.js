@@ -1,10 +1,19 @@
 // Centrale versiebron voor app en service worker
-const APP_VERSION = '3.2.7';
+const APP_VERSION = '3.2.8';
 
 // Changelog voor het uitklapbare "Changes"-luik in de Info-tab.
 // Voeg nieuwe releases bovenaan toe.
 // Inhoud gebaseerd op git-geschiedenis van version.js + recente lokale wijzigingen.
 const APP_CHANGELOG = [
+    {
+        version: '3.2.8',
+        title: 'Hotfix: wizard WhatsApp behoudt linebreaks',
+        changes: [
+            'Rapporttekst wordt nu bij opbouw gecachet als pure tekstbron voor delen.',
+            'Wizard "Deel tekst voor WhatsApp" gebruikt daardoor opnieuw correcte enters en *vet*-markup.',
+            'Deelhelper kiest voortaan eerst de gecachete rapporttekst en valt pas daarna terug op DOM-lezing.'
+        ]
+    },
     {
         version: '3.2.7',
         title: 'Wizard WhatsApp-opmaak hersteld',
