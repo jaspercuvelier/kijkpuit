@@ -1,10 +1,19 @@
 // Centrale versiebron voor app en service worker
-const APP_VERSION = '3.2.6';
+const APP_VERSION = '3.2.7';
 
 // Changelog voor het uitklapbare "Changes"-luik in de Info-tab.
 // Voeg nieuwe releases bovenaan toe.
 // Inhoud gebaseerd op git-geschiedenis van version.js + recente lokale wijzigingen.
 const APP_CHANGELOG = [
+    {
+        version: '3.2.7',
+        title: 'Wizard WhatsApp-opmaak hersteld',
+        changes: [
+            'Wizard-knop "Deel tekst voor WhatsApp" gebruikt op mobiel nu rechtstreeks een WhatsApp-deellink met correcte linebreaks en *vet*-markup.',
+            'Op desktop kopieert dezelfde wizardactie de rapporttekst naar het klembord met duidelijke plak-instructie.',
+            'Rapportdelen leest tekst nu via een gedeelde helper zodat opmaak consistenter blijft, ook buiten de zichtbare Delen-tab.'
+        ]
+    },
     {
         version: '3.2.6',
         title: 'Delen vereenvoudigd (2 knoppen + desktop klembordflow)',

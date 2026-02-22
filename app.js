@@ -3481,7 +3481,7 @@ async function copyLinkWithInstructions(link = '', fallbackInput = null) {
     return true;
 }
 
-function sessionWizardShareReport() {
+async function sessionWizardShareReport() {
     const persisted = persistSessionWizardData({ commitRouteHistory: true, requireName: true, silent: true });
     if (!persisted) return;
     reportMode = 'session';
@@ -3489,7 +3489,19 @@ function sessionWizardShareReport() {
     buildViewedSessionOptions();
     buildReportSessionOptions();
     updateReport();
-    shareReport();
+    const text = getReportTextForSharing();
+    if (isMobileShareContext()) {
+        const waLink = `https://wa.me/?text=${encodeURIComponent(text)}`;
+        const opened = window.open(waLink, '_blank');
+        if (!opened) window.location.href = waLink;
+        return;
+    }
+    const copied = await copyTextWithFallback(text);
+    if (!copied) {
+        alert('Kopiëren van het rapport is mislukt. Probeer opnieuw.');
+        return;
+    }
+    alert('Gekopieerd naar het klembord. Open nu WhatsApp en plak het rapport.');
 }
 
 function sessionWizardGenerateShareLink() {
@@ -4617,12 +4629,22 @@ function setReportMode(m) {
     updateReport();
 }
 
+function getReportTextForSharing() {
+    const box = document.getElementById('report-text');
+    if (!box) return 'Geen data';
+    const rawText = typeof box.textContent === 'string' ? box.textContent.replace(/\r\n/g, '\n') : '';
+    const normalized = rawText.trim();
+    if (normalized) return normalized;
+    const fallback = typeof box.innerText === 'string' ? box.innerText.trim() : '';
+    return fallback || 'Geen data';
+}
+
 async function shareReport(includePhotos = false) {
     const day = ensureDay();
     const sel = document.getElementById('report-session-select');
     const sessionId = sel ? sel.value : '';
     const session = sessionId ? day.sessions.find(s => s.id === sessionId) : null;
-    const text = document.getElementById('report-text').innerText || 'Geen data';
+    const text = getReportTextForSharing();
     let files = [];
     if (includePhotos) {
         const photos = reportMode === 'session' && session
