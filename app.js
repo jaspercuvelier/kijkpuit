@@ -1868,6 +1868,8 @@ function buildUI() {
 }
 
 function renderCard(s, custom = false) {
+    const hasAmplexus = s.hasAmplexus !== false;
+
     // Determine image source
     let imgHTML = '';
     if (s.image) {
@@ -1899,7 +1901,7 @@ function renderCard(s, custom = false) {
             <div class="space-y-2 bg-emerald-900/10 p-2 rounded-lg border border-emerald-500/10">
                 <div class="text-[10px] text-emerald-400 font-bold text-center uppercase tracking-widest mb-1 opacity-80">Levend</div>
                 
-                ${renderCounterRow(s.id, 'p_l', 'M+V', 'live')}
+                ${hasAmplexus ? renderCounterRow(s.id, 'p_l', '❤️', 'live') : ''}
                 ${renderCounterRow(s.id, 'm_l', 'M', 'live')}
                 ${renderCounterRow(s.id, 'v_l', 'V', 'live')}
                 ${renderCounterRow(s.id, 'o_l', '?', 'live')}
@@ -1909,7 +1911,7 @@ function renderCard(s, custom = false) {
             <div class="space-y-2 bg-red-900/10 p-2 rounded-lg border border-red-500/10">
                 <div class="text-[10px] text-red-400 font-bold text-center uppercase tracking-widest mb-1 opacity-80">Dood</div>
                 
-                ${renderCounterRow(s.id, 'p_d', 'M+V', 'dead')}
+                ${hasAmplexus ? renderCounterRow(s.id, 'p_d', '❤️', 'dead') : ''}
                 ${renderCounterRow(s.id, 'm_d', 'M', 'dead')}
                 ${renderCounterRow(s.id, 'v_d', 'V', 'dead')}
                 ${renderCounterRow(s.id, 'o_d', '?', 'dead')}
@@ -3096,6 +3098,150 @@ function findSessionByDeterminationId(detId, day = ensureDay()) {
     return (day.sessions || []).find(s => (s.determinations || []).some(d => d.id === detId)) || null;
 }
 
+const SESSION_COUNT_TABLE_COLUMNS = Object.freeze([
+    { suffix: 'p_l', short: 'Kop L', title: 'Koppels levend' },
+    { suffix: 'm_l', short: 'M L', title: 'Mannetje levend' },
+    { suffix: 'v_l', short: 'V L', title: 'Vrouwtje levend' },
+    { suffix: 'o_l', short: '? L', title: 'Onbekend levend' },
+    { suffix: 'p_d', short: 'Kop D', title: 'Koppels dood' },
+    { suffix: 'm_d', short: 'M D', title: 'Mannetje dood' },
+    { suffix: 'v_d', short: 'V D', title: 'Vrouwtje dood' },
+    { suffix: 'o_d', short: '? D', title: 'Onbekend dood' }
+]);
+
+function listSessionSpeciesForCorrectionTable(session, day = ensureDay()) {
+    if (!session || typeof session !== 'object') return [];
+    const speciesMap = new Map();
+    const pushSpecies = (speciesId = '', speciesName = '') => {
+        const id = String(speciesId || '').trim();
+        if (!id) return;
+        const resolvedName = String(speciesName || findSpeciesNameById(id, day) || id).trim() || id;
+        const existing = speciesMap.get(id);
+        if (!existing) {
+            speciesMap.set(id, { speciesId: id, speciesName: resolvedName });
+            return;
+        }
+        if ((!existing.speciesName || existing.speciesName === id) && resolvedName) {
+            speciesMap.set(id, { speciesId: id, speciesName: resolvedName });
+        }
+    };
+
+    (Array.isArray(SPECIES) ? SPECIES : []).forEach(s => {
+        pushSpecies(s?.id || '', s?.name || '');
+    });
+    (Array.isArray(day?.custom) ? day.custom : []).forEach(s => {
+        pushSpecies(s?.id || '', s?.name || '');
+    });
+    Object.keys(session.counts || {}).forEach(key => {
+        const parsed = parseCounterKey(key);
+        if (!parsed?.speciesId) return;
+        pushSpecies(parsed.speciesId, findSpeciesNameById(parsed.speciesId, day));
+    });
+
+    return Array.from(speciesMap.values())
+        .sort((a, b) => String(a.speciesName || '').localeCompare(String(b.speciesName || ''), 'nl', { sensitivity: 'base' }));
+}
+
+function renderSessionCountCorrectionTool(session, day, dayKey) {
+    const speciesRows = listSessionSpeciesForCorrectionTable(session, day);
+    const hasRows = speciesRows.length > 0;
+    const colSpan = SESSION_COUNT_TABLE_COLUMNS.length + 2;
+
+    const rowHtml = hasRows
+        ? speciesRows.map(row => {
+            const cells = SESSION_COUNT_TABLE_COLUMNS.map(col => {
+                const key = `${row.speciesId}_${col.suffix}`;
+                const raw = Number(session.counts?.[key] || 0);
+                const value = Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 0;
+                return `<td class="px-1 py-1 text-center align-top">
+                            <label class="inline-flex flex-col items-center gap-1" title="${col.title}">
+                                <span class="text-[9px] uppercase tracking-wide text-gray-400">${col.short}</span>
+                                <input data-session-table-key="${escapeHtmlForClipboard(key)}" type="number" min="0" step="1" value="${value}"
+                                    class="w-14 bg-gray-800 border border-gray-600 rounded px-1.5 py-1 text-[11px] text-white text-center mx-auto block">
+                            </label>
+                        </td>`;
+            }).join('');
+            const rowTotal = SESSION_COUNT_TABLE_COLUMNS.reduce((acc, col) => {
+                const key = `${row.speciesId}_${col.suffix}`;
+                const raw = Number(session.counts?.[key] || 0);
+                const value = Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 0;
+                return acc + (col.suffix.startsWith('p_') ? value * 2 : value);
+            }, 0);
+            return `<tr class="border-t border-gray-700/70">
+                        <td class="px-2 py-1 text-[11px] text-gray-100 font-semibold whitespace-nowrap text-center align-middle">${escapeHtmlForClipboard(row.speciesName)}</td>
+                        ${cells}
+                        <td class="px-2 py-1 text-[11px] text-gray-200 font-bold whitespace-nowrap text-center align-middle">${rowTotal}</td>
+                    </tr>`;
+        }).join('')
+        : `<tr><td colspan="${colSpan}" class="px-2 py-2 text-[11px] text-gray-400 text-center">Geen soorten beschikbaar.</td></tr>`;
+
+    const buttonClass = hasRows
+        ? 'bg-indigo-600 hover:bg-indigo-500 text-white'
+        : 'bg-gray-700 text-gray-400 cursor-not-allowed';
+    const disabledAttr = hasRows ? '' : 'disabled';
+
+    return `
+        <details class="mt-2 bg-black/20 border border-indigo-500/20 rounded p-2" data-session-count-table>
+            <summary class="cursor-pointer text-[10px] uppercase tracking-wider text-indigo-200 font-bold">Aantallen corrigeren (tabel)</summary>
+            <div class="mt-2 space-y-2">
+                <div class="text-[10px] text-gray-400">Pas de cellen aan en klik op "Bewaar aantallen".</div>
+                <div class="overflow-x-auto rounded border border-gray-700/80">
+                    <table class="min-w-[860px] w-full bg-gray-900/40">
+                        <thead class="bg-indigo-950/40">
+                            <tr>
+                                <th class="px-2 py-1 text-center text-[10px] font-bold text-indigo-200">Soort</th>
+                                <th class="px-2 py-1 text-center text-[10px] font-bold text-indigo-200" colspan="${SESSION_COUNT_TABLE_COLUMNS.length}">Label + aantal</th>
+                                <th class="px-2 py-1 text-center text-[10px] font-bold text-indigo-200">Tot</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rowHtml}</tbody>
+                    </table>
+                </div>
+                <button class="w-full py-2 rounded text-[11px] font-bold ${buttonClass}" ${disabledAttr} onclick="saveSessionCountTable(this, '${session.id}', '${dayKey}')">
+                    Bewaar aantallen
+                </button>
+            </div>
+        </details>
+    `;
+}
+
+function saveSessionCountTable(button, sessionId, dayKey = picker.value) {
+    const host = button?.closest('[data-session-count-table]');
+    if (!host) return;
+    const day = ensureDay(dayKey);
+    const session = (day.sessions || []).find(s => s.id === sessionId);
+    if (!session) {
+        alert('Telsessie niet gevonden.');
+        return;
+    }
+
+    const preserved = {};
+    Object.entries(session.counts || {}).forEach(([key, raw]) => {
+        if (parseCounterKey(key)) return;
+        const value = Number(raw || 0);
+        if (!Number.isFinite(value) || value <= 0) return;
+        preserved[key] = value;
+    });
+
+    const next = {};
+    host.querySelectorAll('[data-session-table-key]').forEach(input => {
+        const key = input.getAttribute('data-session-table-key') || '';
+        if (!parseCounterKey(key)) return;
+        const raw = Number(input.value);
+        const value = Number.isFinite(raw) ? Math.max(0, Math.floor(raw)) : 0;
+        input.value = String(value);
+        if (value > 0) next[key] = value;
+    });
+
+    session.counts = { ...preserved, ...next };
+    recalcDayFromSessions(day);
+    save();
+    render();
+    renderSessionAdmin();
+    recordUserAction();
+    showToast('Telsessie-aantallen opgeslagen');
+}
+
 function renderSessionAdmin() {
     const dayKey = document.getElementById('sessionDate')?.value || picker.value;
     const day = ensureDay(dayKey);
@@ -3108,6 +3254,7 @@ function renderSessionAdmin() {
         const route = normalizeRouteName(s.routeName || '');
         const weather = s.weather ? `<div class="text-[10px] text-sky-300">${weatherSummaryText(s.weather, ' • ', true)}</div>` : '';
         const autoNote = (s.autoContributorNote || '').trim();
+        const correctionTool = renderSessionCountCorrectionTool(s, day, dayKey);
         return `<div class="bg-gray-900 p-3 rounded border border-gray-800 flex items-center gap-2">
                     <input type="checkbox" class="session-merge-checkbox accent-emerald-500" value="${s.id}">
                     <div class="flex-1">
@@ -3120,6 +3267,7 @@ function renderSessionAdmin() {
                             Meetellen in rapport
                         </label>
                         ${weather}
+                        ${correctionTool}
                     </div>
                     <button class="bg-red-700 px-2 py-1 rounded text-[12px]" onclick="deleteSession('${s.id}','${dayKey}')" title="Verwijder telsessie">🗑️</button>
                 </div>`;
@@ -4666,8 +4814,8 @@ function updateReport() {
     const session = sessionId ? (data.sessions || []).find(s => s.id === sessionId) : null;
     const reportSessions = getReportEligibleSessions(data);
     renderReportSessionChecklist();
-    const excludedSessions = (data.sessions || []).filter(s => !sessionIncludedInReports(s));
     const targetCounts = reportMode === 'session' && session ? (session.counts || {}) : getReportCountsForDay(data);
+    const totalCount = sumCounts(targetCounts || {});
     const sessionsToShow = reportMode === 'session' && session ? [session] : reportSessions;
 
     // Update the editor UI in the Delen tab
@@ -4722,13 +4870,14 @@ function updateReport() {
     if (weatherSummaries.length > 1) txt += `*Weer:* ${weatherSummaries.join(' | ')}\n\n`;
     if (reportMode === 'day' && routeSummaries.length === 1) txt += `*Traject:* ${routeSummaries[0]}\n\n`;
     if (reportMode === 'day' && routeSummaries.length > 1) txt += `*Trajecten:* ${routeSummaries.join(' | ')}\n\n`;
-    const all = [...SPECIES, ...(data.custom || [])]; let h = false;
+    txt += `*Totaal dieren:* ${totalCount}\n\n`;
+    const all = [...SPECIES, ...(data.custom || [])]; let hasSpeciesCounts = false;
     all.forEach(s => {
         const pl = targetCounts[`${s.id}_p_l`] || 0, pd = targetCounts[`${s.id}_p_d`] || 0;
         const ml = targetCounts[`${s.id}_m_l`] || 0, vl = targetCounts[`${s.id}_v_l`] || 0, ol = targetCounts[`${s.id}_o_l`] || 0;
         const md = targetCounts[`${s.id}_m_d`] || 0, vd = targetCounts[`${s.id}_v_d`] || 0, od = targetCounts[`${s.id}_o_d`] || 0;
         if (pl + pd + ml + vl + ol + md + vd + od > 0) {
-            h = true;
+            hasSpeciesCounts = true;
             txt += `*${s.name}:*\n${pl > 0 ? '  ❤️ ' + pl + ' Koppels (levend)\n' : ''}${pd > 0 ? '  ☠️ ' + pd + ' Koppels (dood)\n' : ''}  - Levend: ${ml}m, ${vl}v, ${ol}o\n  - Dood: ${md}m, ${vd}v, ${od}o\n`;
         }
     });
@@ -4795,15 +4944,12 @@ function updateReport() {
                 txt += `  - ${sessionDisplayLabel(s, data)}: ${total} stuks${routeTxt}${who}${weatherTxt}\n`;
             });
         }
-        if (reportMode === 'day' && excludedSessions.length) {
-            txt += `\n⚠️ ${excludedSessions.length} telsessies tellen niet mee in dit rapport.\n`;
-        }
     }
     if (reportMode === 'day' && !sessionsToShow.length && (data.sessions || []).length) {
         txt += `\n⚠️ Geen telsessies geselecteerd. Zet minstens 1 telsessie aan bovenaan.\n`;
     }
     txt += `\n#Paddentrek #Telsessie`;
-    const reportOutput = h || data.notes || reportSessions.length || (data.sessions || []).length ? txt : "Nog geen data ingevoerd.";
+    const reportOutput = hasSpeciesCounts || data.notes || reportSessions.length || (data.sessions || []).length ? txt : "Nog geen data ingevoerd.";
     lastRenderedReportText = reportOutput;
     document.getElementById('report-text').innerText = reportOutput;
     renderReportTrend();

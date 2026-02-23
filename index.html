@@ -217,31 +217,64 @@
             align-items: center;
             justify-content: center;
             line-height: 1;
-            transition: color 0.2s ease, text-shadow 0.2s ease;
+            position: relative;
+            transition: color 0.2s ease, text-shadow 0.2s ease, filter 0.2s ease;
         }
 
         @keyframes frogRecordingPulse {
             0% {
                 transform: scale(1);
-                color: #fca5a5;
-                text-shadow: 0 0 0 rgba(248, 113, 113, 0.2);
+                color: #fecaca;
+                text-shadow: 0 0 6px rgba(252, 165, 165, 0.55), 0 0 14px rgba(248, 113, 113, 0.35);
+                filter: drop-shadow(0 0 0 rgba(239, 68, 68, 0.1));
             }
 
-            50% {
-                transform: scale(1.1);
+            35% {
+                transform: scale(1.2);
                 color: #ef4444;
-                text-shadow: 0 0 10px rgba(248, 113, 113, 0.85), 0 0 18px rgba(239, 68, 68, 0.45);
+                text-shadow: 0 0 16px rgba(252, 165, 165, 0.95), 0 0 28px rgba(239, 68, 68, 0.8), 0 0 40px rgba(220, 38, 38, 0.6);
+                filter: drop-shadow(0 0 10px rgba(239, 68, 68, 0.65));
             }
 
             100% {
                 transform: scale(1);
-                color: #fca5a5;
-                text-shadow: 0 0 0 rgba(248, 113, 113, 0.2);
+                color: #fecaca;
+                text-shadow: 0 0 6px rgba(252, 165, 165, 0.55), 0 0 14px rgba(248, 113, 113, 0.35);
+                filter: drop-shadow(0 0 0 rgba(239, 68, 68, 0.1));
+            }
+        }
+
+        @keyframes frogRecordingHalo {
+            0% {
+                opacity: 0.82;
+                transform: scale(0.92);
+            }
+
+            70% {
+                opacity: 0.12;
+                transform: scale(1.5);
+            }
+
+            100% {
+                opacity: 0;
+                transform: scale(1.62);
             }
         }
 
         .brand-frog.is-recording {
-            animation: frogRecordingPulse 1.2s ease-in-out infinite;
+            animation: frogRecordingPulse 0.88s ease-in-out infinite;
+        }
+
+        .brand-frog.is-recording::after {
+            content: '';
+            position: absolute;
+            width: 1.55em;
+            height: 1.55em;
+            border-radius: 9999px;
+            background: radial-gradient(circle, rgba(248, 113, 113, 0.55) 0%, rgba(239, 68, 68, 0.24) 55%, rgba(239, 68, 68, 0) 72%);
+            z-index: -1;
+            pointer-events: none;
+            animation: frogRecordingHalo 0.88s ease-out infinite;
         }
 
         .settings-accordion {
@@ -705,7 +738,7 @@
                 <div id="render-target" class="space-y-6"></div>
                 <div id="custom-species-render" class="space-y-6"></div>
 
-                <div class="bg-gray-800 p-6 rounded-xl border border-emerald-500/30 space-y-3">
+                <div class="mt-6 bg-gray-800 p-6 rounded-xl border border-emerald-500/30 space-y-3">
                     <h3 class="font-bold mb-4 text-emerald-400">Nieuwe soort toevoegen</h3>
                     <div class="flex gap-2">
                         <input type="text" id="new-species-name" placeholder="Bijv: Groene Kikker..."
@@ -936,7 +969,7 @@
                     </div>
                     <div id="session-admin-list" class="space-y-2 text-[11px]"></div>
                     <div class="text-[11px] text-gray-400">
-                        Controleer of corrigeer per telsessie: naam, traject, weer, notities en foto's.
+                        Controleer of corrigeer per telsessie: aantallen, naam, traject, weer, notities en foto's.
                     </div>
                     <div id="session-log-container" class="space-y-4"></div>
                     <div class="pt-1">
