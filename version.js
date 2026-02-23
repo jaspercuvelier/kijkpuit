@@ -1,10 +1,32 @@
 // Centrale versiebron voor app en service worker
-const APP_VERSION = '3.2.8';
+const APP_VERSION = '3.2.10';
 
 // Changelog voor het uitklapbare "Changes"-luik in de Info-tab.
 // Voeg nieuwe releases bovenaan toe.
 // Inhoud gebaseerd op git-geschiedenis van version.js + recente lokale wijzigingen.
 const APP_CHANGELOG = [
+    {
+        version: '3.2.10',
+        title: 'Trektrend-tab + mobiel leesbaarheidsupgrade',
+        changes: [
+            'Trektrend staat nu op een apart tabblad "Trend" in plaats van onder "Delen".',
+            'Op kleine schermen verschijnt in portrait nu automatisch een hint om het scherm te draaien voor beter grafiekoverzicht.',
+            'De trektrendgrafiek ondersteunt nu pinch-zoom (knijpen met twee vingers) op smartphone.',
+            'In de telsessie-wizard is extra hulptekst toegevoegd dat je telsessies (tekst en link) via tabblad "Delen" kan delen.'
+        ]
+    },
+    {
+        version: '3.2.9',
+        title: 'Telsessie-consistentie + nieuwe instellingen',
+        changes: [
+            'Zichtbare terminologie doorheen de app gelijkgetrokken naar "telsessie/telsessies".',
+            'In Instellingen zijn nieuwe toggles toegevoegd voor geluid en "Toon laatst getelde dier".',
+            'Beide toggles staan standaard aan bij eerste gebruik en blijven daarna bewaard via lokale opslag.',
+            'Bij -1 op een dier verschijnt nu ook een verwijder-toast (bv. "1 vrouwtje gewone pad verwijderd"), met consistenter hoofdlettergebruik.',
+            'Salamanders tonen in het telscherm nu een hagedis-icoon i.p.v. een paddenemoji.',
+            'Headerlayout aangepast zodat emoji en titel op alle toestellen netjes op dezelfde regel blijven.'
+        ]
+    },
     {
         version: '3.2.8',
         title: 'Hotfix: wizard WhatsApp behoudt linebreaks',

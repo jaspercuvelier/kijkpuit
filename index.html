@@ -7,7 +7,7 @@
     <meta name="keywords"
         content="paddentrek, paddenoverzet, amfibieën tellen, vrijwilligers natuurpunt, paddenschermen, kikkers, salamanders, trekperiode, veldwerk, 2026">
     <meta name="description"
-        content="Vrijwilligersapp voor paddentrek 2026: tel en registreer amfibieën, beheer tellingen en routes, deel rapporten en deel-links met je team.">
+        content="Vrijwilligersapp voor paddentrek 2026: tel en registreer amfibieën, beheer telsessies en routes, deel rapporten en deel-links met je team.">
     <meta name="robots" content="index,follow">
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff">
     <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0f172a">
@@ -16,7 +16,7 @@
     <meta property="og:type" content="website">
     <meta property="og:title" content="Paddentrek Teller Pro">
     <meta property="og:description"
-        content="Sluit aan bij de paddentrek: tel en red amfibieën, houd tellingen bij en deel rapporten.">
+        content="Sluit aan bij de paddentrek: tel en red amfibieën, houd telsessies bij en deel rapporten.">
     <meta property="og:image" content="/icons/icon-512.png">
     <meta property="og:image:alt" content="Kikkerpictogram van de Paddentrek app">
     <meta property="og:site_name" content="Paddentrek Teller Pro">
@@ -102,42 +102,6 @@
 
         #update-btn {
             z-index: 120;
-        }
-
-        @keyframes recPulse {
-            0% {
-                transform: scale(0.9);
-                opacity: 0.6;
-            }
-
-            50% {
-                transform: scale(1.1);
-                opacity: 1;
-            }
-
-            100% {
-                transform: scale(0.9);
-                opacity: 0.6;
-            }
-        }
-
-        .animate-rec {
-            animation: recPulse 1s infinite;
-        }
-
-        .record-btn {
-            width: 34px;
-            height: 34px;
-            border-radius: 9999px;
-            border: 1px solid rgba(248, 113, 113, 0.5);
-            background: rgba(248, 113, 113, 0.12);
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .record-btn:active {
-            transform: scale(0.96);
         }
 
         /* Emojis en letters */
@@ -233,8 +197,51 @@
             flex-wrap: wrap;
         }
 
+        .brand-main {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            white-space: nowrap;
+        }
+
+        .brand-title {
+            white-space: nowrap;
+        }
+
         .brand-sub {
             white-space: nowrap;
+        }
+
+        .brand-frog {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            line-height: 1;
+            transition: color 0.2s ease, text-shadow 0.2s ease;
+        }
+
+        @keyframes frogRecordingPulse {
+            0% {
+                transform: scale(1);
+                color: #fca5a5;
+                text-shadow: 0 0 0 rgba(248, 113, 113, 0.2);
+            }
+
+            50% {
+                transform: scale(1.1);
+                color: #ef4444;
+                text-shadow: 0 0 10px rgba(248, 113, 113, 0.85), 0 0 18px rgba(239, 68, 68, 0.45);
+            }
+
+            100% {
+                transform: scale(1);
+                color: #fca5a5;
+                text-shadow: 0 0 0 rgba(248, 113, 113, 0.2);
+            }
+        }
+
+        .brand-frog.is-recording {
+            animation: frogRecordingPulse 1.2s ease-in-out infinite;
         }
 
         .settings-accordion {
@@ -242,6 +249,133 @@
             border: 1px solid rgba(75, 85, 99, 0.7);
             border-radius: 14px;
             overflow: hidden;
+            transition: border-color 0.24s ease, box-shadow 0.24s ease, background-color 0.24s ease;
+        }
+
+        .settings-accordion:hover {
+            border-color: rgba(110, 118, 129, 0.8);
+            box-shadow: 0 6px 20px rgba(2, 6, 23, 0.28);
+        }
+
+        .settings-accordion[open] {
+            border-color: rgba(16, 185, 129, 0.4);
+            box-shadow: 0 10px 26px rgba(2, 6, 23, 0.33);
+        }
+
+        .settings-toggle-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 10px 12px;
+            border-radius: 12px;
+            border: 1px solid rgba(75, 85, 99, 0.65);
+            background: linear-gradient(135deg, rgba(17, 24, 39, 0.95), rgba(31, 41, 55, 0.95));
+            cursor: pointer;
+        }
+
+        .settings-toggle-copy {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            min-width: 0;
+        }
+
+        .settings-toggle-title {
+            font-size: 12px;
+            font-weight: 700;
+            color: #f3f4f6;
+            line-height: 1.2;
+        }
+
+        .settings-toggle-sub {
+            font-size: 10px;
+            color: #9ca3af;
+            line-height: 1.2;
+        }
+
+        .settings-switch {
+            position: relative;
+            width: 50px;
+            height: 28px;
+            flex-shrink: 0;
+        }
+
+        .settings-switch input {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            opacity: 0;
+            cursor: pointer;
+            z-index: 2;
+        }
+
+        .settings-switch-track {
+            position: relative;
+            display: block;
+            width: 100%;
+            height: 100%;
+            border-radius: 9999px;
+            background: #374151;
+            border: 1px solid #4b5563;
+            transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+            box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35);
+        }
+
+        .settings-switch-track::after {
+            content: '';
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            width: 20px;
+            height: 20px;
+            border-radius: 9999px;
+            background: #e5e7eb;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+            transition: transform 0.2s ease, background-color 0.2s ease;
+        }
+
+        .settings-switch input:checked+.settings-switch-track {
+            background: linear-gradient(135deg, #10b981, #14b8a6);
+            border-color: rgba(45, 212, 191, 0.65);
+            box-shadow: 0 0 0 1px rgba(45, 212, 191, 0.15), inset 0 1px 2px rgba(0, 0, 0, 0.2);
+        }
+
+        .settings-switch input:checked+.settings-switch-track::after {
+            transform: translateX(22px);
+            background: #ffffff;
+        }
+
+        .settings-switch input:focus-visible+.settings-switch-track {
+            outline: 2px solid #5eead4;
+            outline-offset: 2px;
+        }
+
+        .trend-rotate-hint {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            font-size: 11px;
+            color: #bbf7d0;
+            background: rgba(16, 185, 129, 0.14);
+            border: 1px solid rgba(16, 185, 129, 0.35);
+            border-radius: 10px;
+            padding: 8px 10px;
+        }
+
+        #report-trend-zoomwrap {
+            overflow: auto;
+            touch-action: pan-x pan-y;
+            -webkit-overflow-scrolling: touch;
+            border-radius: 10px;
+        }
+
+        #report-trend-chart {
+            transform-origin: 0 0;
+            will-change: transform;
         }
 
         .settings-accordion>summary {
@@ -253,6 +387,11 @@
             gap: 10px;
             padding: 12px 14px;
             background: linear-gradient(180deg, rgba(17, 24, 39, 0.95), rgba(31, 41, 55, 0.95));
+            transition: background-color 0.22s ease, color 0.22s ease;
+        }
+
+        .settings-accordion>summary:hover {
+            background: linear-gradient(180deg, rgba(30, 41, 59, 0.95), rgba(31, 41, 55, 0.95));
         }
 
         .settings-accordion>summary::-webkit-details-marker {
@@ -263,16 +402,40 @@
             content: '▸';
             color: #9ca3af;
             font-size: 12px;
-            transition: transform 0.18s ease;
+            transition: transform 0.22s ease, color 0.22s ease;
         }
 
         .settings-accordion[open]>summary::after {
             transform: rotate(90deg);
+            color: #6ee7b7;
         }
 
         .settings-accordion-body {
+            max-height: 0;
+            opacity: 0;
+            transform: translateY(-6px);
+            overflow: hidden;
+            padding: 0 14px;
+            border-top: 1px solid transparent;
+            transition: max-height 0.34s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.22s ease, transform 0.22s ease, padding 0.22s ease, border-color 0.22s ease;
+        }
+
+        .settings-accordion[open]>.settings-accordion-body {
+            max-height: 4200px;
+            opacity: 1;
+            transform: translateY(0);
             padding: 12px 14px 14px 14px;
-            border-top: 1px solid rgba(75, 85, 99, 0.45);
+            border-top-color: rgba(75, 85, 99, 0.45);
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+
+            .settings-accordion,
+            .settings-accordion>summary,
+            .settings-accordion>summary::after,
+            .settings-accordion-body {
+                transition: none !important;
+            }
         }
 
         #main-nav button {
@@ -355,7 +518,7 @@
                 top: auto !important;
                 z-index: 95;
                 display: grid;
-                grid-template-columns: repeat(5, minmax(0, 1fr));
+                grid-template-columns: repeat(6, minmax(0, 1fr));
                 overflow: hidden;
                 white-space: normal;
                 border-top: 1px solid #374151;
@@ -411,13 +574,13 @@
 
         @media (max-width: 480px) {
             .brand-wrap {
-                flex-direction: column;
-                align-items: flex-start;
+                flex-wrap: wrap;
+                align-items: center;
             }
 
             .brand-sub {
                 white-space: normal;
-                margin-top: -4px;
+                margin-top: 0;
             }
         }
     </style>
@@ -433,8 +596,11 @@
     <header class="bg-gray-800 px-3 py-2 shadow-lg sticky top-0 z-50">
         <div class="flex justify-between items-center">
             <h1 class="text-lg font-bold text-white brand-wrap leading-tight">
-                <span class="text-base">🐸</span>
-                <span class="text-emerald-400 brand-title text-base">Paddentrek Teller Pro</span>
+                <span class="brand-main">
+                    <span id="brand-frog-indicator" class="text-base brand-frog" aria-label="Geen actieve telsessie"
+                        title="">🐸</span>
+                    <span class="text-emerald-400 brand-title text-base">Paddentrek Teller Pro</span>
+                </span>
                 <span class="text-[10px] uppercase tracking-[0.18em] text-gray-400 brand-sub">Ultra Pro Xtreme
                     2026</span>
             </h1>
@@ -472,19 +638,15 @@
                     </button>
                 </div>
                 <div class="flex items-center gap-1.5">
-                    <button id="record-btn" onclick="stopTelling()" class="hidden record-btn" title="Stop telling">
-                        <span id="record-dot"
-                            class="w-3 h-3 rounded-full bg-red-500 shadow-[0_0_0_6px_rgba(248,113,113,0.25)] animate-rec"></span>
-                    </button>
                     <button id="new-session-btn" onclick="startTelling(); trackEvent('count_started');"
                         class="bg-emerald-700 px-3 py-2 rounded text-[10px] font-bold uppercase tracking-widest flex items-center gap-1">
-                        <span class="text-xs">⏺</span> Nieuwe telling
+                        <span class="text-xs">⏺</span> Nieuwe telsessie
                     </button>
                 </div>
             </div>
             <div id="quick-session-row" class="hidden">
                 <div class="quick-header">
-                    <label for="global-session-select" class="quick-label">Actieve telling</label>
+                    <label for="global-session-select" class="quick-label">Actieve telsessie</label>
                     <span id="quick-session-meta" class="quick-meta"></span>
                 </div>
                 <select id="global-session-select" onchange="setViewedSession(this.value)"></select>
@@ -508,6 +670,8 @@
                 class="tab-icon">🔎</span><span class="tab-text">Determinatie</span></button>
         <button onclick="switchTab('report')" id="tab-report" class="px-5 py-3 uppercase tracking-tight"><span
                 class="tab-icon">📊</span><span class="tab-text">Delen</span></button>
+        <button onclick="switchTab('trend')" id="tab-trend" class="px-5 py-3 uppercase tracking-tight"><span
+                class="tab-icon">📈</span><span class="tab-text">Trend</span></button>
         <button onclick="switchTab('settings')" id="tab-settings" class="px-5 py-3 uppercase tracking-tight"><span
                 class="tab-icon">⚙️</span><span class="tab-text">Instellingen</span></button>
         <button onclick="switchTab('info')" id="tab-info" class="px-5 py-3 uppercase tracking-tight"><span
@@ -524,14 +688,14 @@
                 <div id="start-telling-container">
                     <button id="start-telling-btn" onclick="startTelling(); trackEvent('count_started');"
                         class="bg-emerald-600 text-white font-bold py-4 px-8 rounded-xl text-2xl shadow-lg active:bg-emerald-700">
-                        Start Telling
+                        Start Telsessie
                     </button>
                 </div>
                 <div id="stop-telling-container" class="hidden text-center">
                     <div id="session-timer" class="text-3xl font-mono text-emerald-400 mb-4 font-bold">00:00:00</div>
                     <button id="stop-telling-btn" onclick="stopTelling()"
                         class="bg-red-600 text-white font-bold py-4 px-8 rounded-xl text-2xl shadow-lg active:bg-red-700">
-                        Stop Telling
+                        Stop Telsessie
                     </button>
                 </div>
             </div>
@@ -570,7 +734,7 @@
                 </summary>
                 <div class="settings-accordion-body space-y-3">
                     <div class="text-[11px] text-gray-200 mb-2">
-                        Tel je samen met iemand anders aan hetzelfde traject? Deel jouw tellingen zodat ze worden
+                        Tel je samen met iemand anders aan hetzelfde traject? Deel jouw telsessies zodat ze worden
                         samengevoegd.
                     </div>
 
@@ -582,7 +746,7 @@
                     </div>
                     <div id="share-identity-hint"
                         class="text-[10px] text-cyan-200 bg-cyan-900/20 border border-cyan-500/20 rounded px-2 py-2">
-                        Naam en traject komen uit je laatste afgeronde sessie.
+                        Naam en traject komen uit je laatste afgeronde telsessie.
                     </div>
 
                     <div class="h-px bg-gray-700 my-2"></div>
@@ -643,7 +807,7 @@
                 <div class="settings-accordion-body space-y-3 text-left">
                     <div class="space-y-2">
                         <div class="flex items-center justify-between gap-2 text-[10px] text-gray-300">
-                            <span class="uppercase tracking-wider text-gray-400 font-bold">Sessies in rapport</span>
+                            <span class="uppercase tracking-wider text-gray-400 font-bold">Telsessies in rapport</span>
                             <div class="flex gap-2">
                                 <button class="text-[10px] bg-gray-700 px-2 py-1 rounded"
                                     onclick="setAllReportSessionsIncluded(true)">Alles</button>
@@ -689,7 +853,16 @@
                 </div>
             </details>
 
-            <details id="report-trend-card" class="settings-accordion hidden">
+        </section>
+
+        <!-- TAB 3: TREND -->
+        <section id="view-trend" class="hidden space-y-4 text-center">
+            <h2 class="text-xl font-bold text-emerald-400 text-center">📈 Trektrend</h2>
+            <div id="trend-rotate-hint" class="trend-rotate-hint hidden">
+                <span>📱</span>
+                <span>Draai je scherm voor een breder overzicht van de grafiek.</span>
+            </div>
+            <details id="report-trend-card" class="settings-accordion hidden" open>
                 <summary>
                     <span class="font-bold text-emerald-100 text-sm">🐸 Trektrend</span>
                     <span class="text-[10px] uppercase tracking-wide text-emerald-200/80">Per teldag</span>
@@ -707,29 +880,51 @@
                     </div>
                     <div id="report-trend-meta" class="text-[11px] text-emerald-100"></div>
                     <div
-                        class="overflow-x-auto no-scrollbar rounded-lg border border-emerald-500/20 bg-gray-900/40 p-2">
-                        <div id="report-trend-chart" class="min-h-[220px] flex justify-center"></div>
+                        class="rounded-lg border border-emerald-500/20 bg-gray-900/40 p-2">
+                        <div id="report-trend-zoomwrap" class="no-scrollbar">
+                            <div id="report-trend-chart" class="min-h-[220px] flex justify-center"></div>
+                        </div>
                     </div>
+                    <div class="text-[10px] text-emerald-200/80">Knijp met 2 vingers om in of uit te zoomen op
+                        smartphone.</div>
                     <div id="report-trend-peaks" class="flex flex-wrap gap-2 text-[10px]"></div>
                 </div>
             </details>
-
-
-
         </section>
 
         <!-- TAB 6: INSTELLINGEN -->
         <section id="view-settings" class="hidden space-y-4">
             <h2 class="text-xl font-bold text-emerald-400 text-center">⚙️ Instellingen</h2>
 
-
-
-
+            <div class="bg-gray-800 p-4 rounded-xl border border-emerald-500/30 space-y-3">
+                <h3 class="font-bold text-emerald-200 text-sm">Algemene voorkeuren</h3>
+                <label class="settings-toggle-row">
+                    <span class="settings-toggle-copy">
+                        <span class="settings-toggle-title">Geluid</span>
+                        <span class="settings-toggle-sub">Speel geluid bij tellen</span>
+                    </span>
+                    <span class="settings-switch">
+                        <input id="setting-sound-toggle" type="checkbox" onchange="toggleSoundSetting(this.checked)">
+                        <span class="settings-switch-track"></span>
+                    </span>
+                </label>
+                <label class="settings-toggle-row">
+                    <span class="settings-toggle-copy">
+                        <span class="settings-toggle-title">Laatst getelde dier</span>
+                        <span class="settings-toggle-sub">Toon status-toast onderaan</span>
+                    </span>
+                    <span class="settings-switch">
+                        <input id="setting-last-count-toggle" type="checkbox"
+                            onchange="toggleLastCountToastSetting(this.checked)">
+                        <span class="settings-switch-track"></span>
+                    </span>
+                </label>
+            </div>
 
             <details class="settings-accordion" id="settings-session-management-details">
                 <summary>
-                    <span class="font-bold text-emerald-200 text-sm">Tellingbeheer</span>
-                    <span class="text-[10px] uppercase tracking-wide text-emerald-300/80">Sessies</span>
+                    <span class="font-bold text-emerald-200 text-sm">Telsessiebeheer</span>
+                    <span class="text-[10px] uppercase tracking-wide text-emerald-300/80">Telsessies</span>
                 </summary>
                 <div id="settings-session-management-block" class="settings-accordion-body space-y-3">
                     <div class="flex gap-2 items-center">
@@ -740,16 +935,8 @@
                             op datum</button>
                     </div>
                     <div id="session-admin-list" class="space-y-2 text-[11px]"></div>
-                    <div class="h-px bg-gray-700 my-2"></div>
-                    <div
-                        class="flex items-center gap-2 text-[11px] text-gray-300 bg-gray-800/70 border border-gray-700 px-3 py-2 rounded">
-                        <span class="uppercase font-bold text-gray-400 text-[10px]">Telling</span>
-                        <select id="session-log-select"
-                            class="bg-gray-700 border border-gray-600 rounded px-2 py-1 flex-1 text-white text-[11px]"
-                            onchange="setViewedSession(this.value)"></select>
-                    </div>
                     <div class="text-[11px] text-gray-400">
-                        Controleer of corrigeer per telling: naam, traject, weer, notities en foto's.
+                        Controleer of corrigeer per telsessie: naam, traject, weer, notities en foto's.
                     </div>
                     <div id="session-log-container" class="space-y-4"></div>
                     <div class="pt-1">
@@ -801,7 +988,7 @@
 
                     <div class="bg-gray-800 p-4 rounded-xl border border-indigo-400/30 space-y-3">
                         <h3 class="font-bold text-indigo-200 text-sm">CSV Export</h3>
-                        <p class="text-[11px] text-gray-300">Exporteer dag of telling van de huidige datum, of een
+                        <p class="text-[11px] text-gray-300">Exporteer dag of telsessie van de huidige datum, of een
                             datumrange.</p>
                         <div class="grid grid-cols-2 gap-2 text-[11px] text-gray-200">
                             <div class="space-y-1">
@@ -818,10 +1005,10 @@
                         <div class="grid grid-cols-1 gap-2">
                             <button onclick="exportAllSessionsCSV()"
                                 class="w-full bg-indigo-600 py-2 rounded-lg font-bold uppercase text-xs">⬇️ Exporteer
-                                alle tellingen (vandaag)</button>
+                                alle telsessies (vandaag)</button>
                             <button onclick="exportRangeCSV(true)"
                                 class="w-full bg-indigo-500 py-2 rounded-lg font-bold uppercase text-xs">⬇️ Exporteer
-                                alle tellingen (range)</button>
+                                alle telsessies (range)</button>
                         </div>
                     </div>
 
@@ -873,13 +1060,13 @@
             <div class="bg-gray-800 p-4 rounded-xl border border-emerald-500/30 space-y-3">
                 <div class="flex items-center justify-between gap-2">
                     <div>
-                        <div class="text-[11px] uppercase text-gray-400 font-bold">Actieve telling</div>
-                        <div id="det-session-label" class="text-sm text-white">Geen telling</div>
+                        <div class="text-[11px] uppercase text-gray-400 font-bold">Actieve telsessie</div>
+                        <div id="det-session-label" class="text-sm text-white">Geen telsessie</div>
                     </div>
                     <div class="flex gap-2">
                         <button id="det-start-session-btn" onclick="startSession(true)"
                             class="bg-emerald-700 px-3 py-2 rounded text-[10px] font-bold uppercase tracking-widest">Start
-                            telling</button>
+                            telsessie</button>
                         <button id="det-loose-btn"
                             onclick="startLooseDetermination(); trackEvent('determination_started', { type: 'loose' });"
                             class="bg-amber-700 px-3 py-2 rounded text-[10px] font-bold uppercase tracking-widest hidden">Start
@@ -933,7 +1120,7 @@
                                     toe aan teller</button>
                                 <div id="det-warning"
                                     class="text-[10px] text-orange-300 bg-orange-900/30 border border-orange-700 rounded p-2 hidden">
-                                    Let op: bij her-determinatie wordt de vorige telling niet automatisch gecorrigeerd.
+                                    Let op: bij her-determinatie wordt de vorige telsessie niet automatisch gecorrigeerd.
                                     Pas zelf -1/+1 aan indien nodig.</div>
                             </div>
                         </div>
@@ -944,8 +1131,8 @@
             <!-- Historiek / bewerken -->
             <div class="bg-gray-800 p-4 rounded-xl border border-blue-500/30 space-y-3">
                 <div class="flex items-center justify-between">
-                    <h3 class="font-bold text-blue-200 text-sm">Determinaties in deze telling</h3>
-                    <div class="text-[10px] text-gray-400">Kies de telling bovenaan in de header</div>
+                    <h3 class="font-bold text-blue-200 text-sm">Determinaties in deze telsessie</h3>
+                    <div class="text-[10px] text-gray-400">Kies de telsessie bovenaan in de header</div>
                 </div>
                 <div id="det-list" class="space-y-2 text-[11px]"></div>
             </div>
@@ -972,25 +1159,25 @@
                 </div>
             </details>
             <div class="bg-gray-800 p-4 rounded-xl border border-emerald-500/30 space-y-3">
-                <h3 class="font-bold text-emerald-300 text-sm">⚡ Snelle workflow (avondtelling)</h3>
+                <h3 class="font-bold text-emerald-300 text-sm">⚡ Snelle workflow (avond)</h3>
                 <div class="text-gray-200 text-[13px] leading-relaxed space-y-1">
-                    <div>1) Kies de datum en (optioneel) de actieve telling bovenaan in de header.</div>
-                    <div>2) Start een telling en tel met de +1/-1 knoppen.</div>
-                    <div>3) Stop de telling: de sessie-wizard opent automatisch.</div>
+                    <div>1) Kies de datum en (optioneel) de actieve telsessie bovenaan in de header.</div>
+                    <div>2) Start een telsessie en tel met de +1/-1 knoppen.</div>
+                    <div>3) Stop de telsessie: de telsessie-wizard opent automatisch.</div>
                     <div>4) Sla op of kies meteen hoe je wil delen (WhatsApp-tekst of deel-link).</div>
-                    <div>5) Gebruik tab "Delen" om sessies aan/uit te zetten voor het dagrapport.</div>
+                    <div>5) Gebruik tab "Delen" om telsessies aan/uit te zetten voor het dagrapport.</div>
                 </div>
             </div>
             <div class="bg-gray-800 p-4 rounded-xl border border-cyan-500/30 space-y-3">
-                <h3 class="font-bold text-cyan-300 text-sm">🧭 Sessie-wizard na stoppen</h3>
+                <h3 class="font-bold text-cyan-300 text-sm">🧭 Telsessie-wizard na stoppen</h3>
                 <div class="text-gray-200 text-[13px] leading-relaxed space-y-2">
-                    <div>Na elke gestopte telling vul je in:</div>
-                    <div>• Naam (wordt onthouden voor volgende sessies).</div>
+                    <div>Na elke gestopte telsessie vul je in:</div>
+                    <div>• Naam (wordt onthouden voor volgende telsessies).</div>
                     <div>• Traject (wordt onthouden en als suggestie hergebruikt).</div>
-                    <div>• Weer bij start (automatisch opgehaald bij sessiestart).</div>
-                    <div>• Notities per sessie.</div>
+                    <div>• Weer bij start (automatisch opgehaald bij start van de telsessie).</div>
+                    <div>• Notities per telsessie.</div>
                     <div class="text-cyan-100 text-[12px] bg-cyan-900/20 border border-cyan-500/20 rounded px-2 py-2">
-                        Sessie samenvoegen, corrigeren of verwijderen kan via Instellingen > Sessiebeheer.
+                        Telsessie samenvoegen, corrigeren of verwijderen kan via Instellingen > Telsessiebeheer.
                     </div>
                 </div>
             </div>
@@ -998,25 +1185,24 @@
                 <h3 class="font-bold text-indigo-300 text-sm">📤 Delen & importeren</h3>
                 <div class="text-gray-200 text-[13px] leading-relaxed space-y-1">
                     <div>• Tekstrapport: ideaal om direct in WhatsApp/Signal te plakken.</div>
-                    <div>• Bij meerdere geselecteerde sessies toont "Tellingen" enkel de tellernamen.</div>
-                    <div>• Deel-link: ontvanger importeert jouw sessie als aparte telling.</div>
-                    <div>• Dezelfde link 2x importeren geeft geen dubbeltelling (wordt overgeslagen).</div>
+                    <div>• Bij meerdere geselecteerde telsessies toont "Telsessies" enkel de tellernamen.</div>
+                    <div>• Deel-link: ontvanger importeert jouw telsessie als aparte telsessie.</div>
+                    <div>• Dezelfde link 2x importeren geeft geen dubbele telsessie (wordt overgeslagen).</div>
                 </div>
             </div>
             <div class="bg-gray-800 p-4 rounded-xl border border-blue-500/30 space-y-3">
                 <h3 class="font-bold text-blue-300 text-sm">🔎 Determinatie</h3>
                 <div class="text-gray-200 text-[13px] leading-relaxed space-y-1">
-                    <div>• De actieve telling voor determinaties kies je bovenaan in de header.</div>
-                    <div>• "Voeg toe aan teller" schrijft naar de geselecteerde telling.</div>
+                    <div>• De actieve telsessie voor determinaties kies je bovenaan in de header.</div>
+                    <div>• "Voeg toe aan teller" schrijft naar de geselecteerde telsessie.</div>
                 </div>
             </div>
             <div class="bg-gray-800 p-4 rounded-xl border border-red-500/30 space-y-3">
                 <h3 class="font-bold text-red-300 text-sm">🧯 Problemen oplossen</h3>
                 <div class="text-gray-200 text-[13px] leading-relaxed space-y-1">
                     <div>• Verkeerde dag? Pas eerst datum aan.</div>
-                    <div>• Rapport te hoog? Controleer welke sessies meetellen.</div>
-                    <div>• Data kwijt na update? Gebruik migratie in Beheer → Geavanceerd.</div>
-                    <div>• Foto-opslag vol? Wis foto’s per dag in Beheer → Geavanceerd.</div>
+                    <div>• Rapport te hoog? Controleer welke telsessies meetellen.</div>
+                    <div>Op zoek naar geavanceerde instellingen? Die zitten standaard verborgen. Tik 5 keer op het versienummer rechtsboven om de geavanceerde instellingen tevoorschijn te toveren. Met die geavanceerde instellingen kan je extra tools vinden om onder andere opslagruimte te beheren</div>
                 </div>
             </div>
             <p class="text-[11px] text-gray-500 text-center mt-2">App gemaakt door Jasper Cuvelier.</p>
@@ -1029,7 +1215,7 @@
     </div>
     <div id="last-count-toast"
         class="fixed bottom-24 left-1/2 transform -translate-x-1/2 max-w-[92vw] bg-gray-900/95 text-cyan-100 px-3 py-2 rounded-lg shadow-xl hidden z-[109] border border-cyan-500/30 text-[11px] font-semibold text-center backdrop-blur-sm">
-        Laatste +1: ...
+        Laatst geteld: ...
     </div>
     <button id="update-btn"
         class="hidden fixed right-4 bottom-24 bg-emerald-600 text-white px-4 py-2 rounded-full shadow-2xl font-bold text-xs uppercase tracking-widest border border-emerald-300/40">
@@ -1109,7 +1295,7 @@
                     class="w-10 h-10 rounded-full bg-emerald-600/20 border border-emerald-400/40 flex items-center justify-center text-xl">
                     📝</div>
                 <div class="space-y-1">
-                    <h3 class="text-emerald-200 font-bold text-lg">Sessie afgerond</h3>
+                    <h3 class="text-emerald-200 font-bold text-lg">Telsessie afgerond</h3>
                     <div id="session-wizard-meta" class="text-[12px] text-emerald-100"></div>
                 </div>
                 <button class="absolute top-3 right-3 text-gray-400 hover:text-white"
@@ -1174,7 +1360,7 @@
                         </button>
                         <button data-session-wizard-share="link" onclick="sessionWizardSetShareChoice('link')"
                             class="bg-gray-800 border border-gray-600 text-gray-200 rounded-lg py-2.5 font-bold text-[11px] uppercase tracking-wide active:scale-[0.98]">
-                            Deel-link (importeerbare sessie)
+                            Deel-link (importeerbare telsessie)
                         </button>
                     </div>
                     <div id="session-wizard-step-share-action"
@@ -1193,11 +1379,14 @@
                         telsessies zal samentellen en om er daarna een verzamelrapport van te maken.</div>
                     <button onclick="sessionWizardGenerateShareLink()"
                         class="w-full bg-cyan-700 hover:bg-cyan-600 text-white rounded-lg py-2.5 font-bold text-[11px] uppercase tracking-wide active:scale-[0.98]">
-                        🔗 Verstuur volledige sessie via deel-link
+                        🔗 Verstuur volledige telsessie via deel-link
                     </button>
                 </div>
                 <div class="text-[11px] text-gray-300 bg-gray-900/50 border border-gray-700 rounded px-2 py-2">
-                    Sessies samenvoegen kan via Instellingen &gt; Tellingbeheer.
+                    Telsessies samenvoegen kan via Instellingen &gt; Telsessiebeheer.
+                </div>
+                <div class="text-[11px] text-gray-300 bg-gray-900/50 border border-gray-700 rounded px-2 py-2">
+                    Je kan telsessies delen (zowel tekst als link) via het tabblad "Delen".
                 </div>
             </div>
 
@@ -1230,7 +1419,7 @@
             <div class="flex items-start justify-between gap-3">
                 <div>
                     <div class="text-cyan-300 text-[10px] uppercase tracking-widest font-bold">Deel-link</div>
-                    <h3 class="text-cyan-100 font-bold text-lg">Wizard: telling toevoegen</h3>
+                    <h3 class="text-cyan-100 font-bold text-lg">Wizard: telsessie toevoegen</h3>
                 </div>
                 <button data-sync-close="1" class="text-gray-400 hover:text-white text-lg"
                     onclick="closeSyncWizard(event)">✕</button>
@@ -1242,7 +1431,7 @@
                 class="bg-black/40 border border-cyan-900/40 rounded p-3 text-[10px] text-cyan-100 whitespace-pre-wrap"></pre>
             <div class="space-y-2">
                 <div class="text-[10px] uppercase tracking-wider text-cyan-200 font-bold">Stap 3 · Datum van nieuwe
-                    telling</div>
+                    telsessie</div>
                 <input type="date" id="sync-wizard-date"
                     class="bg-gray-700 border border-gray-600 rounded px-2 py-2 text-white w-full text-[12px]"
                     onchange="buildSyncWizardTargetOptions()">
@@ -1251,7 +1440,7 @@
             </div>
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 <button class="bg-cyan-700 text-white py-2 rounded text-[11px] font-bold uppercase"
-                    onclick="importPendingSyncLinkWizard()">Voeg telling toe</button>
+                    onclick="importPendingSyncLinkWizard()">Voeg telsessie toe</button>
                 <button data-sync-close="1" class="bg-gray-700 text-white py-2 rounded text-[11px] font-bold uppercase"
                     onclick="closeSyncWizard(event)">Later</button>
                 <button

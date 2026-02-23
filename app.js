@@ -275,6 +275,7 @@ function scheduleCounterTone(ctx, {
 }
 
 function playCounterSignal(kind = 'live') {
+    if (!soundEnabled) return;
     const ctx = getCounterAudioContext();
     if (!ctx) return;
     if (ctx.state === 'suspended') ctx.resume().catch(() => { });
@@ -322,12 +323,12 @@ document.addEventListener('pointerdown', ev => {
 
 // --- DATA ---
 const SPECIES = [
-    { id: 'pad', name: 'Gewone Pad', color: 'emerald', hasAmplexus: true },
-    { id: 'br_kikker', name: 'Bruine Kikker', color: 'amber', hasAmplexus: true },
-    { id: 'alpen', name: 'Alpenwatersalamander', color: 'blue', hasAmplexus: false },
-    { id: 'kleine', name: 'Kleine Watersalamander', color: 'orange', hasAmplexus: false },
-    { id: 'vin', name: 'Vinpootsalamander', color: 'pink', hasAmplexus: false },
-    { id: 'kam', name: 'Kamsalamander', color: 'yellow', hasAmplexus: false }
+    { id: 'pad', name: 'Gewone Pad', color: 'emerald', hasAmplexus: true, icon: '🐸' },
+    { id: 'br_kikker', name: 'Bruine Kikker', color: 'amber', hasAmplexus: true, icon: '🐸' },
+    { id: 'alpen', name: 'Alpenwatersalamander', color: 'blue', hasAmplexus: false, icon: '🦎' },
+    { id: 'kleine', name: 'Kleine Watersalamander', color: 'orange', hasAmplexus: false, icon: '🦎' },
+    { id: 'vin', name: 'Vinpootsalamander', color: 'pink', hasAmplexus: false, icon: '🦎' },
+    { id: 'kam', name: 'Kamsalamander', color: 'yellow', hasAmplexus: false, icon: '🦎' }
 ];
 
 const COUNT_KEY_MIGRATION_SUFFIX_MAP = Object.freeze({
@@ -557,6 +558,8 @@ const STORAGE_KEY_VERSIONED = `paddentrek_${APP_VERSION}`;
 const STORAGE_MIGRATION_STATE_KEY = 'paddentrek_migration_legacy_to_data_v1';
 const AUTO_V3_MIGRATION_STATE_KEY = 'paddentrek_auto_migration_v3_v1';
 const REPORT_TREND_SHOW_EMPTY_KEY = 'paddentrek_report_trend_show_empty_v1';
+const SOUND_ENABLED_KEY = 'paddentrek_sound_enabled_v1';
+const LAST_COUNT_TOAST_ENABLED_KEY = 'paddentrek_show_last_count_v1';
 const SYNC_QUERY_PARAM = 'sync';
 const SYNC_PAYLOAD_VERSION = 1;
 const SYNC_IMPORTED_IDS_KEY = 'paddentrek_sync_imported_ids_v1';
@@ -571,6 +574,11 @@ let pendingQrImportPayload = null;
 let pendingSyncLinkPayload = null;
 let shareSelectionStateByDay = {};
 let reportTrendShowEmptyDays = true;
+const TREND_ZOOM_MIN = 1;
+const TREND_ZOOM_MAX = 3;
+let trendZoomScale = 1;
+let soundEnabled = true;
+let showLastCountToastEnabled = true;
 const PHOTO_DB_NAME = 'paddentrek_media_v1';
 const PHOTO_DB_VERSION = 1;
 const PHOTO_DB_STORE = 'photos';
@@ -868,6 +876,38 @@ function setReportTrendShowEmptySetting(enabled) {
     localStorage.setItem(REPORT_TREND_SHOW_EMPTY_KEY, reportTrendShowEmptyDays ? '1' : '0');
 }
 
+function getBooleanSetting(key, fallback = true) {
+    const raw = localStorage.getItem(key);
+    if (raw === null) {
+        const defaultValue = !!fallback;
+        localStorage.setItem(key, defaultValue ? '1' : '0');
+        return defaultValue;
+    }
+    if (raw === '1' || raw === 'true') return true;
+    if (raw === '0' || raw === 'false') return false;
+    return !!fallback;
+}
+
+function getSoundSetting() {
+    return getBooleanSetting(SOUND_ENABLED_KEY, true);
+}
+
+function setSoundSetting(enabled) {
+    soundEnabled = !!enabled;
+    localStorage.setItem(SOUND_ENABLED_KEY, soundEnabled ? '1' : '0');
+}
+
+function getLastCountToastSetting() {
+    return getBooleanSetting(LAST_COUNT_TOAST_ENABLED_KEY, true);
+}
+
+function setLastCountToastSetting(enabled) {
+    showLastCountToastEnabled = !!enabled;
+    localStorage.setItem(LAST_COUNT_TOAST_ENABLED_KEY, showLastCountToastEnabled ? '1' : '0');
+    if (!showLastCountToastEnabled) clearLastCountToast();
+    renderLastCountToast();
+}
+
 function encodeBase64Url(str) {
     const b64 = btoa(unescape(encodeURIComponent(str)));
     return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
@@ -1083,7 +1123,7 @@ function handleShareIdentityChange(refreshQr = true) {
     if (hint) {
         hint.innerText = name
             ? `Je deelt als ${name}${route ? ` · Traject ${route}` : ''}`
-            : `Vul eerst je naam in via de sessie-wizard.${route ? ` Traject: ${route}` : ''}`;
+            : `Vul eerst je naam in via de telsessie-wizard.${route ? ` Traject: ${route}` : ''}`;
     }
     if (refreshQr) generateQR(false);
 }
@@ -1099,7 +1139,7 @@ function ensureContributorIdentity() {
         return null;
     }
     if (!contributorName || contributorName.toLowerCase() === 'onbekende teller') {
-        alert('Vul eerst je naam in via de sessie-wizard voor je deelt.');
+        alert('Vul eerst je naam in via de telsessie-wizard voor je deelt.');
         if (nameInput) nameInput.focus();
         return null;
     }
@@ -1180,6 +1220,8 @@ if (!storage) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(storage));
 }
 reportTrendShowEmptyDays = getReportTrendShowEmptySetting();
+soundEnabled = getSoundSetting();
+showLastCountToastEnabled = getLastCountToastSetting();
 runCoreSchemaMigrations();
 let activeSessionId = null;
 let sessionWizardContext = null;
@@ -1237,7 +1279,7 @@ function shouldHideHeaderSelectors() {
     const hasActiveSession = !!getActiveSession(day);
     const trendCard = document.getElementById('report-trend-card');
     const trendOpen = !!(trendCard && !trendCard.classList.contains('hidden') && trendCard.open);
-    return hasActiveSession || (currentTab === 'report' && trendOpen);
+    return hasActiveSession || (currentTab === 'trend' && trendOpen);
 }
 
 function refreshHeaderSelectorVisibility() {
@@ -1246,6 +1288,15 @@ function refreshHeaderSelectorVisibility() {
     const hide = shouldHideHeaderSelectors();
     if (dateControls) dateControls.classList.toggle('header-selectors-hidden', hide);
     if (quickRow) quickRow.classList.toggle('header-selectors-hidden', hide);
+}
+
+function updateHeaderFrogRecordingState(active = false) {
+    const frog = document.getElementById('brand-frog-indicator');
+    if (!frog) return;
+    const isActive = !!active;
+    frog.classList.toggle('is-recording', isActive);
+    frog.setAttribute('aria-label', isActive ? 'Actieve telsessie' : 'Geen actieve telsessie');
+    frog.title = isActive ? 'Actieve telsessie bezig' : '';
 }
 
 setDateInputsToToday();
@@ -1570,7 +1621,7 @@ function splitSessionOverMidnightIfNeeded() {
     viewedSessionId = newSession.id;
     setDateInputsToToday();
     save();
-    showToast('Telling gesplitst om middernacht');
+    showToast('Telsessie gesplitst om middernacht');
 }
 
 function migrateOldSchema() {
@@ -1940,16 +1991,44 @@ function parseCounterKey(key = '') {
 
 function countBucketLabel(suffix = '') {
     switch (suffix) {
-        case 'p_l': return 'M+V levend';
-        case 'p_d': return 'M+V dood';
-        case 'm_l': return 'M levend';
-        case 'v_l': return 'V levend';
-        case 'o_l': return '? levend';
-        case 'm_d': return 'M dood';
-        case 'v_d': return 'V dood';
-        case 'o_d': return '? dood';
+        case 'p_l': return 'koppel levend';
+        case 'p_d': return 'koppel dood';
+        case 'm_l': return 'mannetje levend';
+        case 'v_l': return 'vrouwtje levend';
+        case 'o_l': return 'onbekend levend';
+        case 'm_d': return 'mannetje dood';
+        case 'v_d': return 'vrouwtje dood';
+        case 'o_d': return 'onbekend dood';
         default: return suffix || 'onbekend';
     }
+}
+
+function removalBucketLabel(suffix = '') {
+    switch (suffix) {
+        case 'p_l': return 'koppel';
+        case 'p_d': return 'dood koppel';
+        case 'm_l': return 'mannetje';
+        case 'v_l': return 'vrouwtje';
+        case 'o_l': return 'onbekend dier';
+        case 'm_d': return 'dood mannetje';
+        case 'v_d': return 'dood vrouwtje';
+        case 'o_d': return 'dood onbekend dier';
+        default: return 'dier';
+    }
+}
+
+function toastSpeciesName(speciesName = '', fallback = '') {
+    const raw = cleanSpeciesName(speciesName || fallback || '').trim();
+    return raw ? raw.toLowerCase() : 'dier';
+}
+
+function buildRemovalToastMessage(key = '', day = null) {
+    const parsed = parseCounterKey(key);
+    if (!parsed) return '1 dier verwijderd';
+    const contextDay = day && typeof day === 'object' ? day : ensureDay();
+    const speciesName = findSpeciesNameById(parsed.speciesId, contextDay);
+    const species = toastSpeciesName(speciesName, parsed.speciesId || '');
+    return `1 ${removalBucketLabel(parsed.suffix)} ${species} verwijderd`;
 }
 
 function counterSignalKindForAction(key = '', delta = 1) {
@@ -1977,6 +2056,7 @@ function ensureLastCountToastTimer() {
 }
 
 function registerLastCountToast(key, delta = 1, day = null) {
+    if (!showLastCountToastEnabled) return;
     const parsed = parseCounterKey(key);
     if (!parsed || Number(delta) === 0) return;
     const contextDay = day && typeof day === 'object' ? day : ensureDay();
@@ -1994,15 +2074,19 @@ function registerLastCountToast(key, delta = 1, day = null) {
 function renderLastCountToast() {
     const box = document.getElementById('last-count-toast');
     if (!box) return;
+    if (!showLastCountToastEnabled) {
+        box.classList.add('hidden');
+        return;
+    }
     if (!lastCountToastState) {
         box.classList.add('hidden');
         return;
     }
     const agoSec = Math.max(0, Math.floor((Date.now() - Number(lastCountToastState.ts || 0)) / 1000));
-    const species = lastCountToastState.speciesName || lastCountToastState.speciesId || 'Onbekende soort';
+    const species = toastSpeciesName(lastCountToastState.speciesName, lastCountToastState.speciesId || 'onbekende soort');
     const bucket = countBucketLabel(lastCountToastState.bucket || '');
     const action = Number(lastCountToastState.delta || 1) > 0 ? '+1' : '-1';
-    box.innerText = `Laatste ${action}: ${species} (${bucket}) · ${agoSec}s geleden`;
+    box.innerText = `Laatst geteld: ${action} ${species} (${bucket}) · ${agoSec}s geleden`;
     box.classList.remove('hidden');
 }
 
@@ -2021,22 +2105,27 @@ function mod(key, val, e) {
         startSession(true, false, d, false, false, false); // auto-start zonder redirect of modal
         active = getActiveSession(day);
     }
-    day.counts[key] = (day.counts[key] || 0) + val;
-    if (day.counts[key] < 0) day.counts[key] = 0;
+    const prevDayCount = Number(day.counts[key] || 0);
+    const nextDayCount = Math.max(0, prevDayCount + Number(val || 0));
+    const actualDelta = nextDayCount - prevDayCount;
+    day.counts[key] = nextDayCount;
     // Also bump active session if running
     if (active) {
-        active.counts[key] = (active.counts[key] || 0) + val;
-        if (active.counts[key] < 0) active.counts[key] = 0;
+        const prevActiveCount = Number(active.counts[key] || 0);
+        active.counts[key] = Math.max(0, prevActiveCount + actualDelta);
     }
-    playCounterSignal(counterSignalKindForAction(key, val));
+    if (actualDelta === 0) return;
+    playCounterSignal(counterSignalKindForAction(key, actualDelta));
     save(); render();
     recordUserAction();
-    if (val > 0) {
-        registerLastCountToast(key, val, day);
+    if (actualDelta > 0) {
+        registerLastCountToast(key, actualDelta, day);
         vibe(22, true);
         if (key.includes('_p_l')) celebrate(e, true);
         else if (key.includes('_l')) celebrate(e);
         else if (key.includes('_d')) celebrate(e, false, true);
+    } else if (actualDelta < 0) {
+        showToast(buildRemovalToastMessage(key, day));
     }
 }
 
@@ -2093,6 +2182,25 @@ function renderStorageInspector(forceReload = false) {
     meta.innerText = `${keys.length} keys · ${formatBytes(totalBytes)} totaal opgeslagen`;
 }
 
+function renderSettingsToggles() {
+    const soundToggle = document.getElementById('setting-sound-toggle');
+    const lastCountToggle = document.getElementById('setting-last-count-toggle');
+    if (soundToggle) soundToggle.checked = !!soundEnabled;
+    if (lastCountToggle) lastCountToggle.checked = !!showLastCountToastEnabled;
+}
+
+function toggleSoundSetting(checked) {
+    setSoundSetting(!!checked);
+    renderSettingsToggles();
+    showToast(soundEnabled ? 'Geluid aan' : 'Geluid uit');
+}
+
+function toggleLastCountToastSetting(checked) {
+    setLastCountToastSetting(!!checked);
+    renderSettingsToggles();
+    showToast(showLastCountToastEnabled ? 'Laatst getelde dier tonen' : 'Laatst getelde dier verbergen');
+}
+
 function render() {
     const d = ensureDay();
     const active = getActiveSession(d);
@@ -2124,7 +2232,7 @@ function renderSessionLog() {
     if (!box) return;
     const day = ensureDay();
     const sessions = day.sessions.slice().sort((a, b) => new Date(a.start) - new Date(b.start));
-    if (!sessions.length) { box.innerHTML = '<div class="text-gray-500 text-sm">Nog geen sessies vandaag.</div>'; return; }
+    if (!sessions.length) { box.innerHTML = '<div class="text-gray-500 text-sm">Nog geen telsessies vandaag.</div>'; return; }
     const selected = viewedSessionId || sessions[sessions.length - 1].id;
     box.innerHTML = sessions
         .filter(s => s.id === selected)
@@ -2142,7 +2250,7 @@ function renderSessionLog() {
                 : 'bg-gray-600 text-gray-300 opacity-70 cursor-not-allowed';
             const weatherHint = weatherPolicy.allowed
                 ? ''
-                : `<div class="text-[10px] text-amber-200 mt-1">Automatisch weer ophalen kan enkel tot 3 uur na einde sessie. Zet het weer manueel in notities.</div>`;
+                : `<div class="text-[10px] text-amber-200 mt-1">Automatisch weer ophalen kan enkel tot 3 uur na einde telsessie. Zet het weer manueel in notities.</div>`;
             const photos = s.photos || [];
             const label = sessionDisplayLabel(s, day);
             const autoNote = (s.autoContributorNote || '').trim();
@@ -2237,7 +2345,7 @@ function renderDetSessionOptions() {
             const l = sessionDisplayLabel(s, day);
             const route = normalizeRouteName(s.routeName || '');
             return `<option value="${s.id}">${l}${route ? ` · ${route}` : ''}</option>`;
-        }).join('') || '<option value=\"\">Geen sessies</option>';
+        }).join('') || '<option value=\"\">Geen telsessies</option>';
     }
     const sess = getDetSession();
     if (sess && !sess.determinations) sess.determinations = [];
@@ -2248,7 +2356,7 @@ function renderDetSessionOptions() {
     if (sel && sess) sel.value = sess.id;
     if (label) {
         const route = normalizeRouteName(sess?.routeName || '');
-        label.innerText = sess ? `${sessionDisplayLabel(sess, day)}${route ? ` · ${route}` : ''}` : 'Geen telling';
+        label.innerText = sess ? `${sessionDisplayLabel(sess, day)}${route ? ` · ${route}` : ''}` : 'Geen telsessie';
     }
     const hasActive = !!getActiveSession(day);
     if (btnStart) btnStart.classList.add('hidden');
@@ -2269,7 +2377,7 @@ function beginDetermination(id = null) {
             sess = getActiveSession(ensureDay());
         }
     }
-    if (!sess) { alert('Start eerst een sessie.'); return; }
+    if (!sess) { alert('Start eerst een telsessie.'); return; }
     let det = null;
     detEditing = !!id;
     if (id) {
@@ -2593,8 +2701,7 @@ function renderSessions() {
     if (newBtn) newBtn.classList.toggle('hidden', !!active);
     const camFab = document.getElementById('camera-fab');
     if (camFab) camFab.classList.toggle('hidden', !active);
-    const recBtn = document.getElementById('record-btn');
-    if (recBtn) recBtn.classList.toggle('hidden', !active);
+    updateHeaderFrogRecordingState(!!active);
     buildViewedSessionOptions();
     buildRouteSuggestions();
     syncTellingUI();
@@ -2602,7 +2709,7 @@ function renderSessions() {
 }
 
 function buildViewedSessionOptions() {
-    const sels = ['session-view-select', 'session-log-select', 'global-session-select'].map(id => document.getElementById(id)).filter(Boolean);
+    const sels = ['global-session-select'].map(id => document.getElementById(id)).filter(Boolean);
     const quickRow = document.getElementById('quick-session-row');
     const quickMeta = document.getElementById('quick-session-meta');
     const reportSel = document.getElementById('report-session-select');
@@ -2611,7 +2718,7 @@ function buildViewedSessionOptions() {
     const sessions = day.sessions.slice().sort((a, b) => new Date(a.start) - new Date(b.start));
     if (!sessions.length) {
         viewedSessionId = '';
-        const emptyOpt = '<option value="">Geen sessies</option>';
+        const emptyOpt = '<option value="">Geen telsessies</option>';
         sels.forEach(sel => {
             sel.innerHTML = emptyOpt;
             sel.value = '';
@@ -2733,7 +2840,7 @@ function toggleSessionInclude(id, dayKey = picker.value, include = true) {
     save();
     render();
     renderSessionAdmin();
-    showToast(s.includeInReports ? 'Sessie telt mee in rapport' : 'Sessie telt niet mee in rapport');
+    showToast(s.includeInReports ? 'Telsessie telt mee in rapport' : 'Telsessie telt niet mee in rapport');
 }
 
 function updateRoute(id, val) {
@@ -3014,13 +3121,13 @@ function renderSessionAdmin() {
                         </label>
                         ${weather}
                     </div>
-                    <button class="bg-red-700 px-2 py-1 rounded text-[12px]" onclick="deleteSession('${s.id}','${dayKey}')" title="Verwijder sessie">🗑️</button>
+                    <button class="bg-red-700 px-2 py-1 rounded text-[12px]" onclick="deleteSession('${s.id}','${dayKey}')" title="Verwijder telsessie">🗑️</button>
                 </div>`;
-    }).join('') || '<div class="text-gray-500">Geen sessies voor deze dag.</div>';
+    }).join('') || '<div class="text-gray-500">Geen telsessies voor deze dag.</div>';
     box.innerHTML = items;
     // merge action button
     const mergeBtn = document.createElement('button');
-    mergeBtn.innerText = 'Merge selectie';
+    mergeBtn.innerText = 'Telsessies samenvoegen';
     mergeBtn.className = 'w-full bg-gray-700 mt-2 py-2 rounded text-[11px] font-bold';
     mergeBtn.onclick = () => mergeSelectedSessions(dayKey);
     box.appendChild(mergeBtn);
@@ -3030,7 +3137,7 @@ function startSession(force = false, fromSessionPage = false, dayKeyOverride = n
     const dayKey = dayKeyOverride || (fromSessionPage ? (document.getElementById('sessionDate').value || picker.value) : picker.value);
     const day = ensureDay(dayKey);
     const existing = day.sessions.find(s => !s.end);
-    if (existing && !force) { alert('Er draait al een sessie. Stop eerst.'); return; }
+    if (existing && !force) { alert('Er draait al een telsessie. Stop eerst.'); return; }
     const now = new Date();
     const defaultRoute = tempDet ? '' : normalizeRouteName(getContributorProfile().lastRouteName || '');
     const session = {
@@ -3052,7 +3159,7 @@ function startSession(force = false, fromSessionPage = false, dayKeyOverride = n
     day.sessions.push(session);
     activeSessionId = session.id;
     viewedSessionId = session.id;
-    save(); render(); renderSessionAdmin(); renderDetSessionOptions(); renderDeterminationUI(); renderDeterminationList(); showToast('Telling gestart');
+    save(); render(); renderSessionAdmin(); renderDetSessionOptions(); renderDeterminationUI(); renderDeterminationList(); showToast('Telsessie gestart');
     void showInfo;
     if (redirect) openSessionManagement(dayKey, { scroll: false });
     fetchWeather(dayKey, session.id); // capture weather at start
@@ -3118,7 +3225,7 @@ function renderSessionWizardStepper() {
         shareHint.innerText = 'Je deelt meteen een leesbare tekst die je in WhatsApp/Signal kan plakken.';
         shareBtn.innerText = '📤 Deel tekst voor WhatsApp';
     } else {
-        shareHint.innerText = 'Je maakt een deel-link zodat de ontvanger jouw volledige sessie kan importeren als aparte telling om ze nadien bij zijn telsessie samen te tellen.';
+        shareHint.innerText = 'Je maakt een deel-link zodat de ontvanger jouw volledige telsessie kan importeren als aparte telsessie en nadien kan samentellen.';
         shareBtn.innerText = '🔗 Maak importeerbare deel-link';
     }
     shareActionBox.classList.remove('hidden');
@@ -3162,7 +3269,7 @@ function renderSessionWizardWeather(session) {
     const weatherEl = document.getElementById('session-wizard-weather');
     if (!weatherEl) return;
     if (!session?.weather) {
-        weatherEl.innerHTML = '<span class="italic opacity-70">Nog geen weerdata. De app probeert dit bij de start van je sessie op te halen.</span>';
+        weatherEl.innerHTML = '<span class="italic opacity-70">Nog geen weerdata. De app probeert dit bij de start van je telsessie op te halen.</span>';
         return;
     }
     weatherEl.innerText = weatherSummaryText(session.weather, ' • ', true);
@@ -3209,7 +3316,7 @@ function persistSessionWizardData({ commitRouteHistory = true, requireName = fal
     if (nameInput) nameInput.value = rawName;
 
     if (requireName && !rawName) {
-        alert('Vul je naam in om deze sessie te delen.');
+        alert('Vul je naam in om deze telsessie te delen.');
         if (nameInput) nameInput.focus();
         return null;
     }
@@ -3237,7 +3344,7 @@ function persistSessionWizardData({ commitRouteHistory = true, requireName = fal
     updateContributorInputsFromProfile();
     handleShareIdentityChange(false);
     buildRouteSuggestions();
-    if (!silent) showToast('Sessie-informatie opgeslagen');
+    if (!silent) showToast('Telsessie-informatie opgeslagen');
     return { ...ctx, profile: nextProfile };
 }
 
@@ -3342,7 +3449,7 @@ function buildSessionWizardTransfer(requireIdentity = true) {
     if (!identity) return null;
     const payload = buildSyncPayloadForSource(dayKey, day, session, identity);
     if (sumCounts(payload.c || {}) <= 0) {
-        alert('Deze sessie bevat geen aantallen om te delen.');
+        alert('Deze telsessie bevat geen aantallen om te delen.');
         return null;
     }
     return { transfer: payload, payload, dayKey, session };
@@ -3535,7 +3642,7 @@ async function shareSessionWizardLink() {
         if (navigator.share && isMobileShareContext()) {
             await navigator.share({
                 title: 'Paddentrek deel-link',
-                text: 'Open deze link en voeg deze sessie toe in je app.',
+                text: 'Open deze link en voeg deze telsessie toe in je app.',
                 url: resolved
             });
             return;
@@ -3558,7 +3665,7 @@ function sessionWizardGenerateQr() {
     if (bytes > QR_MAX_PAYLOAD_BYTES) {
         const link = buildSyncLinkFromTransfer(built.transfer);
         sessionWizardSetShareLink(link);
-        alert(`Deze sessie is te groot voor een stabiele QR-code (${bytes} bytes). Gebruik de deel-link.`);
+        alert(`Deze telsessie is te groot voor een stabiele QR-code (${bytes} bytes). Gebruik de deel-link.`);
         return;
     }
     const box = document.getElementById('session-wizard-qr-box');
@@ -3587,7 +3694,7 @@ function downloadSessionWizardQr() {
     }
     const ctx = getSessionWizardSession();
     const dayKey = ctx?.dayKey || picker.value || todayISO();
-    const sessionId = (ctx?.session?.id || 'sessie').replace(/[^a-zA-Z0-9_-]/g, '');
+    const sessionId = (ctx?.session?.id || 'telsessie').replace(/[^a-zA-Z0-9_-]/g, '');
     const a = document.createElement('a');
     a.href = href;
     a.download = `paddentrek-${dayKey}-${sessionId}-qr.png`;
@@ -3642,7 +3749,7 @@ function scheduleInactivityWatch() {
     const active = getActiveSession(day);
     if (!active) return;
     inactivityPromptTimer = setTimeout(() => {
-        const ok = confirm('Mag deze telling afgesloten worden?');
+        const ok = confirm('Mag deze telsessie afgesloten worden?');
         if (ok) {
             stopTelling();
         } else {
@@ -3662,6 +3769,7 @@ function syncTellingUI() {
     const day = ensureDay();
     const active = getActiveSession(day);
     const hasActive = !!active;
+    updateHeaderFrogRecordingState(hasActive);
     const startBox = document.getElementById('start-telling-container');
     const stopBox = document.getElementById('stop-telling-container');
     const counters = document.getElementById('counters-container');
@@ -3694,7 +3802,7 @@ function startTelling() {
     clearInterval(tellingTimer);
     tellingTimer = setInterval(updateTellingTimer, 1000);
     syncTellingUI();
-    showToast('Telling gestart');
+    showToast('Telsessie gestart');
 }
 
 function stopTelling(auto = false) {
@@ -3713,17 +3821,17 @@ function stopTelling(auto = false) {
     syncTellingUI();
     updateReport();
     if (!auto) showSessionInfoModal(dayKey, finishedSessionId);
-    showToast(auto ? 'Telling automatisch gestopt' : 'Telling gestopt');
+    showToast(auto ? 'Telsessie automatisch gestopt' : 'Telsessie gestopt');
 }
 
 function endSession(silent = false) {
     const day = ensureDay();
     const active = day.sessions.find(s => !s.end);
-    if (!active) return alert('Geen actieve sessie');
+    if (!active) return alert('Geen actieve telsessie');
     active.end = new Date().toISOString();
     clearLastCountToast();
     save(); render(); renderSessionAdmin();
-    if (!silent) showToast('Telling gestopt');
+    if (!silent) showToast('Telsessie gestopt');
 }
 
 // legacy single merge fallback (unused in UI now but kept for safety)
@@ -3732,7 +3840,7 @@ function mergeSession(id, dayKey = picker.value) {
     const target = day.sessions.find(s => s.id === id);
     if (!target) return;
     const others = day.sessions.filter(s => s.id !== id);
-    if (!others.length) { alert('Minstens 2 sessies nodig.'); return; }
+    if (!others.length) { alert('Minstens 2 telsessies nodig.'); return; }
     const master = target;
     others.forEach(s => {
         for (const k in s.counts) master.counts[k] = (master.counts[k] || 0) + s.counts[k];
@@ -3745,20 +3853,20 @@ function mergeSession(id, dayKey = picker.value) {
     });
     day.sessions = [master];
     recalcDayFromSessions(day);
-    save(); render(); renderSessionAdmin(); showToast('Tellingen samengevoegd');
+    save(); render(); renderSessionAdmin(); showToast('Telsessies samengevoegd');
 }
 
 function mergeSelectedSessions(dayKey = picker.value) {
     const day = ensureDay(dayKey);
     const boxes = Array.from(document.querySelectorAll('.session-merge-checkbox')).filter(cb => cb.checked);
-    if (boxes.length < 2) { alert('Selecteer minstens 2 sessies.'); return; }
+    if (boxes.length < 2) { alert('Selecteer minstens 2 telsessies.'); return; }
     const ids = boxes.map(b => b.value);
     const masterId = ids[0];
     const master = day.sessions.find(s => s.id === masterId);
     const others = day.sessions.filter(s => ids.includes(s.id) && s.id !== masterId);
     const removedDets = others.reduce((n, s) => n + ((s.determinations || []).filter(d => !!d.result && !d.pending).length), 0);
     const removedPhotos = others.reduce((n, s) => n + ((s.photos || []).length), 0);
-    if (!confirm(`Opgelet: bij het samenvoegen worden ${others.length} sessies verwijderd. Ook ${removedDets} determinaties en ${removedPhotos} foto's uit die sessies gaan verloren.`)) return;
+    if (!confirm(`Opgelet: bij het samenvoegen worden ${others.length} telsessies verwijderd. Ook ${removedDets} determinaties en ${removedPhotos} foto's uit die telsessies gaan verloren.`)) return;
     others.forEach(s => {
         for (const k in s.counts) master.counts[k] = (master.counts[k] || 0) + s.counts[k];
         if (s.photos && s.photos.length) {
@@ -3770,7 +3878,7 @@ function mergeSelectedSessions(dayKey = picker.value) {
     });
     day.sessions = day.sessions.filter(s => !others.includes(s));
     recalcDayFromSessions(day);
-    save(); render(); renderSessionAdmin(); showToast('Tellingen samengevoegd');
+    save(); render(); renderSessionAdmin(); showToast('Telsessies samengevoegd');
 }
 
 function recalcDayFromSessions(day) {
@@ -3805,7 +3913,7 @@ function deleteSession(id, dayKey = picker.value) {
     const refsToCleanup = collectSessionPhotoRefs(target);
     const detCount = (target.determinations || []).filter(d => !!d.result && !d.pending).length;
     const photoCount = (target.photos || []).length;
-    const ok = confirm(`Telling verwijderen? Opgelet: ook ${detCount} determinaties en ${photoCount} foto's in deze telling gaan verloren.`);
+    const ok = confirm(`Telsessie verwijderen? Opgelet: ook ${detCount} determinaties en ${photoCount} foto's in deze telsessie gaan verloren.`);
     if (!ok) return;
     day.sessions = day.sessions.filter(s => s.id !== id);
     recalcDayFromSessions(day);
@@ -3813,12 +3921,12 @@ function deleteSession(id, dayKey = picker.value) {
     save();
     render();
     renderSessionAdmin();
-    showToast('Telling verwijderd');
+    showToast('Telsessie verwijderd');
     cleanupPhotoRefsIfUnused(refsToCleanup).catch(err => console.warn('Photo cleanup failed', err));
 }
 
 function confirmMerge(id) {
-    return confirm(`Tellingen samenvoegen met ${id}?`);
+    return confirm(`Telsessies samenvoegen met ${id}?`);
 }
 
 function fmtTime(iso) {
@@ -3849,7 +3957,7 @@ async function fetchWeather(dayOverride, sessionId) {
         if (!policy.allowed) {
             showToast('Weerbericht geblokkeerd');
             alert(
-                'Deze sessie is ouder dan 3 uur.\n\n' +
+                'Deze telsessie is ouder dan 3 uur.\n\n' +
                 'Automatisch weer ophalen kan nu afwijken. Zet het weer manueel bij Notities.'
             );
             return;
@@ -3961,7 +4069,7 @@ async function persistPhotoDataUrl(dataUrl, meta = {}) {
 function triggerPhoto(sessionId = null) {
     const day = ensureDay();
     const target = sessionId || (getActiveSession(day)?.id || null);
-    if (!target) { alert('Start eerst een sessie om foto\'s toe te voegen.'); return; }
+    if (!target) { alert('Start eerst een telsessie om foto\'s toe te voegen.'); return; }
     photoTargetSession = target;
     vibe(25, true);
     const input = document.getElementById('photo-input');
@@ -3975,7 +4083,7 @@ async function handlePhoto(e) {
     const session = photoTargetSession
         ? day.sessions.find(s => s.id === photoTargetSession)
         : getActiveSession(day);
-    if (!session) { alert('Geen actieve sessie gevonden.'); return; }
+    if (!session) { alert('Geen actieve telsessie gevonden.'); return; }
     try {
         const data = await resizeImageFileToDataUrl(f, 600, 0.6);
         const photoRef = await persistPhotoDataUrl(data, { dayKey: picker.value, sessionId: session.id, source: 'session' });
@@ -4027,9 +4135,9 @@ function clearAllPhotos(dayKey = null) {
 async function shareSessionPhotos(sessionId) {
     const day = ensureDay();
     const session = day.sessions.find(s => s.id === sessionId);
-    if (!session) return alert('Tellingen niet gevonden');
+    if (!session) return alert('Telsessie niet gevonden');
     const photos = uniquePhotoRefs(session.photos || []);
-    if (!photos.length) return alert('Geen foto\'s in deze sessie.');
+    if (!photos.length) return alert('Geen foto\'s in deze telsessie.');
     const files = await buildShareFilesFromPhotoRefs(photos, (idx, ext) =>
         `paddentrek-${picker.value}-${sessionId}-${idx + 1}.${ext}`
     );
@@ -4124,6 +4232,126 @@ function trendDateLabel(dateIso) {
     const d = new Date(`${dateIso}T00:00:00`);
     if (isNaN(d.getTime())) return dateIso;
     return d.toLocaleDateString('nl-BE', { day: '2-digit', month: '2-digit' });
+}
+
+function resetTrendChartZoomLayout() {
+    const chart = document.getElementById('report-trend-chart');
+    if (!chart) return;
+    chart.dataset.baseWidth = '';
+    chart.dataset.baseHeight = '';
+    chart.style.width = '';
+    chart.style.minWidth = '';
+    chart.style.height = '';
+    chart.style.minHeight = '';
+}
+
+function clampTrendZoomScale(scale) {
+    const n = Number(scale);
+    if (!Number.isFinite(n)) return TREND_ZOOM_MIN;
+    return Math.min(TREND_ZOOM_MAX, Math.max(TREND_ZOOM_MIN, n));
+}
+
+function applyTrendChartZoom(scale = 1, centerPoint = null) {
+    const chart = document.getElementById('report-trend-chart');
+    if (!chart) return;
+
+    const baseWidth = Number(chart.dataset.baseWidth || 0);
+    const baseHeight = Number(chart.dataset.baseHeight || 0);
+    if (!baseWidth || !baseHeight) {
+        chart.style.width = '';
+        chart.style.minWidth = '';
+        chart.style.height = '';
+        chart.style.minHeight = '';
+        return;
+    }
+
+    const wrapper = document.getElementById('report-trend-zoomwrap');
+    const prevScale = clampTrendZoomScale(trendZoomScale);
+    const nextScale = clampTrendZoomScale(scale);
+    trendZoomScale = nextScale;
+
+    const scaledWidth = Math.max(1, Math.round(baseWidth * nextScale));
+    const scaledHeight = Math.max(1, Math.round(baseHeight * nextScale));
+    chart.style.width = `${scaledWidth}px`;
+    chart.style.minWidth = `${scaledWidth}px`;
+    chart.style.height = `${scaledHeight}px`;
+    chart.style.minHeight = `${scaledHeight}px`;
+
+    const svg = chart.querySelector('svg');
+    if (svg) {
+        svg.style.width = '100%';
+        svg.style.height = '100%';
+        svg.style.maxWidth = 'none';
+        svg.style.display = 'block';
+    }
+
+    if (!wrapper || !centerPoint || !Number.isFinite(centerPoint.clientX) || !Number.isFinite(centerPoint.clientY)) return;
+    if (!prevScale || nextScale === prevScale) return;
+
+    const rect = wrapper.getBoundingClientRect();
+    const pointX = centerPoint.clientX - rect.left;
+    const pointY = centerPoint.clientY - rect.top;
+    const zoomRatio = nextScale / prevScale;
+    wrapper.scrollLeft = (wrapper.scrollLeft + pointX) * zoomRatio - pointX;
+    wrapper.scrollTop = (wrapper.scrollTop + pointY) * zoomRatio - pointY;
+}
+
+function trendTouchDistance(touches) {
+    if (!touches || touches.length < 2) return 0;
+    const dx = touches[0].clientX - touches[1].clientX;
+    const dy = touches[0].clientY - touches[1].clientY;
+    return Math.hypot(dx, dy);
+}
+
+function trendTouchCenter(touches) {
+    if (!touches || touches.length < 2) return null;
+    return {
+        clientX: (touches[0].clientX + touches[1].clientX) / 2,
+        clientY: (touches[0].clientY + touches[1].clientY) / 2
+    };
+}
+
+function bindTrendZoomGestures() {
+    const wrapper = document.getElementById('report-trend-zoomwrap');
+    if (!wrapper || wrapper.dataset.zoomBound === '1') return;
+    wrapper.dataset.zoomBound = '1';
+
+    let pinchStartDistance = 0;
+    let pinchStartScale = trendZoomScale;
+
+    wrapper.addEventListener('touchstart', ev => {
+        if (ev.touches.length !== 2) return;
+        pinchStartDistance = trendTouchDistance(ev.touches);
+        pinchStartScale = trendZoomScale;
+    }, { passive: true });
+
+    wrapper.addEventListener('touchmove', ev => {
+        if (ev.touches.length !== 2) return;
+        const distance = trendTouchDistance(ev.touches);
+        if (!distance || !pinchStartDistance) return;
+        const nextScale = pinchStartScale * (distance / pinchStartDistance);
+        applyTrendChartZoom(nextScale, trendTouchCenter(ev.touches));
+        ev.preventDefault();
+    }, { passive: false });
+
+    const resetPinch = () => {
+        pinchStartDistance = 0;
+        pinchStartScale = trendZoomScale;
+    };
+    wrapper.addEventListener('touchend', resetPinch, { passive: true });
+    wrapper.addEventListener('touchcancel', resetPinch, { passive: true });
+}
+
+function updateTrendMobileAssist() {
+    const hint = document.getElementById('trend-rotate-hint');
+    if (!hint) return;
+    const card = document.getElementById('report-trend-card');
+    const cardVisible = !!(card && !card.classList.contains('hidden'));
+    const shouldShow = currentTab === 'trend'
+        && cardVisible
+        && window.innerWidth <= 820
+        && window.innerHeight > window.innerWidth;
+    hint.classList.toggle('hidden', !shouldShow);
 }
 
 function bindReportTrendInteractions() {
@@ -4225,6 +4453,8 @@ function renderReportTrend() {
 
     if (!knownPoints.length) {
         card.classList.add('hidden');
+        resetTrendChartZoomLayout();
+        updateTrendMobileAssist();
         refreshHeaderSelectorVisibility();
         return;
     }
@@ -4261,6 +4491,7 @@ function renderReportTrend() {
 
     if (!points.length) {
         meta.innerHTML = `Alle <strong>${fullRangeCount}</strong> dag(en) in deze periode hebben <strong>0</strong> dieren of zijn verborgen.`;
+        resetTrendChartZoomLayout();
         chart.innerHTML = `
                     <div class="min-h-[220px] flex items-center justify-center text-center text-[12px] text-emerald-100/90 px-4">
                         Geen dagen met dieren in beeld. Zet "Toon lege teldagen (0)" aan om 0-dagen te tonen.
@@ -4271,6 +4502,8 @@ function renderReportTrend() {
                         Lege dagen verborgen (${reportTrendShowEmptyDays ? emptyCount : hiddenZeroCount})
                     </span>
                 `;
+        updateTrendMobileAssist();
+        refreshHeaderSelectorVisibility();
         return;
     }
 
@@ -4341,8 +4574,10 @@ function renderReportTrend() {
         return `<text x="${x.toFixed(2)}" y="${height - 12}" text-anchor="middle" fill="#cbd5e1" font-size="10">${trendDateLabel(p.date)}</text>`;
     }).join('');
 
+    chart.dataset.baseWidth = String(width);
+    chart.dataset.baseHeight = String(height);
     chart.innerHTML = `
-                <svg viewBox="0 0 ${width} ${height}" style="width:${width}px; height:${height}px; max-width:none; display:block;" role="img" aria-label="Teldagen trendgrafiek">
+                <svg viewBox="0 0 ${width} ${height}" style="width:100%; height:100%; max-width:none; display:block;" role="img" aria-label="Teldagen trendgrafiek">
                     <defs>
                         <linearGradient id="trendFill" x1="0" y1="0" x2="0" y2="1">
                             <stop offset="0%" stop-color="rgba(52,211,153,0.45)" />
@@ -4363,7 +4598,10 @@ function renderReportTrend() {
                     <text x="8" y="12" fill="#64748b" font-size="9">dieren</text>
                 </svg>
             `;
+    applyTrendChartZoom(trendZoomScale);
+    bindTrendZoomGestures();
     bindReportTrendInteractions();
+    updateTrendMobileAssist();
     refreshHeaderSelectorVisibility();
 }
 
@@ -4412,7 +4650,7 @@ function updateReportSessionInputs(session) {
         if (weatherDiv) {
             weatherDiv.innerHTML = session.weather
                 ? (typeof weatherSummaryText === 'function' ? weatherSummaryText(session.weather, ' • ', true) : 'Weerdata beschikbaar')
-                : '<span class="italic opacity-50">Geen weerdata (start sessie om te laden)</span>';
+                : '<span class="italic opacity-50">Geen weerdata (start telsessie om te laden)</span>';
         }
     } else {
         if (routeInp) { routeInp.disabled = true; routeInp.value = ''; }
@@ -4498,7 +4736,7 @@ function updateReport() {
     if (reportMode === 'session' && session) {
         const note = formatSessionNote(session);
         if (note) txt += `\n📝 *Nota:* ${note}\n`;
-        if (session.includeInReports === false) txt += `\n⚠️ Deze sessie staat op "niet meetellen in rapport".\n`;
+        if (session.includeInReports === false) txt += `\n⚠️ Deze telsessie staat op "niet meetellen in rapport".\n`;
     }
     if (reportMode === 'day') {
         const sessionNotes = [];
@@ -4526,7 +4764,7 @@ function updateReport() {
         }
     }
     if (sessionsToShow.length) {
-        txt += `\n⏱️ *Tellingen:*\n`;
+        txt += `\n⏱️ *Telsessies:*\n`;
         const orderedSessions = sessionsToShow.slice().sort((a, b) => new Date(a.start) - new Date(b.start));
         if (reportMode === 'day' && orderedSessions.length > 1) {
             const contributorNames = [];
@@ -4558,13 +4796,13 @@ function updateReport() {
             });
         }
         if (reportMode === 'day' && excludedSessions.length) {
-            txt += `\n⚠️ ${excludedSessions.length} sessie(s) tellen niet mee in dit rapport.\n`;
+            txt += `\n⚠️ ${excludedSessions.length} telsessies tellen niet mee in dit rapport.\n`;
         }
     }
     if (reportMode === 'day' && !sessionsToShow.length && (data.sessions || []).length) {
-        txt += `\n⚠️ Geen tellingen geselecteerd. Zet minstens 1 sessie aan bovenaan.\n`;
+        txt += `\n⚠️ Geen telsessies geselecteerd. Zet minstens 1 telsessie aan bovenaan.\n`;
     }
-    txt += `\n#Paddentrek #Telling`;
+    txt += `\n#Paddentrek #Telsessie`;
     const reportOutput = h || data.notes || reportSessions.length || (data.sessions || []).length ? txt : "Nog geen data ingevoerd.";
     lastRenderedReportText = reportOutput;
     document.getElementById('report-text').innerText = reportOutput;
@@ -4726,7 +4964,7 @@ async function shareDeterminaties() {
 ${ansLines || '  n.v.t.'}
 • Foto's: ${fotos}`;
     });
-    const text = `🐸 Determinaties ${picker.value} (${reportMode === 'session' && session ? 'sessie' : 'dag'})
+    const text = `🐸 Determinaties ${picker.value} (${reportMode === 'session' && session ? 'telsessie' : 'dag'})
 
 ${lines.join('\n\n')}`;
     let files = [];
@@ -4772,7 +5010,7 @@ function exportReportCSV(forceDay = false) {
         const tot = pl * 2 + pd * 2 + ml + vl + ol + md + vd + od;
         if (tot > 0) rows.push([
             d,
-            session ? 'Sessie' : 'Dag',
+            session ? 'Telsessie' : 'Dag',
             meta.route,
             meta.notes,
             meta.weather?.t ?? '',
@@ -4816,10 +5054,10 @@ function exportAllSessionsCSV() {
         day.sessions.forEach(s => {
             const wt = s.weather?.t ?? day.weather?.t ?? '';
             const wc = s.weather?.c ?? day.weather?.c ?? '';
-            addRows('Sessie', s.counts || {}, s.routeName || '', formatSessionNote(s), wt, wc, s.start || '', s.end || '', s.id || '');
+            addRows('Telsessie', s.counts || {}, s.routeName || '', formatSessionNote(s), wt, wc, s.start || '', s.end || '', s.id || '');
         });
     }
-    downloadCSV(rows, `paddentrek-${d}-sessies.csv`);
+    downloadCSV(rows, `paddentrek-${d}-telsessies.csv`);
 }
 
 function copyReport() {
@@ -4986,9 +5224,9 @@ function syncShareSelectionFromDom(refreshQr = true) {
             const selectedCount = sessionCheckboxes.filter(cb => cb.checked).length;
             meta.innerText = dayCheckbox.checked
                 ? 'Hele dag geselecteerd om te delen.'
-                : `${selectedCount} van ${sessionCheckboxes.length} sessie(s) geselecteerd om te delen.`;
+                : `${selectedCount} van ${sessionCheckboxes.length} telsessies geselecteerd om te delen.`;
         } else {
-            meta.innerText = 'Geen sessies gevonden. Je kan enkel het dagtotaal delen.';
+            meta.innerText = 'Geen telsessies gevonden. Je kan enkel het dagtotaal delen.';
         }
     }
     if (refreshQr) generateQR(false);
@@ -5020,9 +5258,9 @@ function buildQRSessionOptions() {
     if (totalSessions) {
         meta.innerText = state.dayTotal
             ? 'Hele dag geselecteerd om te delen.'
-            : `${state.sessionIds.length} van ${totalSessions} sessie(s) geselecteerd om te delen.`;
+            : `${state.sessionIds.length} van ${totalSessions} telsessies geselecteerd om te delen.`;
     } else {
-        meta.innerText = 'Geen sessies gevonden. Je kan enkel het dagtotaal delen.';
+        meta.innerText = 'Geen telsessies gevonden. Je kan enkel het dagtotaal delen.';
     }
     const dayChecked = state.dayTotal ? 'checked' : '';
     const dayTotal = sumCounts(day.counts || {});
@@ -5061,7 +5299,7 @@ function buildReportSessionOptions() {
     const preferred = viewedSessionId && day.sessions.some(s => s.id === viewedSessionId)
         ? viewedSessionId
         : sel.value;
-    sel.innerHTML = '<option value=\"\">Overzicht geselecteerde tellingen</option>' + day.sessions.map(s => {
+    sel.innerHTML = '<option value=\"\">Overzicht geselecteerde telsessies</option>' + day.sessions.map(s => {
         const includeTag = s.includeInReports === false ? ' · (niet meetellen)' : '';
         const label = `${sessionDisplayLabel(s, day)}${s.routeName ? ' · ' + s.routeName : ''}${includeTag}`;
         return `<option value="${s.id}">${label}</option>`;
@@ -5080,12 +5318,12 @@ function renderReportSessionChecklist() {
     const day = ensureDay();
     const sessions = day.sessions.slice().sort((a, b) => new Date(a.start) - new Date(b.start));
     if (!sessions.length) {
-        box.innerHTML = '<div class="text-[11px] text-gray-500">Nog geen tellingen voor deze datum.</div>';
+        box.innerHTML = '<div class="text-[11px] text-gray-500">Nog geen telsessies voor deze datum.</div>';
         meta.innerText = '';
         return;
     }
     const includedCount = sessions.filter(sessionIncludedInReports).length;
-    meta.innerText = `${includedCount} van ${sessions.length} tellingen opgenomen in het rapport.`;
+    meta.innerText = `${includedCount} van ${sessions.length} telsessies opgenomen in het rapport.`;
     box.innerHTML = sessions.map(s => {
         const total = sumCounts(s.counts || {});
         const label = sessionDisplayLabel(s, day);
@@ -5111,7 +5349,7 @@ function setAllReportSessionsIncluded(include = true, dayKey = picker.value) {
     save();
     render();
     renderSessionAdmin();
-    showToast(include ? 'Alle tellingen tellen mee' : 'Geen tellingen geselecteerd');
+    showToast(include ? 'Alle telsessies tellen mee' : 'Geen telsessies geselecteerd');
 }
 
 function buildRouteSuggestions() {
@@ -5268,7 +5506,7 @@ function buildSyncTransferFromSelection(requireIdentity = false) {
         kind: 'bundle',
         createdAt: Date.now(),
         sourceDate: picker.value,
-        sourceLabel: `${payloads.length} sessies`,
+        sourceLabel: `${payloads.length} telsessies`,
         items: payloads
     };
 }
@@ -5283,7 +5521,7 @@ function generateQR(requireIdentity = false) {
     const raw = JSON.stringify(transfer);
     const bytes = qrPayloadByteLength(raw);
     if (bytes > QR_MAX_PAYLOAD_BYTES) {
-        alert(`Deze selectie is te groot voor een stabiele QR-code (${bytes} bytes). Kies minder sessies of gebruik de deel-link.`);
+        alert(`Deze selectie is te groot voor een stabiele QR-code (${bytes} bytes). Kies minder telsessies of gebruik de deel-link.`);
         updateQrSummary(transfer);
         return;
     }
@@ -5330,7 +5568,7 @@ function updateQrSummary(payloadOverride = null) {
             const name = (SPECIES.find(s => s.id === sid) || (payload.s || []).find(c => c.id === sid) || { name: sid }).name;
             lines.push(`${name}: ${val}`);
         });
-        box.innerText = `Wie deze QR scant, krijgt eerst een wizard en kan deze data als aparte telling toevoegen:\n\n${lines.join('\n')}`;
+        box.innerText = `Wie deze QR scant, krijgt eerst een wizard en kan deze data als aparte telsessie toevoegen:\n\n${lines.join('\n')}`;
         return;
     }
 
@@ -5339,11 +5577,11 @@ function updateQrSummary(payloadOverride = null) {
     const lines = payloads.slice(0, 6).map((payload, idx) => {
         const route = normalizeRouteName(payload.sourceRoute || '');
         const count = sumCounts(payload.c || {});
-        return `${idx + 1}. ${payload.sourceLabel || `Telling ${idx + 1}`}${route ? ` · ${route}` : ''} (${count} dieren)`;
+        return `${idx + 1}. ${payload.sourceLabel || `Telsessie ${idx + 1}`}${route ? ` · ${route}` : ''} (${count} dieren)`;
     });
-    if (payloads.length > 6) lines.push(`+${payloads.length - 6} extra telling(en)`);
+    if (payloads.length > 6) lines.push(`+${payloads.length - 6} extra telsessies`);
     box.innerText =
-        `Wie deze QR scant, krijgt eerst een wizard en kan ${payloads.length} aparte telling(en) toevoegen.\n\n` +
+        `Wie deze QR scant, krijgt eerst een wizard en kan ${payloads.length} aparte telsessies toevoegen.\n\n` +
         `Dag: ${payloads[0]?.sourceDate || d}\n` +
         `Teller(s): ${contributors.join(', ')}\n` +
         `Totaal dieren in selectie: ${total}\n\n` +
@@ -5444,7 +5682,7 @@ function normalizeIncomingSyncTransfer(payloadInput) {
         kind: 'bundle',
         createdAt: Number(payloadInput?.createdAt) || Date.now(),
         sourceDate: typeof payloadInput?.sourceDate === 'string' ? payloadInput.sourceDate : (items[0]?.sourceDate || ''),
-        sourceLabel: typeof payloadInput?.sourceLabel === 'string' ? payloadInput.sourceLabel : `${items.length} sessies`,
+        sourceLabel: typeof payloadInput?.sourceLabel === 'string' ? payloadInput.sourceLabel : `${items.length} telsessies`,
         items
     };
 }
@@ -5457,9 +5695,9 @@ function summarizeIncomingPayloadList(payloads, limit = 6) {
         const route = normalizeRouteName(p.sourceRoute || '');
         const total = sumCounts(p.c || {});
         const already = !!findImportedSessionLocation(p.id, getSyncImportEntry(p.id));
-        return `${idx + 1}. ${p.sourceLabel || `Telling ${idx + 1}`}${route ? ` · ${route}` : ''} (${total} dieren)${already ? ' [al bekend]' : ''}`;
+        return `${idx + 1}. ${p.sourceLabel || `Telsessie ${idx + 1}`}${route ? ` · ${route}` : ''} (${total} dieren)${already ? ' [al bekend]' : ''}`;
     });
-    if (list.length > limit) lines.push(`+${list.length - limit} extra telling(en)`);
+    if (list.length > limit) lines.push(`+${list.length - limit} extra telsessies`);
     return lines.join('\n');
 }
 
@@ -5495,7 +5733,7 @@ function renderIncomingSyncCard() {
     meta.innerText =
         `Bron: ${srcDate} · ${created}\n` +
         `Teller(s): ${contributors.join(', ')}\n` +
-        `${payloads.length} telling(en), ${total} dieren totaal.` +
+        `${payloads.length} telsessies, ${total} dieren totaal.` +
         `${alreadyCount ? ` ${alreadyCount} bijdrage(n) zijn al bekend en worden overgeslagen.` : ''}\n` +
         `De wizard opent normaal automatisch. Deze kaart is een fallback als je later alsnog wil toevoegen.`;
     summary.innerText = summarizeIncomingPayloadList(payloads);
@@ -5515,8 +5753,8 @@ function updateSyncWizardHint() {
     if (!dateInput || !hint) return;
     const dayKey = dateInput.value || picker.value || todayISO();
     hint.innerText =
-        `Stap 3: voeg deze link toe als aparte telling(en) op ${dayKey}.\n` +
-        `Er wordt niets bijgeteld in bestaande tellingen.`;
+        `Stap 3: voeg deze link toe als aparte telsessies op ${dayKey}.\n` +
+        `Er wordt niets bijgeteld in bestaande telsessies.`;
 }
 
 function openSyncWizard() {
@@ -5538,9 +5776,9 @@ function openSyncWizard() {
         `• ${srcDate}\n` +
         `• Teller(s): ${contributors.join(', ')}\n` +
         `• ${created}\n` +
-        `• ${payloads.length} telling(en), ${total} dieren\n` +
+        `• ${payloads.length} telsessies, ${total} dieren\n` +
         `${alreadyCount ? `• ${alreadyCount} bijdrage(n) zijn al bekend en worden overgeslagen.\n` : ''}` +
-        `• Na toevoegen staan deze data als aparte tellingen in je lijst.`;
+        `• Na toevoegen staan deze data als aparte telsessies in je lijst.`;
     summary.innerText = `Stap 2: inhoud van de link\n\n${summarizeIncomingPayloadList(payloads)}`;
     dateInput.value = picker.value || todayISO();
     buildSyncWizardTargetOptions();
@@ -5744,7 +5982,7 @@ function importContributionPayloadBatch(payloadInput, dayKey) {
     const added = newCount + updatedCount;
     const status = added ? (alreadyCount ? 'mixed' : 'new') : 'already';
     const lines = [
-        `Resultaat: ${payloads.length} telling(en) verwerkt.`,
+        `Resultaat: ${payloads.length} telsessies verwerkt.`,
         `Nieuw: ${newCount} · Bijgewerkt: ${updatedCount} · Al bekend: ${alreadyCount}`
     ];
     const preview = summarizeIncomingPayloadList(okResults.map(r => r.payload), 8);
@@ -5788,7 +6026,7 @@ function generateSyncLink() {
     if (box) box.classList.remove('hidden');
     if (out) out.value = link;
     if (link.length > 3500) showToast('Let op: erg lange deel-link');
-    else showToast(payloads.length > 1 ? `Deel-link klaar (${payloads.length} sessies)` : 'Deel-link klaar');
+    else showToast(payloads.length > 1 ? `Deel-link klaar (${payloads.length} telsessies)` : 'Deel-link klaar');
     const help = document.getElementById('sync-link-help');
     if (help) {
         help.innerText = isMobileShareContext()
@@ -5810,7 +6048,7 @@ async function shareSyncLink() {
     if (!link) { alert('Maak eerst een deel-link.'); return; }
     try {
         if (navigator.share && isMobileShareContext()) {
-            await navigator.share({ title: 'Paddentrek deel-link', text: 'Open deze link en synchroniseer deze telling(en) in je app.', url: link });
+            await navigator.share({ title: 'Paddentrek deel-link', text: 'Open deze link en synchroniseer deze telsessies in je app.', url: link });
             return;
         }
     } catch (err) {
@@ -5833,7 +6071,7 @@ function importPendingSyncLink() {
         alert(result.summary);
         return;
     }
-    showToast(added > 1 ? `${added} tellingen toegevoegd` : (result.status === 'updated' ? 'Bijdrage bijgewerkt' : 'Telling toegevoegd'));
+    showToast(added > 1 ? `${added} telsessies toegevoegd` : (result.status === 'updated' ? 'Bijdrage bijgewerkt' : 'Telsessie toegevoegd'));
     alert(result.summary);
     openSessionManagement(dayKey);
 }
@@ -5852,7 +6090,7 @@ function importPendingSyncLinkWizard() {
         alert(result.summary);
         return;
     }
-    showToast(added > 1 ? `${added} tellingen toegevoegd` : (result.status === 'updated' ? 'Bijdrage bijgewerkt' : 'Telling toegevoegd'));
+    showToast(added > 1 ? `${added} telsessies toegevoegd` : (result.status === 'updated' ? 'Bijdrage bijgewerkt' : 'Telsessie toegevoegd'));
     alert(result.summary);
     openSessionManagement(dayKey);
 }
@@ -5903,7 +6141,7 @@ function exportRangeCSV(forceSettings = false) {
             day.sessions.forEach(s => {
                 const wt = s.weather?.t ?? day.weather?.t ?? '';
                 const wc = s.weather?.c ?? day.weather?.c ?? '';
-                addRows('Sessie', s.counts || {}, s.routeName || '', formatSessionNote(s), wt, wc, s.start || '', s.end || '', s.id || '');
+                addRows('Telsessie', s.counts || {}, s.routeName || '', formatSessionNote(s), wt, wc, s.start || '', s.end || '', s.id || '');
             });
         }
         // ook dagtotaal opnemen
@@ -6139,7 +6377,7 @@ function describeSync(incoming, targetDay = null) {
 
     if (!lines.length) return 'Geen teldata ontvangen.';
     const sourceTxt = sourceDay !== dayKey ? ` (bron ${sourceDay})` : '';
-    return `Toegevoegd als aparte telling op ${dayKey}${sourceTxt}.\nTeller: ${who}${route ? `\nTraject: ${route}` : ''}\n\n${lines.join('\n')}`;
+    return `Toegevoegd als aparte telsessie op ${dayKey}${sourceTxt}.\nTeller: ${who}${route ? `\nTraject: ${route}` : ''}\n\n${lines.join('\n')}`;
 }
 
 function startScanner() {
@@ -6166,7 +6404,7 @@ function startScanner() {
                 showToast("Alle bijdragen al bekend");
             } else {
                 alert(result.summary);
-                showToast(added > 1 ? `${added} tellingen toegevoegd` : (result.status === 'updated' ? "Bijdrage bijgewerkt" : "Telling toegevoegd"));
+                showToast(added > 1 ? `${added} telsessies toegevoegd` : (result.status === 'updated' ? "Bijdrage bijgewerkt" : "Telsessie toegevoegd"));
             }
             switchTab('count');
         } catch (e) { alert("QR fout"); }
@@ -6191,8 +6429,8 @@ function updateQrWizardHint() {
     if (!dateInput || !hint) return;
     const dayKey = dateInput.value || picker.value || todayISO();
     hint.innerText =
-        `Stap 3: voeg deze QR toe als aparte telling(en) op ${dayKey}.\n` +
-        `Er wordt niets bijgeteld in bestaande tellingen.`;
+        `Stap 3: voeg deze QR toe als aparte telsessies op ${dayKey}.\n` +
+        `Er wordt niets bijgeteld in bestaande telsessies.`;
 }
 
 function setQrWizardIdleState() {
@@ -6228,10 +6466,10 @@ function renderQrWizardPreview(payload) {
         `Stap 1 klaar: QR gelezen.\n` +
         `Bron-datum: ${sourceDate}\n` +
         `Teller(s): ${contributors.join(', ')}\n` +
-        `In QR: ${payloads.length} telling(en), ${total} dieren\n` +
+        `In QR: ${payloads.length} telsessies, ${total} dieren\n` +
         `${alreadyCount ? `Status: ${alreadyCount} bijdrage(n) al bekend (wordt overgeslagen)\n` : ''}` +
         `Stap 2: controleer hieronder de inhoud.\n` +
-        `Na toevoegen staan deze data als aparte telling(en) in je lijst.`;
+        `Na toevoegen staan deze data als aparte telsessies in je lijst.`;
     summary.innerText = `Stap 2: inhoud van de QR\n\n${summarizeIncomingPayloadList(payloads)}`;
     btnImport.disabled = false;
     btnImport.classList.remove('opacity-60');
@@ -6288,7 +6526,7 @@ function importQrWizardPayload() {
         alert(result.summary);
         return;
     }
-    showToast(added > 1 ? `${added} tellingen toegevoegd` : (result.status === 'updated' ? 'Bijdrage bijgewerkt' : 'Telling toegevoegd'));
+    showToast(added > 1 ? `${added} telsessies toegevoegd` : (result.status === 'updated' ? 'Bijdrage bijgewerkt' : 'Telsessie toegevoegd'));
     alert(result.summary);
     openSessionManagement(dayKey);
 }
@@ -6334,7 +6572,7 @@ function buildImportTargetOptions() {
 function updateImportTargetHint() {
     const hint = document.getElementById('import-target-hint');
     if (!hint) return;
-    hint.innerText = `Data uit een deel-link wordt als aparte telling(en) toegevoegd op ${picker.value}.`;
+    hint.innerText = `Data uit een deel-link wordt als aparte telsessies toegevoegd op ${picker.value}.`;
 }
 
 function renderAppChanges() {
@@ -6385,11 +6623,15 @@ function switchTab(t) {
         buildReportSessionOptions();
         updateReport();
     }
+    if (t === 'trend') {
+        renderReportTrend();
+    }
     if (t === 'settings') {
         const sd = document.getElementById('sessionDate');
         if (sd) sd.value = picker.value;
         const pd = document.getElementById('photo-clean-date');
         if (pd) pd.value = picker.value;
+        renderSettingsToggles();
         renderSessionAdmin();
         buildQRSessionOptions();
         buildImportTargetOptions();
@@ -6407,6 +6649,7 @@ function switchTab(t) {
         renderDeterminationList();
     }
     if (t === 'info') renderAppChanges();
+    updateTrendMobileAssist();
     refreshHeaderSelectorVisibility();
 }
 
@@ -6423,8 +6666,9 @@ picker.onchange = () => {
 };
 document.getElementById('sessionDate').onchange = () => renderSessionAdmin();
 window.addEventListener('resize', () => {
-    const reportView = document.getElementById('view-report');
-    if (reportView && !reportView.classList.contains('hidden')) renderReportTrend();
+    const trendView = document.getElementById('view-trend');
+    if (trendView && !trendView.classList.contains('hidden')) renderReportTrend();
+    updateTrendMobileAssist();
 });
 function runInitialRender() {
     splitSessionOverMidnightIfNeeded();
@@ -6436,6 +6680,7 @@ function runInitialRender() {
     renderDetSessionOptions();
     renderDeterminationUI();
     renderDeterminationList();
+    renderSettingsToggles();
     updateContributorInputsFromProfile();
     handleShareIdentityChange(false);
     handleIncomingSyncFromUrl();
@@ -6445,7 +6690,9 @@ function runInitialRender() {
         trendCard.addEventListener('toggle', refreshHeaderSelectorVisibility);
         trendCard.dataset.headerVisibilityBound = '1';
     }
+    bindTrendZoomGestures();
     renderLastCountToast();
+    updateTrendMobileAssist();
     refreshHeaderSelectorVisibility();
 }
 
