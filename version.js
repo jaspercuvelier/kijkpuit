@@ -1,10 +1,23 @@
 // Centrale versiebron voor app en service worker
-const APP_VERSION = '3.2.10';
+const APP_VERSION = '3.2.11';
 
 // Changelog voor het uitklapbare "Changes"-luik in de Info-tab.
 // Voeg nieuwe releases bovenaan toe.
 // Inhoud gebaseerd op git-geschiedenis van version.js + recente lokale wijzigingen.
 const APP_CHANGELOG = [
+    {
+        version: '3.2.11',
+        title: 'Tellercorrecties + rapporttotaal + duidelijkere live-indicator',
+        changes: [
+            'Salamanders tonen in het telscherm geen paartjesrijen meer; enkel M/V/Onbekend (levend en dood).',
+            'In Instellingen > Telsessiebeheer staat nu een correctietabel per sessie om aantallen rechtstreeks te bewerken.',
+            'De correctietabel toont ook ongetelde soorten (0), zodat je snel fouten zoals "kikkers i.p.v. padden" kan rechtzetten.',
+            'De paartjeslabel in de teller gebruikt opnieuw het hartje (❤️) voor duidelijkheid.',
+            'Rapporttekst kreeg een expliciete regel "Totaal dieren", en de melding over niet-meetellende sessies werd verwijderd.',
+            'De headerkikker bij een actieve sessie pulseert nu duidelijker rood met sterkere glow/halo.',
+            'Extra verticale ruimte toegevoegd boven het blok "Nieuwe soort toevoegen" voor betere scheiding in de tellerweergave.'
+        ]
+    },
     {
         version: '3.2.10',
         title: 'Trektrend-tab + mobiel leesbaarheidsupgrade',
