@@ -2242,10 +2242,8 @@ function renderSessionLog() {
             const total = sumCounts(s.counts);
             const weather = weatherSummaryText(s.weather, ' • ', true);
             const contributorNames = sessionContributorNamesForUi(s);
-            const primaryContributor = (Array.isArray(s.contributorRoster) && s.contributorRoster[0]?.name) ? s.contributorRoster[0].name : '';
-            const contributorName = localContributorDisplayName(
-                (typeof primaryContributor === 'string' && primaryContributor.toLowerCase() === 'mezelf') ? '' : primaryContributor
-            );
+            const primaryContributor = (Array.isArray(s.contributorRoster) && s.contributorRoster[0]) ? s.contributorRoster[0] : {};
+            const contributorName = normalizeContributorDisplayName(primaryContributor.name || '', primaryContributor.id || '');
             const weatherPolicy = getSessionWeatherFetchPolicy(s);
             const weatherDisabled = weatherPolicy.allowed ? '' : 'disabled';
             const weatherButtonClass = weatherPolicy.allowed
@@ -2814,11 +2812,25 @@ function updateSessionContributorName(id, val) {
     const name = (val || '').trim();
     if (!Array.isArray(s.contributorRoster)) s.contributorRoster = [];
     const existing = s.contributorRoster[0] || localContributorRosterEntry(s.routeName || '', name);
+    const existingName = normalizeContributorDisplayName(existing.name || '', existing.id || '');
+    const hasImportedContribution = Array.isArray(s.contributions) && s.contributions.length > 0;
+    const resolvedName = name
+        || (existingName && existingName.toLowerCase() !== 'onbekende teller' ? existingName : '')
+        || (hasImportedContribution ? 'Onbekende teller' : localContributorDisplayName(''));
     s.contributorRoster[0] = {
         ...existing,
-        name: localContributorDisplayName(name),
+        name: resolvedName,
         route: normalizeRouteName(existing.route || s.routeName || '')
     };
+    if (Array.isArray(s.contributions) && s.contributions.length === 1) {
+        const rec = s.contributions[0] || {};
+        s.contributions[0] = {
+            ...rec,
+            contributorName: resolvedName,
+            contributorId: String(rec.contributorId || s.contributorRoster[0].id || '').trim()
+                || `legacy_${simpleHash(`${resolvedName}|${s.id || 'session'}`)}`
+        };
+    }
     s.autoContributorNote = localContributorNote(s.contributorRoster[0].name || '', s.contributorRoster[0].route || s.routeName || '');
     save();
 }
@@ -3023,31 +3035,27 @@ function sessionContributorNames(session) {
         seen.add(key);
         names.push(normalized);
     };
-    (Array.isArray(session.contributorRoster) ? session.contributorRoster : []).forEach(r => {
-        pushName(r?.name || '', r?.id || '');
+    const contributions = Array.isArray(session.contributions) ? session.contributions : [];
+    contributions.forEach(c => {
+        pushName(c?.contributorName || '', c?.contributorId || '');
     });
     if (!names.length) {
-        (Array.isArray(session.contributions) ? session.contributions : []).forEach(c => {
-            pushName(c?.contributorName || '', c?.contributorId || '');
+        (Array.isArray(session.contributorRoster) ? session.contributorRoster : []).forEach(r => {
+            pushName(r?.name || '', r?.id || '');
         });
     }
     if (!names.length && !Array.isArray(session.contributions)) return '';
-    if (!names.length && session.contributions.length === 0) return localContributorDisplayName('');
+    if (!names.length && contributions.length === 0) return localContributorDisplayName('');
     return names.join(', ');
 }
 
 function sessionContributorNamesForUi(session) {
     const raw = sessionContributorNames(session);
     if (!raw) return '';
-    const localName = localContributorDisplayName('');
     return raw
         .split(',')
         .map(name => name.trim())
         .filter(Boolean)
-        .map(name => {
-            if (name.toLowerCase() !== 'mezelf') return name;
-            return localName || 'Onbekende teller';
-        })
         .join(', ');
 }
 
@@ -3528,9 +3536,12 @@ function fillSessionWizardFromContext() {
     const nameInput = document.getElementById('session-wizard-name');
     const routeInput = document.getElementById('session-wizard-route');
     const notesInput = document.getElementById('session-wizard-notes');
-    const rosterName = (Array.isArray(session.contributorRoster) && session.contributorRoster[0]?.name) ? session.contributorRoster[0].name : '';
-    const candidateName = (rosterName && rosterName.toLowerCase() !== 'mezelf') ? rosterName : '';
-    const displayName = candidateName || profile.name || '';
+    const rosterEntry = (Array.isArray(session.contributorRoster) && session.contributorRoster[0]) ? session.contributorRoster[0] : {};
+    const rosterName = normalizeContributorDisplayName(rosterEntry.name || '', rosterEntry.id || '');
+    const hasImportedContribution = Array.isArray(session.contributions) && session.contributions.length > 0;
+    const displayName = (rosterName && rosterName.toLowerCase() !== 'onbekende teller')
+        ? rosterName
+        : (hasImportedContribution ? '' : (profile.name || ''));
     const route = normalizeRouteName(session.routeName || profile.lastRouteName || '');
 
     if (meta) {
@@ -3566,19 +3577,39 @@ function persistSessionWizardData({ commitRouteHistory = true, requireName = fal
     }
 
     const profile = getContributorProfile();
+    const hasImportedContribution = Array.isArray(session.contributions) && session.contributions.length > 0;
+    const existingRosterEntry = (Array.isArray(session.contributorRoster) && session.contributorRoster[0]) ? session.contributorRoster[0] : {};
+    const existingRosterName = normalizeContributorDisplayName(existingRosterEntry.name || '', existingRosterEntry.id || '');
+    const existingRosterId = String(existingRosterEntry.id || '').trim();
     const nextProfile = saveContributorProfile({
         ...profile,
-        name: rawName || profile.name || '',
+        name: (!hasImportedContribution && rawName) ? rawName : (profile.name || ''),
         lastRouteName: rawRoute || profile.lastRouteName || '',
         routeHistory: commitRouteHistory && rawRoute
             ? [rawRoute, ...(profile.routeHistory || [])]
             : (profile.routeHistory || [])
     });
-    const displayName = localContributorDisplayName(rawName || nextProfile.name || '');
+    const displayName = rawName
+        || (existingRosterName && existingRosterName.toLowerCase() !== 'onbekende teller' ? existingRosterName : '')
+        || (hasImportedContribution ? 'Onbekende teller' : localContributorDisplayName(nextProfile.name || ''));
+    const rosterId = existingRosterId || (!hasImportedContribution && nextProfile.id ? `local_user_${nextProfile.id}` : '');
 
     session.routeName = rawRoute;
     session.notes = notes;
-    session.contributorRoster = [localContributorRosterEntry(rawRoute, displayName)];
+    session.contributorRoster = [{
+        id: rosterId || `legacy_${simpleHash(`${displayName}|${session.id || 'session'}`)}`,
+        name: displayName,
+        route: rawRoute
+    }];
+    if (Array.isArray(session.contributions) && session.contributions.length === 1) {
+        const rec = session.contributions[0] || {};
+        session.contributions[0] = {
+            ...rec,
+            contributorName: displayName,
+            contributorId: String(rec.contributorId || session.contributorRoster[0].id || '').trim()
+                || `legacy_${simpleHash(`${displayName}|${session.id || 'session'}`)}`
+        };
+    }
     session.autoContributorNote = localContributorNote(displayName, rawRoute);
 
     save();
@@ -5663,6 +5694,64 @@ function buildContributionId(contributorId, sourceDate, sessionId = '') {
     return `contrib_${simpleHash(seed)}`;
 }
 
+function sanitizeContributorNameForPayload(name = '') {
+    const raw = String(name || '').trim();
+    if (!raw) return '';
+    const low = raw.toLowerCase();
+    if (low === 'mezelf') return '';
+    if (low === 'onbekende teller') return '';
+    if (low === 'legacy telling' || low === 'legacy-telling' || low === 'legacy') return '';
+    return raw;
+}
+
+function sessionIdentityForPayload(session, fallbackIdentity = null) {
+    const fallbackName = sanitizeContributorNameForPayload(fallbackIdentity?.contributorName || '');
+    const fallbackId = String(fallbackIdentity?.contributorId || '').trim();
+    if (!session || typeof session !== 'object') {
+        return {
+            contributorName: fallbackName || 'Onbekende teller',
+            contributorId: fallbackId || `legacy_${simpleHash(fallbackName || 'unknown')}`
+        };
+    }
+
+    let preferredName = '';
+    let preferredId = '';
+
+    const contributions = Array.isArray(session.contributions) ? session.contributions : [];
+    for (let i = 0; i < contributions.length; i++) {
+        const c = contributions[i] || {};
+        const name = sanitizeContributorNameForPayload(c.contributorName || '');
+        const id = String(c.contributorId || '').trim();
+        if (name || id) {
+            preferredName = name;
+            preferredId = id;
+            break;
+        }
+    }
+
+    if (!preferredName || !preferredId) {
+        const roster = Array.isArray(session.contributorRoster) ? session.contributorRoster : [];
+        for (let i = 0; i < roster.length; i++) {
+            const r = roster[i] || {};
+            const name = sanitizeContributorNameForPayload(r.name || '');
+            const id = String(r.id || '').trim();
+            if (name || id) {
+                if (!preferredName && name) preferredName = name;
+                if (!preferredId && id) preferredId = id;
+                if (preferredName && preferredId) break;
+            }
+        }
+    }
+
+    const hasSessionIdentity = !!(preferredName || preferredId);
+    const contributorName = preferredName
+        || (hasSessionIdentity ? 'Onbekende teller' : (fallbackName || 'Onbekende teller'));
+    const contributorId = hasSessionIdentity
+        ? (preferredId || `legacy_${simpleHash(`${contributorName}|${session.id || 'session'}`)}`)
+        : (fallbackId || `legacy_${simpleHash(`${contributorName}|${session.id || 'session'}`)}`);
+    return { contributorName, contributorId };
+}
+
 function ensureShareIdentity(requireInput = false) {
     if (requireInput) return ensureContributorIdentity();
     const profile = getContributorProfile();
@@ -5704,7 +5793,8 @@ function buildSyncPayloadForSource(dayKey, day, session, identity) {
     const custom = collectCustomSpeciesForCounts(day.custom || [], counts);
     const sourceLabel = session ? sessionDisplayLabel(session, day) : 'Volledige dag';
     const sourceRoute = normalizeRouteName(session?.routeName || getContributorProfile().lastRouteName || '');
-    const contributionId = buildContributionId(identity.contributorId, dayKey, sessionId || '');
+    const resolvedIdentity = sessionIdentityForPayload(session, identity);
+    const contributionId = buildContributionId(resolvedIdentity.contributorId, dayKey, sessionId || '');
     const payload = {
         v: SYNC_PAYLOAD_VERSION,
         id: contributionId,
@@ -5716,8 +5806,8 @@ function buildSyncPayloadForSource(dayKey, day, session, identity) {
         sess: sessionId || null,
         c: counts,
         s: custom,
-        contributorName: identity.contributorName || 'Onbekende teller',
-        contributorId: identity.contributorId || `legacy_${simpleHash(identity.contributorName || 'unknown')}`
+        contributorName: resolvedIdentity.contributorName || 'Onbekende teller',
+        contributorId: resolvedIdentity.contributorId || `legacy_${simpleHash(resolvedIdentity.contributorName || 'unknown')}`
     };
     payload.h = buildPayloadHash(payload);
     return payload;
@@ -6051,17 +6141,31 @@ function mergeIncomingCustomSpecies(day, payload) {
     });
 }
 
+function isLocalContributorId(contributorId = '') {
+    const id = String(contributorId || '').trim();
+    if (!id) return false;
+    const profile = getContributorProfile();
+    const profileId = String(profile?.id || '').trim();
+    if (!profileId) return false;
+    return id === profileId || id === `local_user_${profileId}`;
+}
+
 function normalizeContributorDisplayName(name = '', contributorId = '') {
     const raw = String(name || '').trim();
     const low = raw.toLowerCase();
+    const explicit = sanitizeContributorNameForPayload(raw);
+    if (explicit) return explicit;
+    if (low === 'mezelf') {
+        if (isLocalContributorId(contributorId)) return localContributorDisplayName('');
+        return 'Onbekende teller';
+    }
     if (raw && low !== 'legacy telling' && low !== 'legacy-telling' && low !== 'legacy') {
-        if (low === 'mezelf') return localContributorDisplayName('');
         return raw;
     }
-    if (typeof contributorId === 'string' && contributorId.startsWith('legacy_user_')) {
+    if (isLocalContributorId(contributorId)) {
         return localContributorDisplayName('');
     }
-    return localContributorDisplayName('');
+    return 'Onbekende teller';
 }
 
 function ensureImportSessionForContribution(dayKey, payload = null, existingSession = null) {

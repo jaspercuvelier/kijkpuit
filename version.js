@@ -1,10 +1,19 @@
 // Centrale versiebron voor app en service worker
-const APP_VERSION = '3.2.14';
+const APP_VERSION = '3.2.15';
 
 // Changelog voor het uitklapbare "Changes"-luik in de Info-tab.
 // Voeg nieuwe releases bovenaan toe.
 // Inhoud gebaseerd op git-geschiedenis van version.js + recente lokale wijzigingen.
 const APP_CHANGELOG = [
+    {
+        version: '3.2.15',
+        title: 'Importnaam per sessie correct behouden',
+        changes: [
+            'Delen gebruikt nu per geselecteerde telsessie de eigen telleridentiteit, i.p.v. de laatst ingevulde globale profielnaam.',
+            'Bij geïmporteerde sessies worden tellernamen in overzichten en sessiebeheer niet langer onterecht vervangen door lokale profieldata.',
+            'Handmatige naamaanpassingen in sessiebeheer werken nu ook de onderliggende contribution-record bij, zodat volgende export/import consistent blijft.'
+        ]
+    },
     {
         version: '3.2.14',
         title: 'Hotfix: tellernaam zonder "mezelf"',
