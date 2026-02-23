@@ -1033,7 +1033,7 @@ function localContributorDisplayName(preferred = '') {
     if (explicit) return explicit;
     const profile = getContributorProfile();
     const fromProfile = (profile?.name || '').trim();
-    return fromProfile || 'mezelf';
+    return fromProfile || 'Onbekende teller';
 }
 
 function localContributorNote(name = '', routeName = '') {
@@ -1689,7 +1689,7 @@ function migrateLegacyContributions() {
                     sourceDate: d,
                     sourceLabel: s.id || 'legacy',
                     contributorId: `legacy_user_${simpleHash(`${d}|${s.id}|local`)}`,
-                    contributorName: 'mezelf',
+                    contributorName: localContributorDisplayName(''),
                     importedAt: Date.now()
                 });
                 changed = true;
@@ -2241,6 +2241,7 @@ function renderSessionLog() {
         .map(s => {
             const total = sumCounts(s.counts);
             const weather = weatherSummaryText(s.weather, ' • ', true);
+            const contributorNames = sessionContributorNamesForUi(s);
             const primaryContributor = (Array.isArray(s.contributorRoster) && s.contributorRoster[0]?.name) ? s.contributorRoster[0].name : '';
             const contributorName = localContributorDisplayName(
                 (typeof primaryContributor === 'string' && primaryContributor.toLowerCase() === 'mezelf') ? '' : primaryContributor
@@ -2262,7 +2263,7 @@ function renderSessionLog() {
                             <div>
                                 <div class="text-xs text-gray-400">${label}</div>
                                 <div class="text-lg font-bold text-white">${total} stuks</div>
-                                ${autoNote ? `<div class="text-[10px] text-cyan-200 mt-1">🔗 ${autoNote}</div>` : ''}
+                                ${contributorNames ? `<div class="text-[10px] text-cyan-200 mt-1">👤 ${escapeHtmlForClipboard(contributorNames)}</div>` : (autoNote ? `<div class="text-[10px] text-cyan-200 mt-1">${escapeHtmlForClipboard(autoNote)}</div>` : '')}
                             </div>
                             <button class="bg-purple-700 px-2 py-1 rounded text-[10px]" onclick="triggerPhoto('${s.id}')">📸</button>
                         </div>
@@ -2344,9 +2345,8 @@ function renderDetSessionOptions() {
     const sessions = day.sessions.slice().sort((a, b) => new Date(a.start) - new Date(b.start));
     if (sel) {
         sel.innerHTML = sessions.map(s => {
-            const l = sessionDisplayLabel(s, day);
-            const route = normalizeRouteName(s.routeName || '');
-            return `<option value="${s.id}">${l}${route ? ` · ${route}` : ''}</option>`;
+            const l = sessionSelectorLabel(s, day);
+            return `<option value="${s.id}">${l}</option>`;
         }).join('') || '<option value=\"\">Geen telsessies</option>';
     }
     const sess = getDetSession();
@@ -2357,8 +2357,7 @@ function renderDetSessionOptions() {
     }
     if (sel && sess) sel.value = sess.id;
     if (label) {
-        const route = normalizeRouteName(sess?.routeName || '');
-        label.innerText = sess ? `${sessionDisplayLabel(sess, day)}${route ? ` · ${route}` : ''}` : 'Geen telsessie';
+        label.innerText = sess ? sessionSelectorLabel(sess, day) : 'Geen telsessie';
     }
     const hasActive = !!getActiveSession(day);
     if (btnStart) btnStart.classList.add('hidden');
@@ -2735,9 +2734,8 @@ function buildViewedSessionOptions() {
     const hasCurrent = sessions.some(s => s.id === viewedSessionId);
     if (!hasCurrent) viewedSessionId = sessions[sessions.length - 1].id;
     const opts = sessions.map(s => {
-        const label = sessionDisplayLabel(s, day);
-        const routeTag = s.routeName ? ` · ${s.routeName}` : '';
-        return `<option value="${s.id}" ${s.id === (viewedSessionId || '') ? 'selected' : ''}>${label}${routeTag}</option>`;
+        const label = sessionSelectorLabel(s, day);
+        return `<option value="${s.id}" ${s.id === (viewedSessionId || '') ? 'selected' : ''}>${label}</option>`;
     }).join('');
     sels.forEach(sel => {
         sel.innerHTML = opts;
@@ -2750,8 +2748,12 @@ function buildViewedSessionOptions() {
         if (!current) quickMeta.innerText = '';
         else {
             const total = sumCounts(current.counts || {});
+            const contributor = sessionContributorNamesForUi(current);
             const route = (current.routeName || '').trim();
-            quickMeta.innerText = route ? `${total} dieren · ${route}` : `${total} dieren`;
+            const parts = [`${total} dieren`];
+            if (contributor) parts.push(contributor);
+            if (route) parts.push(route);
+            quickMeta.innerText = parts.join(' · ');
         }
     }
     if (reportSel && reportMode === 'session' && viewedSessionId && Array.from(reportSel.options).some(o => o.value === viewedSessionId)) {
@@ -3030,8 +3032,23 @@ function sessionContributorNames(session) {
         });
     }
     if (!names.length && !Array.isArray(session.contributions)) return '';
-    if (!names.length && session.contributions.length === 0) return 'mezelf';
+    if (!names.length && session.contributions.length === 0) return localContributorDisplayName('');
     return names.join(', ');
+}
+
+function sessionContributorNamesForUi(session) {
+    const raw = sessionContributorNames(session);
+    if (!raw) return '';
+    const localName = localContributorDisplayName('');
+    return raw
+        .split(',')
+        .map(name => name.trim())
+        .filter(Boolean)
+        .map(name => {
+            if (name.toLowerCase() !== 'mezelf') return name;
+            return localName || 'Onbekende teller';
+        })
+        .join(', ');
 }
 
 function isLikelyImportedSessionId(sessionId = '') {
@@ -3331,6 +3348,7 @@ function renderSessionAdmin() {
         const photoCount = (s.photos || []).length;
         const route = normalizeRouteName(s.routeName || '');
         const weather = s.weather ? `<div class="text-[10px] text-sky-300">${weatherSummaryText(s.weather, ' • ', true)}</div>` : '';
+        const contributorNames = sessionContributorNamesForUi(s);
         const autoNote = (s.autoContributorNote || '').trim();
         const correctionTool = renderSessionCountCorrectionTool(s, day, dayKey);
         return `<div class="bg-gray-900 p-3 rounded border border-gray-800 flex items-center gap-2">
@@ -3339,7 +3357,7 @@ function renderSessionAdmin() {
                         <div class="font-bold text-gray-100">${fmtTime(s.start)} - ${s.end ? fmtTime(s.end) : 'lopend'}</div>
                         <div class="text-gray-400 text-[10px]">${total} stuks · ${detCount} determinaties · ${photoCount} foto's</div>
                         ${route ? `<div class="text-emerald-200 text-[10px]">🚶‍♂️ ${route}</div>` : ''}
-                        ${autoNote ? `<div class="text-cyan-200 text-[10px]">${autoNote}</div>` : ''}
+                        ${contributorNames ? `<div class="text-cyan-200 text-[10px]">👤 ${escapeHtmlForClipboard(contributorNames)}</div>` : (autoNote ? `<div class="text-cyan-200 text-[10px]">${escapeHtmlForClipboard(autoNote)}</div>` : '')}
                         <label class="inline-flex items-center gap-1 text-[10px] mt-1 text-gray-300">
                             <input type="checkbox" class="accent-emerald-500" ${s.includeInReports !== false ? 'checked' : ''} onchange="event.stopPropagation(); toggleSessionInclude('${s.id}','${dayKey}', this.checked)">
                             Meetellen in rapport
@@ -4171,6 +4189,17 @@ function looseDeterminationLabel(sess, day = ensureDay()) {
 function sessionDisplayLabel(sess, day = ensureDay()) {
     if (sess?.detTemp) return looseDeterminationLabel(sess, day);
     return `${fmtTime(sess.start)} ${sess.end ? '– ' + fmtTime(sess.end) : '(live)'}`;
+}
+
+function sessionSelectorLabel(sess, day = ensureDay()) {
+    if (!sess) return '';
+    const base = sessionDisplayLabel(sess, day);
+    const contributor = sessionContributorNamesForUi(sess);
+    const route = normalizeRouteName(sess.routeName || '');
+    const parts = [base];
+    if (contributor) parts.push(contributor);
+    if (route) parts.push(route);
+    return parts.join(' · ');
 }
 
 async function fetchWeather(dayOverride, sessionId) {
@@ -6023,11 +6052,16 @@ function mergeIncomingCustomSpecies(day, payload) {
 }
 
 function normalizeContributorDisplayName(name = '', contributorId = '') {
-    if (typeof contributorId === 'string' && contributorId.startsWith('legacy_user_')) return 'mezelf';
     const raw = String(name || '').trim();
     const low = raw.toLowerCase();
-    if (low === 'legacy telling' || low === 'legacy-telling' || low === 'legacy') return 'mezelf';
-    return raw || 'Onbekende teller';
+    if (raw && low !== 'legacy telling' && low !== 'legacy-telling' && low !== 'legacy') {
+        if (low === 'mezelf') return localContributorDisplayName('');
+        return raw;
+    }
+    if (typeof contributorId === 'string' && contributorId.startsWith('legacy_user_')) {
+        return localContributorDisplayName('');
+    }
+    return localContributorDisplayName('');
 }
 
 function ensureImportSessionForContribution(dayKey, payload = null, existingSession = null) {
