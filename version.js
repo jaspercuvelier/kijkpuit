@@ -1,10 +1,20 @@
 // Centrale versiebron voor app en service worker
-const APP_VERSION = '3.2.11';
+const APP_VERSION = '3.2.12';
 
 // Changelog voor het uitklapbare "Changes"-luik in de Info-tab.
 // Voeg nieuwe releases bovenaan toe.
 // Inhoud gebaseerd op git-geschiedenis van version.js + recente lokale wijzigingen.
 const APP_CHANGELOG = [
+    {
+        version: '3.2.12',
+        title: 'Mobielvriendelijke sessiecorrectie met + en -',
+        changes: [
+            'Het correctietooltje in Instellingen > Telsessiebeheer gebruikt nu een compacte tellerlayout per soort, i.p.v. een brede tabel.',
+            'Aanpassen van aantallen gebeurt nu enkel met + en - knoppen, zodat dit vlot werkt op smartphone.',
+            'In elke soortenkaart staat nu ook een soortemoji (🐸 of 🦎) naast de naam voor snellere herkenning.',
+            'Totalen per soort en totaal van de sessie worden live bijgewerkt tijdens corrigeren.'
+        ]
+    },
     {
         version: '3.2.11',
         title: 'Tellercorrecties + rapporttotaal + duidelijkere live-indicator',

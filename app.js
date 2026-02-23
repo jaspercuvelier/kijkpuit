@@ -3098,17 +3098,6 @@ function findSessionByDeterminationId(detId, day = ensureDay()) {
     return (day.sessions || []).find(s => (s.determinations || []).some(d => d.id === detId)) || null;
 }
 
-const SESSION_COUNT_TABLE_COLUMNS = Object.freeze([
-    { suffix: 'p_l', short: 'Kop L', title: 'Koppels levend' },
-    { suffix: 'm_l', short: 'M L', title: 'Mannetje levend' },
-    { suffix: 'v_l', short: 'V L', title: 'Vrouwtje levend' },
-    { suffix: 'o_l', short: '? L', title: 'Onbekend levend' },
-    { suffix: 'p_d', short: 'Kop D', title: 'Koppels dood' },
-    { suffix: 'm_d', short: 'M D', title: 'Mannetje dood' },
-    { suffix: 'v_d', short: 'V D', title: 'Vrouwtje dood' },
-    { suffix: 'o_d', short: '? D', title: 'Onbekend dood' }
-]);
-
 function listSessionSpeciesForCorrectionTable(session, day = ensureDay()) {
     if (!session || typeof session !== 'object') return [];
     const speciesMap = new Map();
@@ -3142,38 +3131,96 @@ function listSessionSpeciesForCorrectionTable(session, day = ensureDay()) {
         .sort((a, b) => String(a.speciesName || '').localeCompare(String(b.speciesName || ''), 'nl', { sensitivity: 'base' }));
 }
 
+function speciesHasAmplexus(speciesId = '', day = ensureDay()) {
+    const base = SPECIES.find(s => s.id === speciesId);
+    if (base) return base.hasAmplexus !== false;
+    const custom = (day.custom || []).find(s => s.id === speciesId);
+    if (custom) return custom.hasAmplexus !== false;
+    return true;
+}
+
+function speciesIconForId(speciesId = '', day = ensureDay()) {
+    const base = SPECIES.find(s => s.id === speciesId);
+    if (base?.icon) return base.icon;
+    const custom = (day.custom || []).find(s => s.id === speciesId);
+    if (custom?.icon) return custom.icon;
+    return speciesHasAmplexus(speciesId, day) ? '🐸' : '🦎';
+}
+
+function sumSessionSpeciesCounts(counts = {}, speciesId = '') {
+    if (!speciesId) return 0;
+    let total = 0;
+    Object.keys(counts || {}).forEach(key => {
+        const parsed = parseCounterKey(key);
+        if (!parsed || parsed.speciesId !== speciesId) return;
+        const raw = Number(counts[key] || 0);
+        const value = Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 0;
+        total += parsed.suffix.startsWith('p_') ? value * 2 : value;
+    });
+    return total;
+}
+
+function renderSessionCountEditorRow(speciesId, suffix, label, tone, counts) {
+    const key = `${speciesId}_${suffix}`;
+    const raw = Number(counts?.[key] || 0);
+    const value = Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 0;
+    const plusTone = tone === 'dead' ? 'bg-red-900/60 hover:bg-red-700' : 'bg-emerald-600/80 hover:bg-emerald-500';
+    const stepBtnBase = 'w-10 h-10 min-w-[2.5rem] rounded flex items-center justify-center font-bold text-xl leading-none shrink-0 transition-transform active:scale-95';
+
+    return `
+        <div class="flex items-center justify-between bg-gray-900/55 rounded-lg p-1" data-session-editor-row data-session-table-key="${escapeHtmlForClipboard(key)}">
+            <button type="button" onclick="stepSessionCountEditor(this, -1)" class="${stepBtnBase} bg-gray-800 text-gray-300 hover:text-white border border-gray-700">-</button>
+            <div class="flex flex-col items-center justify-center flex-1 gap-1">
+                <span class="text-[10px] text-gray-400 uppercase tracking-widest">${label}</span>
+                <span data-session-editor-value class="min-w-[3.2rem] bg-gray-800 border border-gray-600 rounded px-2 py-1 text-[12px] text-white text-center font-bold">${value}</span>
+            </div>
+            <button type="button" onclick="stepSessionCountEditor(this, 1)" class="${stepBtnBase} ${plusTone} text-white shadow-lg border border-white/10">+</button>
+        </div>
+    `;
+}
+
+function renderSessionCountEditorSpeciesCard(row, session, day) {
+    const hasAmplexus = speciesHasAmplexus(row.speciesId, day);
+    const speciesIcon = speciesIconForId(row.speciesId, day);
+    const counts = session.counts || {};
+    const total = sumSessionSpeciesCounts(counts, row.speciesId);
+
+    return `
+        <div class="bg-gray-900/65 border border-gray-700 rounded-xl p-2 space-y-2">
+            <div class="flex items-center justify-between gap-2 border-b border-gray-700/70 pb-1">
+                <div class="font-bold text-[12px] text-gray-100 flex items-center gap-1">
+                    <span aria-hidden="true">${speciesIcon}</span>
+                    <span>${escapeHtmlForClipboard(row.speciesName)}</span>
+                </div>
+                <div class="text-[10px] bg-black/35 px-2 py-0.5 rounded text-gray-300">TOT: <span class="font-bold text-white" data-session-editor-species-total="${escapeHtmlForClipboard(row.speciesId)}">${total}</span></div>
+            </div>
+            <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <div class="space-y-1.5 bg-emerald-900/10 p-2 rounded-lg border border-emerald-500/10">
+                    <div class="text-[10px] text-emerald-400 font-bold text-center uppercase tracking-widest opacity-80">Levend</div>
+                    ${hasAmplexus ? renderSessionCountEditorRow(row.speciesId, 'p_l', '❤️', 'live', counts) : ''}
+                    ${renderSessionCountEditorRow(row.speciesId, 'm_l', 'M', 'live', counts)}
+                    ${renderSessionCountEditorRow(row.speciesId, 'v_l', 'V', 'live', counts)}
+                    ${renderSessionCountEditorRow(row.speciesId, 'o_l', '?', 'live', counts)}
+                </div>
+                <div class="space-y-1.5 bg-red-900/10 p-2 rounded-lg border border-red-500/10">
+                    <div class="text-[10px] text-red-400 font-bold text-center uppercase tracking-widest opacity-80">Dood</div>
+                    ${hasAmplexus ? renderSessionCountEditorRow(row.speciesId, 'p_d', '❤️', 'dead', counts) : ''}
+                    ${renderSessionCountEditorRow(row.speciesId, 'm_d', 'M', 'dead', counts)}
+                    ${renderSessionCountEditorRow(row.speciesId, 'v_d', 'V', 'dead', counts)}
+                    ${renderSessionCountEditorRow(row.speciesId, 'o_d', '?', 'dead', counts)}
+                </div>
+            </div>
+        </div>
+    `;
+}
+
 function renderSessionCountCorrectionTool(session, day, dayKey) {
     const speciesRows = listSessionSpeciesForCorrectionTable(session, day);
     const hasRows = speciesRows.length > 0;
-    const colSpan = SESSION_COUNT_TABLE_COLUMNS.length + 2;
-
-    const rowHtml = hasRows
-        ? speciesRows.map(row => {
-            const cells = SESSION_COUNT_TABLE_COLUMNS.map(col => {
-                const key = `${row.speciesId}_${col.suffix}`;
-                const raw = Number(session.counts?.[key] || 0);
-                const value = Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 0;
-                return `<td class="px-1 py-1 text-center align-top">
-                            <label class="inline-flex flex-col items-center gap-1" title="${col.title}">
-                                <span class="text-[9px] uppercase tracking-wide text-gray-400">${col.short}</span>
-                                <input data-session-table-key="${escapeHtmlForClipboard(key)}" type="number" min="0" step="1" value="${value}"
-                                    class="w-14 bg-gray-800 border border-gray-600 rounded px-1.5 py-1 text-[11px] text-white text-center mx-auto block">
-                            </label>
-                        </td>`;
-            }).join('');
-            const rowTotal = SESSION_COUNT_TABLE_COLUMNS.reduce((acc, col) => {
-                const key = `${row.speciesId}_${col.suffix}`;
-                const raw = Number(session.counts?.[key] || 0);
-                const value = Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 0;
-                return acc + (col.suffix.startsWith('p_') ? value * 2 : value);
-            }, 0);
-            return `<tr class="border-t border-gray-700/70">
-                        <td class="px-2 py-1 text-[11px] text-gray-100 font-semibold whitespace-nowrap text-center align-middle">${escapeHtmlForClipboard(row.speciesName)}</td>
-                        ${cells}
-                        <td class="px-2 py-1 text-[11px] text-gray-200 font-bold whitespace-nowrap text-center align-middle">${rowTotal}</td>
-                    </tr>`;
-        }).join('')
-        : `<tr><td colspan="${colSpan}" class="px-2 py-2 text-[11px] text-gray-400 text-center">Geen soorten beschikbaar.</td></tr>`;
+    const cards = hasRows
+        ? speciesRows.map(row => renderSessionCountEditorSpeciesCard(row, session, day)).join('')
+        : '<div class="text-[11px] text-gray-400 text-center bg-gray-900/40 border border-gray-700 rounded-lg px-2 py-3">Geen soorten beschikbaar.</div>';
+    const total = sumCounts(session.counts || {});
 
     const buttonClass = hasRows
         ? 'bg-indigo-600 hover:bg-indigo-500 text-white'
@@ -3181,22 +3228,14 @@ function renderSessionCountCorrectionTool(session, day, dayKey) {
     const disabledAttr = hasRows ? '' : 'disabled';
 
     return `
-        <details class="mt-2 bg-black/20 border border-indigo-500/20 rounded p-2" data-session-count-table>
-            <summary class="cursor-pointer text-[10px] uppercase tracking-wider text-indigo-200 font-bold">Aantallen corrigeren (tabel)</summary>
+        <details class="mt-2 bg-black/20 border border-indigo-500/20 rounded p-2" data-session-count-editor>
+            <summary class="cursor-pointer text-[10px] uppercase tracking-wider text-indigo-200 font-bold">Aantallen corrigeren</summary>
             <div class="mt-2 space-y-2">
-                <div class="text-[10px] text-gray-400">Pas de cellen aan en klik op "Bewaar aantallen".</div>
-                <div class="overflow-x-auto rounded border border-gray-700/80">
-                    <table class="min-w-[860px] w-full bg-gray-900/40">
-                        <thead class="bg-indigo-950/40">
-                            <tr>
-                                <th class="px-2 py-1 text-center text-[10px] font-bold text-indigo-200">Soort</th>
-                                <th class="px-2 py-1 text-center text-[10px] font-bold text-indigo-200" colspan="${SESSION_COUNT_TABLE_COLUMNS.length}">Label + aantal</th>
-                                <th class="px-2 py-1 text-center text-[10px] font-bold text-indigo-200">Tot</th>
-                            </tr>
-                        </thead>
-                        <tbody>${rowHtml}</tbody>
-                    </table>
+                <div class="text-[10px] text-gray-400">Gebruik + / -. Dit werkt zonder zijwaartse scroll op smartphone.</div>
+                <div class="text-[11px] text-indigo-100 font-bold bg-indigo-900/20 border border-indigo-500/20 rounded px-2 py-1">
+                    Totaal in sessie: <span data-session-editor-total>${total}</span>
                 </div>
+                <div class="space-y-2">${cards}</div>
                 <button class="w-full py-2 rounded text-[11px] font-bold ${buttonClass}" ${disabledAttr} onclick="saveSessionCountTable(this, '${session.id}', '${dayKey}')">
                     Bewaar aantallen
                 </button>
@@ -3205,8 +3244,46 @@ function renderSessionCountCorrectionTool(session, day, dayKey) {
     `;
 }
 
+function refreshSessionCountEditorTotals(host) {
+    const root = host?.closest ? host.closest('[data-session-count-editor]') : null;
+    if (!root) return;
+    const perSpecies = new Map();
+    root.querySelectorAll('[data-session-editor-row][data-session-table-key]').forEach(row => {
+        const key = row.getAttribute('data-session-table-key') || '';
+        const parsed = parseCounterKey(key);
+        if (!parsed) return;
+        const valueEl = row.querySelector('[data-session-editor-value]');
+        const raw = Number(valueEl?.innerText || 0);
+        const value = Number.isFinite(raw) ? Math.max(0, Math.floor(raw)) : 0;
+        if (valueEl) valueEl.innerText = String(value);
+        const add = parsed.suffix.startsWith('p_') ? value * 2 : value;
+        perSpecies.set(parsed.speciesId, (perSpecies.get(parsed.speciesId) || 0) + add);
+    });
+    let grandTotal = 0;
+    root.querySelectorAll('[data-session-editor-species-total]').forEach(el => {
+        const speciesId = el.getAttribute('data-session-editor-species-total') || '';
+        const total = perSpecies.get(speciesId) || 0;
+        el.innerText = String(total);
+        grandTotal += total;
+    });
+    const totalEl = root.querySelector('[data-session-editor-total]');
+    if (totalEl) totalEl.innerText = String(grandTotal);
+}
+
+function stepSessionCountEditor(button, delta = 1) {
+    const row = button?.closest('[data-session-editor-row]');
+    if (!row) return;
+    const valueEl = row.querySelector('[data-session-editor-value]');
+    if (!valueEl) return;
+    const current = Number.isFinite(Number(valueEl.innerText)) ? Math.max(0, Math.floor(Number(valueEl.innerText))) : 0;
+    const step = Number.isFinite(Number(delta)) ? Math.floor(Number(delta)) : 0;
+    const next = Math.max(0, current + step);
+    valueEl.innerText = String(next);
+    refreshSessionCountEditorTotals(button);
+}
+
 function saveSessionCountTable(button, sessionId, dayKey = picker.value) {
-    const host = button?.closest('[data-session-count-table]');
+    const host = button?.closest('[data-session-count-editor]');
     if (!host) return;
     const day = ensureDay(dayKey);
     const session = (day.sessions || []).find(s => s.id === sessionId);
@@ -3224,12 +3301,13 @@ function saveSessionCountTable(button, sessionId, dayKey = picker.value) {
     });
 
     const next = {};
-    host.querySelectorAll('[data-session-table-key]').forEach(input => {
-        const key = input.getAttribute('data-session-table-key') || '';
+    host.querySelectorAll('[data-session-editor-row][data-session-table-key]').forEach(row => {
+        const key = row.getAttribute('data-session-table-key') || '';
         if (!parseCounterKey(key)) return;
-        const raw = Number(input.value);
+        const valueEl = row.querySelector('[data-session-editor-value]');
+        const raw = Number(valueEl?.innerText || 0);
         const value = Number.isFinite(raw) ? Math.max(0, Math.floor(raw)) : 0;
-        input.value = String(value);
+        if (valueEl) valueEl.innerText = String(value);
         if (value > 0) next[key] = value;
     });
 
