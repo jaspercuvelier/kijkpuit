@@ -1,10 +1,19 @@
 // Centrale versiebron voor app en service worker
-const APP_VERSION = '3.2.15';
+const APP_VERSION = '3.2.17';
 
 // Changelog voor het uitklapbare "Changes"-luik in de Info-tab.
 // Voeg nieuwe releases bovenaan toe.
 // Inhoud gebaseerd op git-geschiedenis van version.js + recente lokale wijzigingen.
 const APP_CHANGELOG = [
+    {
+        version: '3.2.17',
+        title: 'Rapportselectie losgekoppeld van trektrend',
+        changes: [
+            'In Resultaat & Delen kan je nu ad-hoc per dag kiezen welke telsessies in het rapport zitten, via een aparte sessielijst met Alles/Geen.',
+            'Deze rapportselectie staat volledig los van het vinkje voor trektrend: rapport en trektrend beïnvloeden elkaar niet meer.',
+            'Labels en meldingen verduidelijkt: sessiebeheer gebruikt "Meetellen in trektrendgrafiek", terwijl de rapportbox expliciet over "Telsessies in rapport" gaat.'
+        ]
+    },
     {
         version: '3.2.15',
         title: 'Importnaam per sessie correct behouden',

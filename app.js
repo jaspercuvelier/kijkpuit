@@ -573,6 +573,7 @@ let sessionScanner = null;
 let pendingQrImportPayload = null;
 let pendingSyncLinkPayload = null;
 let shareSelectionStateByDay = {};
+let reportSelectionStateByDay = {};
 let reportTrendShowEmptyDays = true;
 const TREND_ZOOM_MIN = 1;
 const TREND_ZOOM_MAX = 3;
@@ -2267,7 +2268,7 @@ function renderSessionLog() {
                         </div>
                             <label class="flex items-center gap-2 text-[11px] text-gray-300 bg-gray-900/60 border border-gray-700 rounded px-2 py-2">
                                 <input type="checkbox" class="accent-emerald-500" ${s.includeInReports !== false ? 'checked' : ''} onchange="toggleSessionInclude('${s.id}','${picker.value}', this.checked)">
-                                Meetellen in rapport en trendgrafiek
+                                Meetellen in trektrendgrafiek
                             </label>
                             <div class="space-y-2 text-left">
                                 <label class="text-[10px] uppercase text-gray-400 font-bold">Teller</label>
@@ -2856,7 +2857,7 @@ function toggleSessionInclude(id, dayKey = picker.value, include = true) {
     save();
     render();
     renderSessionAdmin();
-    showToast(s.includeInReports ? 'Telsessie telt mee in rapport' : 'Telsessie telt niet mee in rapport');
+    showToast(s.includeInReports ? 'Telsessie telt mee in trektrendgrafiek' : 'Telsessie telt niet mee in trektrendgrafiek');
 }
 
 function updateRoute(id, val) {
@@ -2996,24 +2997,121 @@ function subtractCounts(target = {}, counts = {}) {
     return target;
 }
 
-function sessionIncludedInReports(session) {
+function sessionIncludedInTrend(session) {
     return session?.includeInReports !== false;
 }
 
-function getReportEligibleSessions(day) {
+function getTrendEligibleSessions(day) {
     const sessions = Array.isArray(day?.sessions) ? day.sessions : [];
     if (!sessions.length) return [];
-    return sessions.filter(sessionIncludedInReports);
+    return sessions.filter(sessionIncludedInTrend);
 }
 
-function getReportCountsForDay(day) {
+function getTrendCountsForDay(day) {
     const allSessions = Array.isArray(day?.sessions) ? day.sessions : [];
     if (!allSessions.length) return day?.counts || {};
-    const sessions = getReportEligibleSessions(day);
+    const sessions = getTrendEligibleSessions(day);
     if (!sessions.length) return {};
     const merged = {};
     sessions.forEach(s => addCounts(merged, s.counts || {}));
     return merged;
+}
+
+function getReportEligibleSessions(day, dayKey = picker.value, useSelection = true) {
+    const sessions = Array.isArray(day?.sessions) ? day.sessions : [];
+    if (!useSelection) return sessions;
+    const state = getReportSelectionState(dayKey);
+    if (state.mode !== 'custom') return sessions;
+    const selected = new Set(state.sessionIds || []);
+    return sessions.filter(s => selected.has(s.id));
+}
+
+function getReportCountsForDay(day, dayKey = picker.value, useSelection = true) {
+    const allSessions = Array.isArray(day?.sessions) ? day.sessions : [];
+    if (!allSessions.length) return day?.counts || {};
+    const sessions = getReportEligibleSessions(day, dayKey, useSelection);
+    if (!sessions.length) return {};
+    const merged = {};
+    sessions.forEach(s => addCounts(merged, s.counts || {}));
+    return merged;
+}
+
+function normalizeReportSelectionState(day, state = null) {
+    const sessions = Array.isArray(day?.sessions) ? day.sessions : [];
+    const validIds = new Set(sessions.map(s => s.id));
+    const incoming = state && typeof state === 'object' ? state : {};
+    const mode = incoming.mode === 'custom' ? 'custom' : 'all';
+    const rawIds = Array.isArray(incoming.sessionIds) ? incoming.sessionIds : [];
+    const sessionIds = Array.from(new Set(rawIds.filter(id => validIds.has(id))));
+    if (mode === 'all') {
+        return { mode, sessionIds: sessions.map(s => s.id) };
+    }
+    return { mode, sessionIds };
+}
+
+function getReportSelectionState(dayKey = picker.value) {
+    const day = ensureDay(dayKey);
+    const current = reportSelectionStateByDay[dayKey] || null;
+    const normalized = normalizeReportSelectionState(day, current);
+    reportSelectionStateByDay[dayKey] = normalized;
+    return normalized;
+}
+
+function setReportSelectionState(dayKey = picker.value, state = null) {
+    const day = ensureDay(dayKey);
+    reportSelectionStateByDay[dayKey] = normalizeReportSelectionState(day, state);
+}
+
+function collectReportSelectionFromDom() {
+    const checkboxes = Array.from(document.querySelectorAll('#report-session-checklist [data-report-session-id]'));
+    const sessionIds = checkboxes
+        .filter(cb => cb.checked)
+        .map(cb => cb.getAttribute('data-report-session-id'))
+        .filter(Boolean);
+    return { sessionIds };
+}
+
+function syncReportSelectionFromDom(refreshReport = true) {
+    const day = ensureDay();
+    const sessions = Array.isArray(day.sessions) ? day.sessions : [];
+    const checkboxes = Array.from(document.querySelectorAll('#report-session-checklist [data-report-session-id]'));
+    const meta = document.getElementById('report-session-checklist-meta');
+    if (!checkboxes.length) {
+        setReportSelectionState(picker.value, { mode: 'custom', sessionIds: [] });
+        if (meta) meta.innerText = sessions.length ? '' : 'Nog geen telsessies voor deze datum.';
+        if (refreshReport) updateReport();
+        return;
+    }
+    const selectedIds = checkboxes
+        .filter(cb => cb.checked)
+        .map(cb => cb.getAttribute('data-report-session-id'))
+        .filter(Boolean);
+    const selectedCount = selectedIds.length;
+    const mode = selectedCount === checkboxes.length ? 'all' : 'custom';
+    setReportSelectionState(picker.value, { mode, sessionIds: selectedIds });
+    if (meta) {
+        meta.innerText = `${selectedCount} van ${checkboxes.length} telsessies opgenomen in dit rapport (los van trektrend).`;
+    }
+    if (refreshReport) updateReport();
+}
+
+function onReportSessionSelectionChanged() {
+    syncReportSelectionFromDom(true);
+}
+
+function setAllReportSessionsIncluded(include = true, dayKey = picker.value) {
+    const day = ensureDay(dayKey);
+    const sessions = Array.isArray(day.sessions) ? day.sessions : [];
+    if (!sessions.length) return;
+    if (include) {
+        setReportSelectionState(dayKey, { mode: 'all', sessionIds: sessions.map(s => s.id) });
+    } else {
+        setReportSelectionState(dayKey, { mode: 'custom', sessionIds: [] });
+    }
+    if (dayKey === picker.value) {
+        updateReport();
+    }
+    showToast(include ? 'Alle telsessies geselecteerd voor rapport' : 'Geen telsessies geselecteerd voor rapport');
 }
 
 function formatSessionNote(s) {
@@ -3368,7 +3466,7 @@ function renderSessionAdmin() {
                         ${contributorNames ? `<div class="text-cyan-200 text-[10px]">👤 ${escapeHtmlForClipboard(contributorNames)}</div>` : (autoNote ? `<div class="text-cyan-200 text-[10px]">${escapeHtmlForClipboard(autoNote)}</div>` : '')}
                         <label class="inline-flex items-center gap-1 text-[10px] mt-1 text-gray-300">
                             <input type="checkbox" class="accent-emerald-500" ${s.includeInReports !== false ? 'checked' : ''} onchange="event.stopPropagation(); toggleSessionInclude('${s.id}','${dayKey}', this.checked)">
-                            Meetellen in rapport
+                            Meetellen in trektrendgrafiek
                         </label>
                         ${weather}
                         ${correctionTool}
@@ -4497,10 +4595,10 @@ async function buildShareFilesFromPhotoRefs(photoRefs = [], fileNameFactory = nu
 function dayTotalForTrend(day) {
     if (!day || typeof day !== 'object') return 0;
     const hasSessions = Array.isArray(day.sessions) && day.sessions.length > 0;
-    const reportCounts = getReportCountsForDay(day);
-    const reportTotal = sumCounts(reportCounts || {});
-    if (hasSessions) return reportTotal;
-    if (reportTotal > 0) return reportTotal;
+    const trendCounts = getTrendCountsForDay(day);
+    const trendTotal = sumCounts(trendCounts || {});
+    if (hasSessions) return trendTotal;
+    if (trendTotal > 0) return trendTotal;
     return sumCounts(day.counts || {});
 }
 
@@ -4508,7 +4606,7 @@ function dayIsTrendTellingDay(day) {
     if (!day || typeof day !== 'object') return false;
     const sessions = Array.isArray(day.sessions) ? day.sessions : [];
     if (sessions.length) {
-        return sessions.some(sessionIncludedInReports);
+        return sessions.some(sessionIncludedInTrend);
     }
     if (typeof day.notes === 'string' && day.notes.trim()) return true;
     return dayTotalForTrend(day) > 0;
@@ -4950,14 +5048,17 @@ function updateReport() {
     const sel = document.getElementById('report-session-select');
     const sessionId = sel ? (sel.value || (reportMode === 'session' ? viewedSessionId : '')) : (reportMode === 'session' ? viewedSessionId : '');
     const session = sessionId ? (data.sessions || []).find(s => s.id === sessionId) : null;
-    const reportSessions = getReportEligibleSessions(data);
+    const allSessions = getReportEligibleSessions(data, d, false);
+    const reportSessions = reportMode === 'day'
+        ? getReportEligibleSessions(data, d, true)
+        : allSessions;
     renderReportSessionChecklist();
-    const targetCounts = reportMode === 'session' && session ? (session.counts || {}) : getReportCountsForDay(data);
+    const targetCounts = reportMode === 'session' && session ? (session.counts || {}) : getReportCountsForDay(data, d, true);
     const totalCount = sumCounts(targetCounts || {});
     const sessionsToShow = reportMode === 'session' && session ? [session] : reportSessions;
 
     // Update the editor UI in the Delen tab
-    const editSession = session || (reportSessions.length === 1 ? reportSessions[0] : getLatestSession(data));
+    const editSession = session || (allSessions.length === 1 ? allSessions[0] : getLatestSession(data));
     updateReportSessionInputs(editSession);
 
     const routeSummaries = [];
@@ -5023,7 +5124,6 @@ function updateReport() {
     if (reportMode === 'session' && session) {
         const note = formatSessionNote(session);
         if (note) txt += `\n📝 *Nota:* ${note}\n`;
-        if (session.includeInReports === false) txt += `\n⚠️ Deze telsessie staat op "niet meetellen in rapport".\n`;
     }
     if (reportMode === 'day') {
         const sessionNotes = [];
@@ -5175,7 +5275,7 @@ async function shareReport(includePhotos = false) {
     if (includePhotos) {
         const photos = reportMode === 'session' && session
             ? (session.photos || [])
-            : getReportEligibleSessions(day).flatMap(s => s.photos || []);
+            : getReportEligibleSessions(day, picker.value, true).flatMap(s => s.photos || []);
         if (!photos.length) { alert('Geen foto’s beschikbaar voor deze selectie.'); return; }
         files = await buildShareFilesFromPhotoRefs(photos, (idx, ext) =>
             `paddentrek-${picker.value}-${idx + 1}.${ext}`
@@ -5231,7 +5331,7 @@ async function shareDeterminaties() {
     const session = sessionId ? day.sessions.find(s => s.id === sessionId) : null;
     let dets = (reportMode === 'session' && session)
         ? (session?.determinations || [])
-        : getReportEligibleSessions(day).flatMap(s => s.determinations || []);
+        : getReportEligibleSessions(day, picker.value, true).flatMap(s => s.determinations || []);
     dets = dets.filter(d => !!d.result && !d.pending);
     const selected = Array.from(document.querySelectorAll('#report-dets .share-det-checkbox:checked')).map(cb => cb.value);
     if (selected.length) dets = dets.filter(d => selected.includes(d.id));
@@ -5280,7 +5380,7 @@ function exportReportCSV(forceDay = false) {
     const sel = document.getElementById('report-session-select');
     const sessionId = sel ? sel.value : '';
     const session = (!forceDay && sessionId) ? day.sessions.find(s => s.id === sessionId) : null;
-    const counts = reportMode === 'session' && session ? session.counts || {} : getReportCountsForDay(day);
+    const counts = reportMode === 'session' && session ? session.counts || {} : getReportCountsForDay(day, picker.value, true);
     const meta = reportMode === 'session' && session
         ? { route: session.routeName || '', notes: formatSessionNote(session), weather: session.weather }
         : { route: '', notes: day.notes || '', weather: day.weather };
@@ -5584,8 +5684,7 @@ function buildReportSessionOptions() {
         ? viewedSessionId
         : sel.value;
     sel.innerHTML = '<option value=\"\">Overzicht geselecteerde telsessies</option>' + day.sessions.map(s => {
-        const includeTag = s.includeInReports === false ? ' · (niet meetellen)' : '';
-        const label = `${sessionDisplayLabel(s, day)}${s.routeName ? ' · ' + s.routeName : ''}${includeTag}`;
+        const label = `${sessionDisplayLabel(s, day)}${s.routeName ? ' · ' + s.routeName : ''}`;
         return `<option value="${s.id}">${label}</option>`;
     }).join('');
     if (reportMode === 'day') {
@@ -5603,19 +5702,20 @@ function renderReportSessionChecklist() {
     const sessions = day.sessions.slice().sort((a, b) => new Date(a.start) - new Date(b.start));
     if (!sessions.length) {
         box.innerHTML = '<div class="text-[11px] text-gray-500">Nog geen telsessies voor deze datum.</div>';
-        meta.innerText = '';
+        meta.innerText = 'Nog geen telsessies voor deze datum.';
         return;
     }
-    const includedCount = sessions.filter(sessionIncludedInReports).length;
-    meta.innerText = `${includedCount} van ${sessions.length} telsessies opgenomen in het rapport.`;
+    const state = getReportSelectionState(picker.value);
+    const selected = new Set(state.sessionIds || []);
     box.innerHTML = sessions.map(s => {
         const total = sumCounts(s.counts || {});
         const label = sessionDisplayLabel(s, day);
         const route = normalizeRouteName(s.routeName || '');
         const autoNote = (s.autoContributorNote || '').trim();
+        const checked = selected.has(s.id) ? 'checked' : '';
         return `
                     <label class="flex items-start gap-2 bg-gray-900/65 border border-gray-700 rounded-lg px-2 py-2 cursor-pointer">
-                        <input type="checkbox" class="mt-0.5 accent-emerald-500" ${s.includeInReports !== false ? 'checked' : ''} onchange="toggleSessionInclude('${s.id}','${picker.value}', this.checked)">
+                        <input type="checkbox" class="mt-0.5 accent-emerald-500" data-report-session-id="${s.id}" ${checked} onchange="onReportSessionSelectionChanged()">
                         <div class="flex-1 min-w-0">
                             <div class="text-[11px] text-gray-100 font-semibold">${label}${route ? ` · ${route}` : ''}</div>
                             <div class="text-[10px] text-gray-400">${total} dieren</div>
@@ -5624,16 +5724,7 @@ function renderReportSessionChecklist() {
                     </label>
                 `;
     }).join('');
-}
-
-function setAllReportSessionsIncluded(include = true, dayKey = picker.value) {
-    const day = ensureDay(dayKey);
-    if (!day.sessions.length) return;
-    day.sessions.forEach(s => s.includeInReports = !!include);
-    save();
-    render();
-    renderSessionAdmin();
-    showToast(include ? 'Alle telsessies tellen mee' : 'Geen telsessies geselecteerd');
+    syncReportSelectionFromDom(false);
 }
 
 function buildRouteSuggestions() {
@@ -6507,7 +6598,7 @@ function exportRangeCSV(forceSettings = false) {
             });
         }
         // ook dagtotaal opnemen
-        addRows('Dag', getReportCountsForDay(day), '', day.notes || '', day.weather?.t ?? '', day.weather?.c ?? '', '', '', 'day-' + d);
+        addRows('Dag', getReportCountsForDay(day, d, false), '', day.notes || '', day.weather?.t ?? '', day.weather?.c ?? '', '', '', 'day-' + d);
     });
     if (rows.length === 1) rows.push(['Geen data', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
     const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(';')).join('\n');
