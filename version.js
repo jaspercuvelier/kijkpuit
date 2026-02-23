@@ -1,10 +1,19 @@
 // Centrale versiebron voor app en service worker
-const APP_VERSION = '3.2.13';
+const APP_VERSION = '3.2.14';
 
 // Changelog voor het uitklapbare "Changes"-luik in de Info-tab.
 // Voeg nieuwe releases bovenaan toe.
 // Inhoud gebaseerd op git-geschiedenis van version.js + recente lokale wijzigingen.
 const APP_CHANGELOG = [
+    {
+        version: '3.2.14',
+        title: 'Hotfix: tellernaam zonder "mezelf"',
+        changes: [
+            'Tellernaam-resolutie gebruikt nu consequent de naam uit sessiedata of importdata i.p.v. de placeholder "mezelf".',
+            'In actieve sessies en in Telsessiebeheer verschijnt daardoor overal dezelfde, expliciete tellernaam.',
+            'Als er effectief geen naam beschikbaar is, blijft "Onbekende teller" de duidelijke fallback.'
+        ]
+    },
     {
         version: '3.2.13',
         title: 'Tellernamen overal consistenter zichtbaar',
